@@ -936,8 +936,6 @@ document.querySelector("#camMsg .file-picker").addEventListener("change", closeC
 rows = rows.filter(r => r.status !== "reading");
 render();
 updateMode();
-// スマホで開いたら、すぐにカメラを起動する
-if (matchMedia("(pointer: coarse)").matches) openCamera();
 </script>
 </body>
 </html>
