@@ -130,6 +130,35 @@
   .mobile-capture { display: none; }
   .topbar-gear { margin-left: auto; }
   .banner { background: var(--warn-soft); color: var(--warn); border: 1px solid #f1dca4; border-radius: var(--radius); padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .company-wrap { position: relative; }
+  .company-switch { font: inherit; font-size: 13.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px;
+    border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; max-width: 260px; }
+  .company-switch svg { width: 15px; height: 15px; flex: none; color: var(--primary); }
+  .company-switch #companyName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .company-switch .caret { color: var(--muted); font-size: 11px; }
+  .company-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 240px; max-width: 320px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; box-shadow: 0 10px 30px rgba(15,23,42,.15); padding: 6px; z-index: 30; color: var(--text); }
+  .company-menu[hidden], #companies[hidden], #moveDlg[hidden] { display: none; }
+  .menu-item { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; font-size: 13.5px; text-align: left; border: none; background: none;
+    color: var(--text); padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+  .menu-item:hover { background: var(--surface-2); }
+  .menu-item .check { width: 14px; color: var(--primary); font-weight: 700; }
+  .menu-item .cnt { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .menu-sep { height: 1px; background: var(--line); margin: 6px 0; }
+  .menu-item.sub { color: var(--primary); }
+  .company-chip { margin-left: 10px; font-size: 13px; font-weight: 500; color: var(--primary); background: var(--primary-soft); padding: 2px 10px; border-radius: 999px; vertical-align: middle; }
+  .company-chip:empty { display: none; }
+  .company-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; max-height: 50vh; overflow: auto; }
+  .company-item { display: flex; align-items: center; gap: 8px; }
+  .company-item input { flex: 1; }
+  .company-item .cnt { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .company-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row input { flex: 1; }
+  .move-list { display: flex; flex-direction: column; gap: 6px; }
+  .move-list .btn { justify-content: flex-start; height: 40px; }
+  .row-actions { display: flex; gap: 2px; }
+  .icon-btn.move:hover { background: var(--primary-soft); color: var(--primary); }
   .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
   .banner .btn { margin-left: auto; height: 32px; }
 
@@ -171,6 +200,13 @@
     .topbar .crumb { display: none; }
     .topbar .mobile-brand { display: flex; }
     .topbar-gear { color: #fff; }
+    .topbar { flex-wrap: wrap; height: auto; padding: 10px 16px; row-gap: 10px; }
+    .company-wrap { order: 3; width: 100%; }
+    .company-switch { width: 100%; max-width: none; height: 38px; background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); color: #fff; }
+    .company-switch svg, .company-switch .caret { color: #fff; }
+    .company-switch .caret { margin-left: auto; }
+    .company-menu { left: 0; right: 0; max-width: none; }
+    .company-chip { display: none; }
     .content { padding: 16px 16px 110px; }
     .page-head .actions { display: none; }
     .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -210,6 +246,7 @@
   <symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
 </svg>
 
@@ -220,7 +257,7 @@
       <div class="nav-label">仕訳</div>
       <a href="#" class="active"><svg><use href="#i-receipt"/></svg>レシート取込</a>
       <div class="nav-label">マスタ</div>
-      <a class="disabled"><svg><use href="#i-building"/></svg>会社<span class="soon">準備中</span></a>
+      <a href="#" class="open-companies"><svg><use href="#i-building"/></svg>会社</a>
       <a class="disabled"><svg><use href="#i-list"/></svg>勘定科目<span class="soon">準備中</span></a>
       <div class="nav-label">保管</div>
       <a class="disabled"><svg><use href="#i-folder"/></svg>証憑フォルダ<span class="soon">準備中</span></a>
@@ -232,6 +269,10 @@
   <div class="main">
     <div class="topbar">
       <div class="brand mobile-brand" style="padding:0"><span class="brand-mark">神</span>仕分けの神様</div>
+      <div class="company-wrap">
+        <button class="company-switch" id="companySwitch" aria-haspopup="true"><svg><use href="#i-building"/></svg><span id="companyName">会社を選択</span><span class="caret">▾</span></button>
+        <div class="company-menu" id="companyMenu" hidden></div>
+      </div>
       <div class="crumb">仕訳 / <b>レシート取込</b></div>
       <button class="icon-btn topbar-gear open-settings" title="設定"><svg><use href="#i-gear"/></svg></button>
     </div>
@@ -239,7 +280,7 @@
     <div class="content">
       <div class="page-head">
         <div>
-          <h1>レシート取込</h1>
+          <h1>レシート取込<span class="company-chip" id="headCompany"></span></h1>
           <p>レシートを撮影・アップロードすると、日付・金額・摘要を自動で読み取ります。<span class="mode-tag" id="modeTag"></span></p>
         </div>
         <div class="actions">
@@ -306,6 +347,30 @@
   </div>
 </div>
 
+<!-- 会社の管理 -->
+<div class="dialog-back" id="companies" hidden>
+  <div class="dialog">
+    <h2>会社</h2>
+    <div class="company-list" id="companyList"></div>
+    <label class="dlg-label" for="newCompany">会社を追加</label>
+    <div class="add-row">
+      <input id="newCompany" type="text" placeholder="例: 株式会社サンプル" autocomplete="off">
+      <button class="btn btn-primary" id="addCompany">追加</button>
+    </div>
+    <div class="dlg-actions" style="margin-top:18px"><span style="flex:1"></span><button class="btn" id="companiesClose">閉じる</button></div>
+  </div>
+</div>
+
+<!-- 仕訳を別の会社へ移動 -->
+<div class="dialog-back" id="moveDlg" hidden>
+  <div class="dialog">
+    <h2>別の会社へ移動</h2>
+    <p class="dlg-help" style="margin-top:0">この仕訳の移動先を選んでください。</p>
+    <div class="move-list" id="moveList"></div>
+    <div class="dlg-actions" style="margin-top:14px"><span style="flex:1"></span><button class="btn" id="moveClose">キャンセル</button></div>
+  </div>
+</div>
+
 <!-- 設定 -->
 <div class="dialog-back" id="settings" hidden>
   <div class="dialog">
@@ -334,6 +399,8 @@ import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+e
 const MODEL = "claude-opus-5";
 const API_KEY_STORAGE = "shiwake-api-key";
 const STORAGE_KEY = "receipt-rows-v1";
+const COMPANIES_KEY = "shiwake-companies";
+const CURRENT_COMPANY_KEY = "shiwake-current-company";
 const SETTINGS_KEY = "receipt-settings-v1";
 const MAX_PARALLEL_AI = 3;  // Claude はサーバー側で処理するので並列で送る
 const MAX_PARALLEL_OCR = 1; // 端末内OCRはスマホの負荷が高いので1枚ずつ
@@ -350,6 +417,19 @@ function load(key, fallback) {
 function save() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.filter(r => r.status !== "reading"))); } catch {}
 }
+// ---- 会社 ----
+let companies = load(COMPANIES_KEY, []);
+let currentCompanyId = load(CURRENT_COMPANY_KEY, null);
+function saveCompanies() {
+  try {
+    localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies));
+    localStorage.setItem(CURRENT_COMPANY_KEY, JSON.stringify(currentCompanyId));
+  } catch {}
+}
+const currentCompany = () => companies.find(c => c.id === currentCompanyId) || null;
+const companyRows = () => rows.filter(r => r.companyId === currentCompanyId);
+const countFor = id => rows.filter(r => r.companyId === id && r.status === "done").length;
+
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 const yen = n => "¥" + Number(n || 0).toLocaleString();
 
@@ -381,12 +461,18 @@ addEventListener("drop", e => {
 
 async function addFiles(fileList) {
   const files = Array.from(fileList);
+  if (!files.length) return;
+  if (!currentCompany()) {
+    alert("先に会社を登録・選択してください。");
+    openCompanies();
+    return;
+  }
   for (const file of files) {
     const groupId = uid();
     try {
       const [full, thumb] = await Promise.all([resize(file, 1600, 0.85), resize(file, 400, 0.7)]);
       fullImages.set(groupId, full);
-      rows.push({ id: uid(), groupId, thumb, status: "reading" });
+      rows.push({ id: uid(), groupId, companyId: currentCompanyId, thumb, status: "reading" });
       queue.push(groupId);
     } catch (err) {
       alert(`${file.name}: ${err.message}`);
@@ -433,7 +519,7 @@ async function readGroup(groupId) {
     const receipts = data.receipts.length ? data.receipts
       : [{ date: "", amount: 0, summary: "", note: "レシートを検出できませんでした" }];
     const newRows = receipts.map(r => ({
-      id: uid(), groupId, thumb: placeholder.thumb, status: "done",
+      id: uid(), groupId, companyId: placeholder.companyId, thumb: placeholder.thumb, status: "done",
       date: r.date || "",
       debitCode: "", debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
@@ -677,7 +763,7 @@ const needsCheck = r => r.status === "done" && (!!r.note || !r.date || !Number(r
 function sortedRows() {
   // 日付順（未入力・読み取り中は末尾）
   const k = r => r.date || "9999";
-  return [...rows].sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
+  return companyRows().sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
 }
 
 function statusBadge(row) {
@@ -687,11 +773,11 @@ function statusBadge(row) {
 }
 
 function renderStats() {
-  const done = rows.filter(r => r.status === "done");
+  const done = companyRows().filter(r => r.status === "done");
   document.getElementById("st-count").innerHTML = `${done.length}<small>件</small>`;
   document.getElementById("st-total").textContent = yen(done.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
   document.getElementById("st-warn").innerHTML = `${done.filter(needsCheck).length}<small>件</small>`;
-  document.getElementById("st-reading").innerHTML = `${rows.filter(r => r.status === "reading").length}<small>件</small>`;
+  document.getElementById("st-reading").innerHTML = `${companyRows().filter(r => r.status === "reading").length}<small>件</small>`;
   document.getElementById("download").disabled = done.length === 0;
   const tDebit = document.getElementById("t-debit"), tCredit = document.getElementById("t-credit");
   if (tDebit) tDebit.textContent = yen(done.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
@@ -701,14 +787,21 @@ function renderStats() {
 function render() {
   const list = document.getElementById("list");
   renderStats();
+  renderCompany();
 
-  if (!rows.length) {
+  if (!currentCompany()) {
+    list.innerHTML = `<div class="dropzone"><svg><use href="#i-building"/></svg>
+      <b>まず会社を登録してください</b>仕訳は会社ごとに分けて管理します。<br><br>
+      <button class="btn btn-primary open-companies">会社を登録する</button></div>`;
+    return;
+  }
+  if (!companyRows().length) {
     list.innerHTML = `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
       <b>まだレシートがありません</b>「撮影する」でレシートを撮るか、画像をここにドラッグ＆ドロップしてください。</div>`;
     return;
   }
 
-  const del = id => `<td class="c-del"><button class="icon-btn" data-del="${id}" title="削除"><svg><use href="#i-trash"/></svg></button></td>`;
+  const del = id => `<td class="c-del"><div class="row-actions">${companies.length > 1 ? `<button class="icon-btn move" data-move="${id}" title="別の会社へ移動"><svg><use href="#i-move"/></svg></button>` : ""}<button class="icon-btn" data-del="${id}" title="削除"><svg><use href="#i-trash"/></svg></button></div></td>`;
   let body = "";
   sortedRows().forEach((row, i) => {
     const thumb = `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="レシート"></td>`;
@@ -797,9 +890,11 @@ list.addEventListener("change", e => {
 });
 
 list.addEventListener("click", e => {
-  const t = e.target.closest("[data-del], [data-retry], .thumb");
+  const t = e.target.closest("[data-del], [data-retry], [data-move], .thumb");
   if (!t) return;
-  if (t.dataset.del) {
+  if (t.dataset.move) {
+    openMove(t.dataset.move);
+  } else if (t.dataset.del) {
     const row = rows.find(r => r.id === t.dataset.del);
     if (row && (row.status !== "done" || confirm("この仕訳を削除しますか？"))) {
       rows = rows.filter(r => r !== row);
@@ -839,17 +934,118 @@ document.getElementById("download").onclick = async () => {
     : new Uint8Array(Encoding.convert(Encoding.stringToCode(csv), { to: "SJIS", from: "UNICODE" }));
   const blob = new Blob([bytes], { type: "text/csv" });
   const stamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" }).replace(/[-: ]/g, "").slice(0, 12);
-  const name = `shiwake_${stamp}.csv`;
+  const company = (currentCompany()?.name || "会社").replace(/[\\/:*?"<>|]/g, "_");
+  const name = `${company}_仕訳_${stamp}.csv`;
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 
 document.getElementById("clearAll").onclick = () => {
-  if (!rows.length || !confirm("取り込んだレシートをすべて消去しますか？")) return;
-  rows = []; queue = []; fullImages.clear();
+  const mine = companyRows();
+  if (!mine.length || !confirm(`「${currentCompany().name}」の仕訳 ${mine.length} 件をすべて消去しますか？`)) return;
+  const groups = new Set(mine.map(r => r.groupId));
+  rows = rows.filter(r => r.companyId !== currentCompanyId);
+  queue = queue.filter(g => !groups.has(g));
+  groups.forEach(g => fullImages.delete(g));
   save(); render();
 };
+
+// ---- 会社の切り替え・管理 ----
+const companyMenu = document.getElementById("companyMenu");
+function renderCompany() {
+  const c = currentCompany();
+  document.getElementById("companyName").textContent = c ? c.name : "会社を選択";
+  document.getElementById("headCompany").textContent = c ? c.name : "";
+}
+function switchCompany(id) {
+  currentCompanyId = id;
+  saveCompanies();
+  render();
+}
+document.getElementById("companySwitch").onclick = e => {
+  e.stopPropagation();
+  if (!companyMenu.hidden) { companyMenu.hidden = true; return; }
+  companyMenu.innerHTML = companies.map(c => `<button class="menu-item" data-company="${c.id}">
+      <span class="check">${c.id === currentCompanyId ? "✓" : ""}</span>${escapeHtml(c.name)}<span class="cnt">${countFor(c.id)}件</span></button>`).join("")
+    + (companies.length ? `<div class="menu-sep"></div>` : "")
+    + `<button class="menu-item sub" data-manage="1"><span class="check">＋</span>会社を追加・編集</button>`;
+  companyMenu.hidden = false;
+};
+companyMenu.onclick = e => {
+  const t = e.target.closest("[data-company], [data-manage]");
+  if (!t) return;
+  companyMenu.hidden = true;
+  if (t.dataset.company) switchCompany(t.dataset.company);
+  else openCompanies();
+};
+document.addEventListener("click", e => { if (!e.target.closest(".company-wrap")) companyMenu.hidden = true; });
+
+const companiesDlg = document.getElementById("companies");
+function openCompanies() { renderCompanyList(); companiesDlg.hidden = false; }
+function renderCompanyList() {
+  const listEl = document.getElementById("companyList");
+  listEl.innerHTML = companies.length ? companies.map(c => `<div class="company-item">
+      <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
+      <span class="cnt">${countFor(c.id)}件</span>
+      <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
+    </div>`).join("") : `<div class="company-empty">まだ会社が登録されていません。</div>`;
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest(".open-companies");
+  if (t) { e.preventDefault(); openCompanies(); }
+});
+document.getElementById("companiesClose").onclick = () => { companiesDlg.hidden = true; render(); };
+document.getElementById("addCompany").onclick = () => {
+  const input = document.getElementById("newCompany");
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  const c = { id: uid(), name };
+  companies.push(c);
+  currentCompanyId = c.id; // 追加した会社にそのまま切り替える
+  saveCompanies();
+  input.value = "";
+  renderCompanyList();
+  render();
+};
+document.getElementById("newCompany").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("addCompany").click(); });
+document.getElementById("companyList").addEventListener("change", e => {
+  const id = e.target.dataset.rename;
+  const c = companies.find(x => x.id === id);
+  if (!c) return;
+  const name = e.target.value.trim();
+  if (name) { c.name = name; saveCompanies(); render(); } else e.target.value = c.name;
+});
+document.getElementById("companyList").addEventListener("click", e => {
+  const t = e.target.closest("[data-remove]");
+  if (!t) return;
+  const c = companies.find(x => x.id === t.dataset.remove);
+  const n = rows.filter(r => r.companyId === c.id).length;
+  if (!confirm(n ? `「${c.name}」を削除すると、仕訳 ${n} 件も削除されます。よろしいですか？` : `「${c.name}」を削除しますか？`)) return;
+  rows = rows.filter(r => r.companyId !== c.id);
+  companies = companies.filter(x => x !== c);
+  if (currentCompanyId === c.id) currentCompanyId = companies[0]?.id || null;
+  saveCompanies(); save();
+  renderCompanyList(); render();
+});
+
+const moveDlg = document.getElementById("moveDlg");
+let movingRowId = null;
+function openMove(rowId) {
+  movingRowId = rowId;
+  document.getElementById("moveList").innerHTML = companies.filter(c => c.id !== currentCompanyId)
+    .map(c => `<button class="btn" data-to="${c.id}"><svg><use href="#i-building"/></svg>${escapeHtml(c.name)}</button>`).join("");
+  moveDlg.hidden = false;
+}
+document.getElementById("moveList").onclick = e => {
+  const t = e.target.closest("[data-to]");
+  if (!t) return;
+  const row = rows.find(r => r.id === movingRowId);
+  if (row) row.companyId = t.dataset.to;
+  moveDlg.hidden = true;
+  save(); render();
+};
+document.getElementById("moveClose").onclick = () => { moveDlg.hidden = true; };
 
 // ---- 設定（APIキー） ----
 const settingsDlg = document.getElementById("settings");
@@ -880,6 +1076,7 @@ let stream = null;
 let shotCount = 0;
 
 async function openCamera() {
+  if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
   shotCount = 0;
   document.getElementById("camCount").textContent = "0枚";
   document.getElementById("camLast").hidden = true;
@@ -934,6 +1131,15 @@ document.querySelector("#camMsg .file-picker").addEventListener("change", closeC
 
 // 前回「読み取り中」のまま閉じた行は残さない
 rows = rows.filter(r => r.status !== "reading");
+// 会社機能より前に取り込んだ仕訳は、仮の会社にまとめる
+if (rows.some(r => !r.companyId)) {
+  if (!companies.length) companies.push({ id: uid(), name: "会社1" });
+  const fallback = currentCompany()?.id || companies[0].id;
+  rows.forEach(r => { r.companyId ||= fallback; });
+  save();
+}
+if (!currentCompany()) currentCompanyId = companies[0]?.id || null;
+saveCompanies();
 render();
 updateMode();
 </script>
