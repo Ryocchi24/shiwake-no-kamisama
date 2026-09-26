@@ -130,6 +130,7 @@
   .mobile-capture { display: none; }
   .topbar-gear { margin-left: auto; }
   .banner { background: var(--warn-soft); color: var(--warn); border: 1px solid #f1dca4; border-radius: var(--radius); padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
   .banner .btn { margin-left: auto; height: 32px; }
 
   .camera { position: fixed; inset: 0; background: #000; z-index: 100; color: #fff; }
@@ -157,6 +158,8 @@
   .dialog h2 { margin: 0 0 16px; font-size: 17px; }
   .dlg-label { font-size: 13px; font-weight: 500; display: block; margin-bottom: 6px; }
   .dialog input { width: 100%; font: inherit; height: 40px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 10px; }
+  .mode-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 13px; }
+  .mode-box p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
   .dlg-help { font-size: 12.5px; color: var(--muted); margin: 8px 0 18px; }
   .dlg-actions { display: flex; gap: 8px; align-items: center; }
 
@@ -237,7 +240,7 @@
       <div class="page-head">
         <div>
           <h1>レシート取込</h1>
-          <p>レシートを撮影・アップロードすると、日付・金額・摘要を自動で読み取ります。</p>
+          <p>レシートを撮影・アップロードすると、日付・金額・摘要を自動で読み取ります。<span class="mode-tag" id="modeTag"></span></p>
         </div>
         <div class="actions">
           <label class="btn"><svg><use href="#i-upload"/></svg>画像をアップロード<input class="file-picker" type="file" accept="image/*" multiple></label>
@@ -245,7 +248,7 @@
         </div>
       </div>
 
-      <div class="banner" id="keyBanner" hidden>AI読み取りを使うには、最初に <b>APIキー</b> の設定が必要です。<button class="btn btn-primary open-settings">設定する</button></div>
+      <div class="banner" id="ocrBanner" hidden></div>
 
       <div class="stats">
         <div class="stat"><div class="stat-label">仕訳件数</div><div class="stat-value mono" id="st-count">0<small>件</small></div></div>
@@ -307,10 +310,13 @@
 <div class="dialog-back" id="settings" hidden>
   <div class="dialog">
     <h2>設定</h2>
-    <label class="dlg-label" for="apiKey">Anthropic APIキー</label>
-    <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-...">
-    <p class="dlg-help">キーはこの端末のブラウザの中にだけ保存され、GitHubやほかの場所には送られません（AIへの読み取り依頼にのみ使います）。
-      キーは <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> で発行できます。</p>
+    <div class="mode-box">
+      <b>現在の読み取り方式：<span id="modeName"></span></b>
+      <p>標準は <b>無料モード</b>（スマホの中で文字を読み取る方式）です。画像は端末の外に出ません。精度は控えめなので、一覧で確認・修正してください。</p>
+    </div>
+    <label class="dlg-label" for="apiKey">高精度モード用 APIキー（任意・有料）</label>
+    <input id="apiKey" type="password" autocomplete="off" placeholder="空欄のままなら無料モード">
+    <p class="dlg-help">Anthropic のAPIキーを入れると、AI（Claude）で高精度に読み取ります（1枚あたり数円）。キーはこの端末のブラウザ内にだけ保存されます。</p>
     <div class="dlg-actions">
       <button class="btn btn-ghost" id="keyDelete">キーを削除</button>
       <span style="flex:1"></span>
@@ -321,6 +327,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2.2.0/encoding.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
 <script type="module">
 import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm";
 
@@ -328,7 +335,8 @@ const MODEL = "claude-opus-5";
 const API_KEY_STORAGE = "shiwake-api-key";
 const STORAGE_KEY = "receipt-rows-v1";
 const SETTINGS_KEY = "receipt-settings-v1";
-const MAX_PARALLEL = 3;
+const MAX_PARALLEL_AI = 3;  // Claude はサーバー側で処理するので並列で送る
+const MAX_PARALLEL_OCR = 1; // 端末内OCRはスマホの負荷が高いので1枚ずつ
 
 /** 1行 = 1仕訳。原寸画像はメモリ上のみ、thumb は保存用の小さい画像 */
 let rows = load(STORAGE_KEY, []);
@@ -406,7 +414,8 @@ function resize(file, maxSide, quality) {
 }
 
 function pump() {
-  while (running < MAX_PARALLEL && queue.length) {
+  const limit = getApiKey() ? MAX_PARALLEL_AI : MAX_PARALLEL_OCR;
+  while (running < limit && queue.length) {
     const groupId = queue.shift();
     running++;
     readGroup(groupId).finally(() => { running--; pump(); });
@@ -416,7 +425,8 @@ function pump() {
 async function readGroup(groupId) {
   const placeholder = rows.find(r => r.groupId === groupId && r.status === "reading");
   try {
-    const data = { receipts: await readReceipt(fullImages.get(groupId).split(",")[1]) };
+    const image = fullImages.get(groupId);
+    const data = { receipts: getApiKey() ? await readReceipt(image.split(",")[1]) : await readReceiptFree(image) };
 
     const idx = rows.indexOf(placeholder);
     if (idx < 0) return; // 読み取り中に削除された
@@ -429,6 +439,7 @@ async function readGroup(groupId) {
       summary: r.summary || r.store || "",
       creditCode: "", creditSub: "", creditAmount: r.amount || "",
       note: r.note || "",
+      ocrText: r.ocrText || "",
     }));
     rows.splice(idx, 1, ...newRows);
   } catch (err) {
@@ -509,6 +520,145 @@ async function readReceipt(imageBase64) {
   return JSON.parse(text).receipts;
 }
 
+// ---- 無料モード：端末内OCR（Tesseract.js）＋ルールで項目を抜き出す ----
+let ocrWorkerPromise = null;
+function getOcrWorker() {
+  if (!ocrWorkerPromise) {
+    const banner = document.getElementById("ocrBanner");
+    banner.textContent = "文字認識の準備をしています（初回のみ数MBのデータを読み込みます）…";
+    banner.hidden = false;
+    ocrWorkerPromise = Tesseract.createWorker("jpn")
+      .then(async worker => {
+        await worker.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
+        return worker;
+      })
+      .catch(err => { ocrWorkerPromise = null; throw new Error("文字認識の準備に失敗しました。電波の良い場所で再読み取りしてください"); })
+      .finally(() => { banner.hidden = true; });
+  }
+  return ocrWorkerPromise;
+}
+
+// OCR向けに白黒化・コントラスト強調した画像を作る
+function preprocessForOcr(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(2, 1800 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      const ctx = c.getContext("2d");
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      const px = ctx.getImageData(0, 0, c.width, c.height);
+      const d = px.data;
+      // 明るさの分布の両端を切ってコントラストを広げる（感熱紙の薄い文字対策）
+      const hist = new Uint32Array(256);
+      const gray = new Uint8ClampedArray(d.length / 4);
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        gray[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        hist[gray[j]]++;
+      }
+      const total = gray.length;
+      let lo = 0, hi = 255, acc = 0;
+      while (lo < 255 && (acc += hist[lo]) < total * 0.02) lo++;
+      acc = 0;
+      while (hi > 0 && (acc += hist[hi]) < total * 0.02) hi--;
+      const range = Math.max(1, hi - lo);
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        const v = ((gray[j] - lo) * 255) / range;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+      ctx.putImageData(px, 0, 0);
+      resolve(c);
+    };
+    img.onerror = () => reject(new Error("画像を開けませんでした"));
+    img.src = dataUrl;
+  });
+}
+
+// 全角英数字→半角、日本語の文字間に入る余計な空白を除去
+function normalizeText(text) {
+  return text
+    .replace(/[０-９Ａ-Ｚａ-ｚ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+    .replace(/[，]/g, ",").replace(/[．]/g, ".").replace(/[／]/g, "/").replace(/[：]/g, ":")
+    .replace(/[¥￥]/g, "¥")
+    .replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1")
+    .replace(/(\d)[ \t]+(?=[\d,])/g, "$1")
+    .replace(/,[ \t]+(?=\d)/g, ",")
+    // 「5.,500」「5 ,500」「5、500」のように崩れた桁区切りを「5,500」に直す
+    .replace(/(\d)[ \t]*[,.、]{1,2}[ \t]*(?=\d{3}(?!\d))/g, "$1,");
+}
+
+function validDate(y, m, d) {
+  const dt = new Date(y, m - 1, d);
+  return y >= 2000 && y <= 2100 && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+const pad = n => String(n).padStart(2, "0");
+
+function extractDate(text) {
+  const candidates = [];
+  const push = (y, m, d) => { if (validDate(y, m, d)) candidates.push(`${y}-${pad(m)}-${pad(d)}`); };
+  for (const m of text.matchAll(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})/g)) push(+m[1], +m[2], +m[3]);
+  for (const m of text.matchAll(/(?:令和|R)\s*(\d{1,2}|元)\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})/g))
+    push(2018 + (m[1] === "元" ? 1 : +m[1]), +m[2], +m[3]);
+  if (!candidates.length) {
+    for (const m of text.matchAll(/(?<!\d)(\d{2})[/.](\d{1,2})[/.](\d{1,2})(?!\d)/g)) push(2000 + +m[1], +m[2], +m[3]);
+  }
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+  return candidates.find(c => c <= today) || candidates[0] || "";
+}
+
+function amountsIn(line) {
+  // 「1,280」「¥1280」「1.280」（OCRでカンマが点になる場合）などを拾う
+  return [...line.matchAll(/¥?\s*(\d{1,3}(?:[,.]\d{3})+|\d{1,7})(?![\d%])/g)]
+    .map(m => Number(m[1].replace(/[,.]/g, "")))
+    .filter(n => n > 0 && n < 10000000);
+}
+
+function extractAmount(lines) {
+  const exclude = /小計|お?預|釣|つり|税率|対象|内税|外税|消費税|点数|ポイント|電話|TEL|No\.|番号/i;
+  const priorities = [/合\s*計|総\s*額|ご?請求/, /お買上|お買い上げ|領収金額|お支払|支払金額/, /(?<!小)計/];
+  for (const re of priorities) {
+    for (let i = 0; i < lines.length; i++) {
+      if (!re.test(lines[i]) || exclude.test(lines[i])) continue;
+      // 金額が同じ行になければ次の行を見る
+      const nums = amountsIn(lines[i].replace(/.*?(合\s*計|総\s*額|請求|お買上|お買い上げ|領収金額|お支払|支払金額|計)/, ""));
+      const found = nums.length ? nums : amountsIn(lines[i + 1] || "");
+      if (found.length) return Math.max(...found);
+    }
+  }
+  // キーワードが読めなかった場合は「¥」付きの最大の金額
+  const yen = lines.filter(l => /¥/.test(l) && !/お?預|釣|つり/.test(l)).flatMap(amountsIn);
+  return yen.length ? Math.max(...yen) : 0;
+}
+
+function extractStore(lines) {
+  const skip = /領収|レシート|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|^[\d\s\-:/.,¥]+$/i;
+  for (const line of lines.slice(0, 8)) {
+    const t = line.replace(/[^\p{L}\p{N}ー・&\s]/gu, "").trim();
+    const letters = (t.match(/[\p{L}]/gu) || []).length;
+    if (letters >= 2 && !skip.test(line)) return t.slice(0, 20);
+  }
+  return "";
+}
+
+async function readReceiptFree(dataUrl) {
+  const worker = await getOcrWorker();
+  const canvas = await preprocessForOcr(dataUrl);
+  const { data } = await worker.recognize(canvas);
+  const text = normalizeText(data.text || "");
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const date = extractDate(text);
+  const amount = extractAmount(lines);
+  const store = extractStore(lines);
+  const missing = [!date && "日付", !amount && "金額", !store && "店名"].filter(Boolean);
+  return [{
+    date, amount, store, summary: store, ocrText: text,
+    note: missing.length ? `${missing.join("・")}を読み取れませんでした` : "",
+  }];
+}
+
 // ---- 表示 ----
 const FIELDS = [
   { key: "date", label: "①伝票日付", type: "date", cls: "c-date" },
@@ -565,7 +715,7 @@ function render() {
     const head = `<td class="rowno">${i + 1}</td><td class="c-status">${statusBadge(row)}</td>${thumb}`;
     if (row.status !== "done") {
       const msg = row.status === "reading"
-        ? `<span class="status-msg">AIが読み取っています…</span>`
+        ? `<span class="status-msg">読み取っています…</span>`
         : `<span class="status-msg error">${escapeHtml(row.error)}<button class="btn" data-retry="${row.id}">再読み取り</button></span>`;
       body += `<tr class="is-${row.status}">${head}<td colspan="${FIELDS.length}" class="c-msg">${msg}</td>${del(row.id)}</tr>`;
       return;
@@ -704,9 +854,13 @@ document.getElementById("clearAll").onclick = () => {
 // ---- 設定（APIキー） ----
 const settingsDlg = document.getElementById("settings");
 const apiKeyInput = document.getElementById("apiKey");
-function openSettings() { apiKeyInput.value = getApiKey(); settingsDlg.hidden = false; apiKeyInput.focus(); }
-function closeSettings() { settingsDlg.hidden = true; updateKeyBanner(); }
-function updateKeyBanner() { document.getElementById("keyBanner").hidden = !!getApiKey(); }
+function openSettings() { apiKeyInput.value = getApiKey(); updateMode(); settingsDlg.hidden = false; }
+function closeSettings() { settingsDlg.hidden = true; updateMode(); }
+function updateMode() {
+  const name = getApiKey() ? "高精度モード（Claude）" : "無料モード（端末内）";
+  document.getElementById("modeName").textContent = name;
+  document.getElementById("modeTag").textContent = name;
+}
 for (const el of document.querySelectorAll(".open-settings")) el.addEventListener("click", e => { e.preventDefault(); openSettings(); });
 document.getElementById("settingsClose").onclick = closeSettings;
 document.getElementById("keySave").onclick = () => {
@@ -726,7 +880,6 @@ let stream = null;
 let shotCount = 0;
 
 async function openCamera() {
-  if (!getApiKey()) { openSettings(); return; }
   shotCount = 0;
   document.getElementById("camCount").textContent = "0枚";
   document.getElementById("camLast").hidden = true;
@@ -782,9 +935,9 @@ document.querySelector("#camMsg .file-picker").addEventListener("change", closeC
 // 前回「読み取り中」のまま閉じた行は残さない
 rows = rows.filter(r => r.status !== "reading");
 render();
-updateKeyBanner();
+updateMode();
 // スマホで開いたら、すぐにカメラを起動する
-if (matchMedia("(pointer: coarse)").matches && getApiKey()) openCamera();
+if (matchMedia("(pointer: coarse)").matches) openCamera();
 </script>
 </body>
 </html>
