@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "shiwake", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "3000", "--directory", "docs"], "port": 3000 }
+  ]
+}

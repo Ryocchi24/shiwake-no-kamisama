@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>仕分けの神様</title>
+<meta name="theme-color" content="#14213d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="仕分けの神様">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sidebar: #14213d; --sidebar-text: #aeb8cc; --sidebar-active: #22335a;
+    --bg: #f3f5f8; --surface: #fff; --surface-2: #f8f9fb;
+    --text: #1b2433; --muted: #6a7385; --line: #e2e6ec; --line-strong: #cfd5de;
+    --primary: #2463eb; --primary-hover: #1d52c7; --primary-soft: #eaf1ff;
+    --debit: #eef4ff; --debit-text: #2451b3; --credit: #fff3ec; --credit-text: #b3521e;
+    --ok: #127a4a; --ok-soft: #e4f5ec; --warn: #9a6200; --warn-soft: #fff4d9;
+    --err: #c62a2a; --err-soft: #fdeaea; --info: #4a5568; --info-soft: #edf0f4;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
+    font-family: "Noto Sans JP", -apple-system, "Hiragino Sans", sans-serif; }
+  .mono { font-family: "Roboto Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  /* レイアウト */
+  .app { display: grid; grid-template-columns: 224px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--sidebar); color: var(--sidebar-text); padding: 18px 12px; position: sticky; top: 0; height: 100vh; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 15px; padding: 0 8px 20px; }
+  .brand-mark { width: 30px; height: 30px; border-radius: 7px; background: var(--primary); display: grid; place-items: center; font-size: 15px; }
+  .nav-label { font-size: 11px; letter-spacing: .08em; padding: 14px 10px 6px; color: #7382a0; }
+  .nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; color: inherit; text-decoration: none; font-size: 13.5px; }
+  .nav a.active { background: var(--sidebar-active); color: #fff; }
+  .nav a.disabled { opacity: .5; pointer-events: none; }
+  .nav .soon { margin-left: auto; font-size: 10px; border: 1px solid #3a4a6b; border-radius: 4px; padding: 0 5px; }
+  .nav svg { width: 16px; height: 16px; flex: none; }
+
+  .main { min-width: 0; display: flex; flex-direction: column; }
+  .topbar { height: 56px; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 28px; gap: 16px; position: sticky; top: 0; z-index: 10; }
+  .crumb { color: var(--muted); font-size: 13px; }
+  .crumb b { color: var(--text); font-weight: 500; }
+  .topbar .mobile-brand { display: none; }
+  .content { padding: 24px 28px 48px; max-width: 1440px; width: 100%; }
+
+  .page-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .page-head h1 { font-size: 20px; margin: 0; font-weight: 700; }
+  .page-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .page-head .actions { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ボタン */
+  .btn { font: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text);
+    border-radius: 6px; height: 36px; padding: 0 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .btn:hover { background: var(--surface-2); }
+  .btn svg { width: 16px; height: 16px; }
+  .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn input { display: none; }
+
+  /* 集計カード */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .stat-label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .stat-value { font-size: 22px; font-weight: 500; margin-top: 4px; }
+  .stat-value small { font-size: 13px; color: var(--muted); margin-left: 2px; font-family: "Noto Sans JP", sans-serif; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+  /* 仕訳テーブル */
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .panel-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .panel-title { font-weight: 700; font-size: 14px; }
+  .panel-head .spacer { flex: 1; }
+  .field { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
+  .field select { font: inherit; font-size: 12.5px; color: var(--text); height: 30px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 6px; background: var(--surface); }
+  .field input[type=checkbox] { accent-color: var(--primary); }
+  .divider { width: 1px; height: 22px; background: var(--line); }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1040px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: middle; }
+  thead th { background: var(--surface-2); font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; position: sticky; top: 0; }
+  thead tr.group th { font-weight: 700; text-align: center; border-bottom: 1px solid var(--line); padding: 6px; }
+  thead th.debit { background: var(--debit); color: var(--debit-text); }
+  thead th.credit { background: var(--credit); color: var(--credit-text); }
+  thead th.num { text-align: right; }
+  th.b-left, td.b-left { border-left: 1px solid var(--line); }
+  tbody tr:hover td { background: #fafbfd; }
+  tbody tr.is-error td, tbody tr.is-reading td { background: var(--surface-2); }
+  td.rowno { color: var(--muted); font-size: 12px; text-align: center; width: 36px; }
+  td input { width: 100%; font: inherit; font-size: 13.5px; height: 32px; border: 1px solid transparent; border-radius: 5px; padding: 0 7px; background: transparent; color: var(--text); }
+  td input:hover { border-color: var(--line); }
+  td input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
+  td input.num { text-align: right; font-family: "Roboto Mono", monospace; font-variant-numeric: tabular-nums; }
+  td input.code { font-family: "Roboto Mono", monospace; }
+  td input.code::placeholder { color: #c2c8d2; }
+  td input.missing { border-color: #f0b4b4; background: var(--err-soft); }
+  td.c-date { width: 140px; } td.c-code { width: 76px; } td.c-amount { width: 112px; } td.c-summary { min-width: 200px; }
+  td.c-amount input { padding: 0 4px; }
+  .thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 5px; cursor: zoom-in; border: 1px solid var(--line); display: block; }
+  .note { font-size: 11.5px; color: var(--warn); margin: 2px 7px 0; display: flex; gap: 4px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.err { background: var(--err-soft); color: var(--err); }
+  .badge.info { background: var(--info-soft); color: var(--info); }
+  .spinner { width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status-msg { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 10px; }
+  .status-msg.error { color: var(--err); }
+  .icon-btn { border: none; background: none; color: var(--muted); cursor: pointer; width: 28px; height: 28px; border-radius: 5px; display: grid; place-items: center; }
+  .icon-btn:hover { background: var(--err-soft); color: var(--err); }
+  .icon-btn svg { width: 15px; height: 15px; }
+  tfoot td { background: var(--surface-2); font-weight: 700; border-bottom: none; }
+  tfoot td.total { text-align: right; padding-right: 15px; }
+
+  .dropzone { margin: 16px; border: 1.5px dashed var(--line-strong); border-radius: var(--radius); padding: 44px 16px; text-align: center; color: var(--muted); }
+  .dropzone svg { width: 36px; height: 36px; color: #a9b2c1; }
+  .dropzone b { display: block; color: var(--text); font-size: 15px; margin: 8px 0 4px; }
+  body.dragging .panel { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  .modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .75); display: none; align-items: center; justify-content: center; z-index: 50; padding: 24px; }
+  .modal.open { display: flex; }
+  .modal img { max-width: 100%; max-height: 100%; border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+
+  .mobile-capture { display: none; }
+  .topbar-gear { margin-left: auto; }
+  .banner { background: var(--warn-soft); color: var(--warn); border: 1px solid #f1dca4; border-radius: var(--radius); padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .banner .btn { margin-left: auto; height: 32px; }
+
+  .camera { position: fixed; inset: 0; background: #000; z-index: 100; color: #fff; }
+  .camera[hidden], .dialog-back[hidden], .banner[hidden], .cam-msg[hidden] { display: none; }
+  .camera video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .cam-frame { position: absolute; inset: 12% 10% 22%; border: 2px solid rgba(255,255,255,.7); border-radius: 12px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.25); pointer-events: none; }
+  .cam-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .cam-flash.on { opacity: .8; transition: none; }
+  .cam-top { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
+  .cam-btn { font: inherit; font-size: 15px; color: #fff; background: rgba(0,0,0,.45); border: none; border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+  .cam-count { background: rgba(0,0,0,.45); border-radius: 999px; padding: 6px 14px; font-size: 14px; }
+  .cam-hint { position: absolute; left: 0; right: 0; bottom: calc(130px + env(safe-area-inset-bottom)); text-align: center; font-size: 13px; text-shadow: 0 1px 3px #000; }
+  .cam-bottom { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 16px 24px calc(24px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,.6)); }
+  .cam-last-wrap img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 2px solid #fff; }
+  .shutter { width: 76px; height: 76px; border-radius: 50%; border: 5px solid #fff; background: rgba(255,255,255,.3); cursor: pointer; padding: 0; }
+  .shutter::after { content: ""; display: block; width: 58px; height: 58px; margin: 4px auto; border-radius: 50%; background: #fff; }
+  .shutter:active::after { transform: scale(.9); }
+  .cam-done { justify-self: end; background: var(--primary); font-weight: 700; }
+  .cam-top { z-index: 2; }
+  .camera.no-stream .shutter, .camera.no-stream .cam-hint, .camera.no-stream .cam-frame, .camera.no-stream .cam-count { visibility: hidden; }
+  .cam-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; background: #111; }
+
+  .dialog-back { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .dialog { background: var(--surface); border-radius: 12px; width: 100%; max-width: 460px; padding: 22px; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .dialog h2 { margin: 0 0 16px; font-size: 17px; }
+  .dlg-label { font-size: 13px; font-weight: 500; display: block; margin-bottom: 6px; }
+  .dialog input { width: 100%; font: inherit; height: 40px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 10px; }
+  .dlg-help { font-size: 12.5px; color: var(--muted); margin: 8px 0 18px; }
+  .dlg-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* スマホ */
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .topbar { padding: 0 16px; background: var(--sidebar); border: none; color: #fff; }
+    .topbar .crumb { display: none; }
+    .topbar .mobile-brand { display: flex; }
+    .topbar-gear { color: #fff; }
+    .content { padding: 16px 16px 110px; }
+    .page-head .actions { display: none; }
+    .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat { padding: 10px 12px; }
+    .stat-value { font-size: 18px; }
+    .panel-head .spacer, .divider { display: none; }
+    .panel-head #download { width: 100%; justify-content: center; }
+    table { min-width: 0; }
+    thead { display: none; }
+    table, tbody, tfoot, tr, td { display: block; width: 100%; }
+    tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 12px 14px 12px 64px; border-bottom: 1px solid var(--line); position: relative; }
+    tbody td { border: none; padding: 0; width: auto !important; min-width: 0 !important; }
+    td.b-left { border: none; }
+    td.rowno { display: none; }
+    td.c-thumb { position: absolute; left: 14px; top: 14px; }
+    td.c-status { grid-column: 1 / 3; padding-right: 30px; }
+    td.c-summary, td.c-msg { grid-column: 1 / 3; }
+    td.c-del { position: absolute; right: 8px; top: 8px; }
+    td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
+    td input { border-color: var(--line); height: 36px; }
+    tfoot tr { display: flex; justify-content: space-between; padding: 12px 14px; }
+    tfoot td { width: auto; padding: 0; }
+    tfoot td.hide-sm { display: none; }
+    .mobile-capture { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+      background: var(--surface); border-top: 1px solid var(--line); z-index: 20; }
+    .mobile-capture .btn { height: 48px; justify-content: center; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2z"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">神</span>仕分けの神様</div>
+    <nav class="nav">
+      <div class="nav-label">仕訳</div>
+      <a href="#" class="active"><svg><use href="#i-receipt"/></svg>レシート取込</a>
+      <div class="nav-label">マスタ</div>
+      <a class="disabled"><svg><use href="#i-building"/></svg>会社<span class="soon">準備中</span></a>
+      <a class="disabled"><svg><use href="#i-list"/></svg>勘定科目<span class="soon">準備中</span></a>
+      <div class="nav-label">保管</div>
+      <a class="disabled"><svg><use href="#i-folder"/></svg>証憑フォルダ<span class="soon">準備中</span></a>
+      <div class="nav-label">システム</div>
+      <a href="#" class="open-settings"><svg><use href="#i-gear"/></svg>設定</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="brand mobile-brand" style="padding:0"><span class="brand-mark">神</span>仕分けの神様</div>
+      <div class="crumb">仕訳 / <b>レシート取込</b></div>
+      <button class="icon-btn topbar-gear open-settings" title="設定"><svg><use href="#i-gear"/></svg></button>
+    </div>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <h1>レシート取込</h1>
+          <p>レシートを撮影・アップロードすると、日付・金額・摘要を自動で読み取ります。</p>
+        </div>
+        <div class="actions">
+          <label class="btn"><svg><use href="#i-upload"/></svg>画像をアップロード<input class="file-picker" type="file" accept="image/*" multiple></label>
+          <button class="btn btn-primary open-camera"><svg><use href="#i-camera"/></svg>撮影する</button>
+        </div>
+      </div>
+
+      <div class="banner" id="keyBanner" hidden>AI読み取りを使うには、最初に <b>APIキー</b> の設定が必要です。<button class="btn btn-primary open-settings">設定する</button></div>
+
+      <div class="stats">
+        <div class="stat"><div class="stat-label">仕訳件数</div><div class="stat-value mono" id="st-count">0<small>件</small></div></div>
+        <div class="stat"><div class="stat-label">合計金額</div><div class="stat-value mono" id="st-total">¥0</div></div>
+        <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--warn)"></span>要確認</div><div class="stat-value mono" id="st-warn">0<small>件</small></div></div>
+        <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--primary)"></span>読取中</div><div class="stat-value mono" id="st-reading">0<small>件</small></div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">仕訳一覧</span>
+          <span class="spacer"></span>
+          <label class="field">日付形式
+            <select id="dateFormat"><option value="slash">YYYY/MM/DD</option><option value="compact">YYYYMMDD</option></select>
+          </label>
+          <label class="field">文字コード
+            <select id="encoding"><option value="sjis">Shift_JIS</option><option value="utf8">UTF-8</option></select>
+          </label>
+          <label class="field"><input id="includeHeader" type="checkbox"> 見出し行</label>
+          <span class="divider"></span>
+          <button class="btn btn-ghost" id="clearAll"><svg><use href="#i-trash"/></svg>全消去</button>
+          <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg>CSVダウンロード</button>
+        </div>
+        <div id="list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mobile-capture">
+  <label class="btn"><svg><use href="#i-upload"/></svg>画像を選ぶ<input class="file-picker" type="file" accept="image/*" multiple></label>
+  <button class="btn btn-primary open-camera"><svg><use href="#i-camera"/></svg>撮影する</button>
+</div>
+
+<div class="modal" id="modal"><img id="modalImg" alt=""></div>
+
+<!-- カメラ -->
+<div class="camera" id="camera" hidden>
+  <video id="video" playsinline muted autoplay></video>
+  <div class="cam-frame"></div>
+  <div class="cam-flash" id="camFlash"></div>
+  <div class="cam-top">
+    <button class="cam-btn" id="camClose">✕ 閉じる</button>
+    <span class="cam-count" id="camCount">0枚</span>
+  </div>
+  <div class="cam-msg" id="camMsg" hidden>
+    <p id="camMsgText">カメラを起動できませんでした。</p>
+    <label class="btn btn-primary">標準カメラで撮影<input class="file-picker" type="file" accept="image/*" capture="environment"></label>
+  </div>
+  <div class="cam-hint">レシート全体が枠に入るように撮影してください</div>
+  <div class="cam-bottom">
+    <div class="cam-last-wrap"><img id="camLast" alt="" hidden></div>
+    <button class="shutter" id="shutter" aria-label="撮影"></button>
+    <button class="cam-btn cam-done" id="camDone">完了</button>
+  </div>
+</div>
+
+<!-- 設定 -->
+<div class="dialog-back" id="settings" hidden>
+  <div class="dialog">
+    <h2>設定</h2>
+    <label class="dlg-label" for="apiKey">Anthropic APIキー</label>
+    <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-...">
+    <p class="dlg-help">キーはこの端末のブラウザの中にだけ保存され、GitHubやほかの場所には送られません（AIへの読み取り依頼にのみ使います）。
+      キーは <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> で発行できます。</p>
+    <div class="dlg-actions">
+      <button class="btn btn-ghost" id="keyDelete">キーを削除</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="settingsClose">キャンセル</button>
+      <button class="btn btn-primary" id="keySave">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2.2.0/encoding.min.js"></script>
+<script type="module">
+import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm";
+
+const MODEL = "claude-opus-5";
+const API_KEY_STORAGE = "shiwake-api-key";
+const STORAGE_KEY = "receipt-rows-v1";
+const SETTINGS_KEY = "receipt-settings-v1";
+const MAX_PARALLEL = 3;
+
+/** 1行 = 1仕訳。原寸画像はメモリ上のみ、thumb は保存用の小さい画像 */
+let rows = load(STORAGE_KEY, []);
+const fullImages = new Map(); // groupId -> dataURL（画面を開いている間だけ保持）
+let queue = [];
+let running = 0;
+
+function load(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.filter(r => r.status !== "reading"))); } catch {}
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+const yen = n => "¥" + Number(n || 0).toLocaleString();
+
+// ---- 設定 ----
+const settings = Object.assign({ dateFormat: "slash", encoding: "sjis", includeHeader: true }, load(SETTINGS_KEY, {}));
+for (const key of ["dateFormat", "encoding"]) {
+  const el = document.getElementById(key);
+  el.value = settings[key];
+  el.onchange = () => { settings[key] = el.value; saveSettings(); };
+}
+const headerBox = document.getElementById("includeHeader");
+headerBox.checked = settings.includeHeader;
+headerBox.onchange = () => { settings.includeHeader = headerBox.checked; saveSettings(); };
+function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} }
+
+// ---- 画像の取り込み ----
+for (const input of document.querySelectorAll(".file-picker, .file-camera")) {
+  input.onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+}
+// PC はドラッグ＆ドロップでも取り込める
+let dragDepth = 0;
+addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", e => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
+  addFiles([...e.dataTransfer.files].filter(f => f.type.startsWith("image/")));
+});
+
+async function addFiles(fileList) {
+  const files = Array.from(fileList);
+  for (const file of files) {
+    const groupId = uid();
+    try {
+      const [full, thumb] = await Promise.all([resize(file, 1600, 0.85), resize(file, 400, 0.7)]);
+      fullImages.set(groupId, full);
+      rows.push({ id: uid(), groupId, thumb, status: "reading" });
+      queue.push(groupId);
+    } catch (err) {
+      alert(`${file.name}: ${err.message}`);
+    }
+  }
+  render();
+  pump();
+}
+
+function resize(file, maxSide, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => reject(new Error("画像を開けませんでした"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function pump() {
+  while (running < MAX_PARALLEL && queue.length) {
+    const groupId = queue.shift();
+    running++;
+    readGroup(groupId).finally(() => { running--; pump(); });
+  }
+}
+
+async function readGroup(groupId) {
+  const placeholder = rows.find(r => r.groupId === groupId && r.status === "reading");
+  try {
+    const data = { receipts: await readReceipt(fullImages.get(groupId).split(",")[1]) };
+
+    const idx = rows.indexOf(placeholder);
+    if (idx < 0) return; // 読み取り中に削除された
+    const receipts = data.receipts.length ? data.receipts
+      : [{ date: "", amount: 0, summary: "", note: "レシートを検出できませんでした" }];
+    const newRows = receipts.map(r => ({
+      id: uid(), groupId, thumb: placeholder.thumb, status: "done",
+      date: r.date || "",
+      debitCode: "", debitSub: "", debitAmount: r.amount || "",
+      summary: r.summary || r.store || "",
+      creditCode: "", creditSub: "", creditAmount: r.amount || "",
+      note: r.note || "",
+    }));
+    rows.splice(idx, 1, ...newRows);
+  } catch (err) {
+    if (placeholder) Object.assign(placeholder, { status: "error", error: err.message });
+  }
+  save();
+  render();
+}
+
+// ---- AI 読み取り（ブラウザから直接 Claude API を呼ぶ） ----
+const RECEIPT_SCHEMA = {
+  type: "object",
+  properties: {
+    receipts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "取引日 YYYY-MM-DD。読めない場合は空文字" },
+          amount: { type: "integer", description: "支払総額（税込・円）。読めない場合は0" },
+          store: { type: "string", description: "店名・発行者名" },
+          summary: { type: "string", description: "摘要: 「店名 主な品目」の形で短く（全角20文字程度まで）" },
+          note: { type: "string", description: "読み取りに自信がない点があれば短く。なければ空文字" },
+        },
+        required: ["date", "amount", "store", "summary", "note"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["receipts"],
+  additionalProperties: false,
+};
+
+function buildPrompt() {
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+  return `この画像は日本の領収書・レシートです。会計仕訳の入力に使うため、次の情報を読み取ってください。
+
+- date: 取引日を西暦 YYYY-MM-DD で。和暦（令和など）は西暦に変換。年が印字されていない場合は、今日（${today}）以前で最も近い年と判断する。
+- amount: 実際に支払った合計金額（税込）。お預かり・お釣りの金額ではなく「合計」「お買上計」「領収金額」の金額を使う。
+- store: 店名・発行者名。
+- summary: 「店名 主な品目」の形で短く。品目が多い場合は代表的なものか分類名（例: 文具類、飲食代）でまとめる。
+- note: かすれ・折れなどで確信が持てない項目があれば短く記載。
+
+1枚の画像に複数のレシートが写っている場合は、それぞれを別の要素として返してください。
+レシートが写っていない場合は receipts を空配列にしてください。`;
+}
+
+function getApiKey() { try { return localStorage.getItem(API_KEY_STORAGE) || ""; } catch { return ""; } }
+
+async function readReceipt(imageBase64) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("APIキーが未設定です（右上の設定から登録してください）");
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  let response;
+  try {
+    response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 16000,
+      output_config: { effort: "medium", format: { type: "json_schema", schema: RECEIPT_SCHEMA } },
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } },
+          { type: "text", text: buildPrompt() },
+        ],
+      }],
+    });
+  } catch (err) {
+    if (err instanceof Anthropic.AuthenticationError) throw new Error("APIキーが正しくありません（設定を確認してください）");
+    if (err instanceof Anthropic.RateLimitError) throw new Error("混み合っています。少し待ってから再読み取りしてください");
+    if (err instanceof Anthropic.APIConnectionError) throw new Error("AIに接続できません。電波状況を確認してください");
+    if (err instanceof Anthropic.APIError) throw new Error(`AIエラー (${err.status}): ${err.message}`);
+    throw err;
+  }
+  if (response.stop_reason === "refusal") throw new Error("AIが読み取りを断りました。画像を確認してください");
+  const text = response.content.find(b => b.type === "text")?.text;
+  if (!text) throw new Error("読み取り結果が空でした");
+  return JSON.parse(text).receipts;
+}
+
+// ---- 表示 ----
+const FIELDS = [
+  { key: "date", label: "①伝票日付", type: "date", cls: "c-date" },
+  { key: "debitCode", label: "②借方科目", code: true, cls: "c-code b-left" },
+  { key: "debitSub", label: "③借方補助", code: true, cls: "c-code" },
+  { key: "debitAmount", label: "④借方金額", num: true, cls: "c-amount" },
+  { key: "summary", label: "⑤摘要", cls: "c-summary b-left" },
+  { key: "creditCode", label: "⑥貸方科目", code: true, cls: "c-code b-left" },
+  { key: "creditSub", label: "⑦貸方補助", code: true, cls: "c-code" },
+  { key: "creditAmount", label: "⑧貸方金額", num: true, cls: "c-amount" },
+];
+
+const isMissing = (key, v) => (key === "date" && !v) || ((key === "debitAmount" || key === "creditAmount") && !Number(v));
+const needsCheck = r => r.status === "done" && (!!r.note || !r.date || !Number(r.debitAmount) || Number(r.debitAmount) !== Number(r.creditAmount));
+
+function sortedRows() {
+  // 日付順（未入力・読み取り中は末尾）
+  const k = r => r.date || "9999";
+  return [...rows].sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
+}
+
+function statusBadge(row) {
+  if (row.status === "reading") return `<span class="badge info"><span class="spinner"></span>読取中</span>`;
+  if (row.status === "error") return `<span class="badge err">エラー</span>`;
+  return needsCheck(row) ? `<span class="badge warn">要確認</span>` : `<span class="badge ok">OK</span>`;
+}
+
+function renderStats() {
+  const done = rows.filter(r => r.status === "done");
+  document.getElementById("st-count").innerHTML = `${done.length}<small>件</small>`;
+  document.getElementById("st-total").textContent = yen(done.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
+  document.getElementById("st-warn").innerHTML = `${done.filter(needsCheck).length}<small>件</small>`;
+  document.getElementById("st-reading").innerHTML = `${rows.filter(r => r.status === "reading").length}<small>件</small>`;
+  document.getElementById("download").disabled = done.length === 0;
+  const tDebit = document.getElementById("t-debit"), tCredit = document.getElementById("t-credit");
+  if (tDebit) tDebit.textContent = yen(done.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
+  if (tCredit) tCredit.textContent = yen(done.reduce((s, r) => s + Number(r.creditAmount || 0), 0));
+}
+
+function render() {
+  const list = document.getElementById("list");
+  renderStats();
+
+  if (!rows.length) {
+    list.innerHTML = `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
+      <b>まだレシートがありません</b>「撮影する」でレシートを撮るか、画像をここにドラッグ＆ドロップしてください。</div>`;
+    return;
+  }
+
+  const del = id => `<td class="c-del"><button class="icon-btn" data-del="${id}" title="削除"><svg><use href="#i-trash"/></svg></button></td>`;
+  let body = "";
+  sortedRows().forEach((row, i) => {
+    const thumb = `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="レシート"></td>`;
+    const head = `<td class="rowno">${i + 1}</td><td class="c-status">${statusBadge(row)}</td>${thumb}`;
+    if (row.status !== "done") {
+      const msg = row.status === "reading"
+        ? `<span class="status-msg">AIが読み取っています…</span>`
+        : `<span class="status-msg error">${escapeHtml(row.error)}<button class="btn" data-retry="${row.id}">再読み取り</button></span>`;
+      body += `<tr class="is-${row.status}">${head}<td colspan="${FIELDS.length}" class="c-msg">${msg}</td>${del(row.id)}</tr>`;
+      return;
+    }
+    body += `<tr>${head}` + FIELDS.map(f => {
+      const v = row[f.key] ?? "";
+      const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
+      const attrs = f.type === "date" ? 'type="date"' : f.num ? 'inputmode="numeric"' : "";
+      const cls = [f.num ? "num" : "", f.code ? "code" : "", isMissing(f.key, v) ? "missing" : ""].join(" ");
+      return `<td class="${f.cls}" data-label="${f.label}">
+        <input ${attrs} class="${cls}" ${f.code ? 'placeholder="—"' : ""} data-id="${row.id}" data-key="${f.key}" value="${escapeHtml(shown)}">
+        ${f.key === "summary" && row.note ? `<div class="note">⚠ ${escapeHtml(row.note)}</div>` : ""}
+      </td>`;
+    }).join("") + `${del(row.id)}</tr>`;
+  });
+
+  list.innerHTML = `<div class="table-wrap"><table>
+    <thead>
+      <tr class="group">
+        <th colspan="4"></th>
+        <th class="debit b-left" colspan="3">借方</th>
+        <th class="b-left"></th>
+        <th class="credit b-left" colspan="3">貸方</th>
+        <th></th>
+      </tr>
+      <tr>
+        <th>No.</th><th>状態</th><th>証憑</th><th>①伝票日付</th>
+        <th class="b-left">②科目コード</th><th>③補助コード</th><th class="num">④金額</th>
+        <th class="b-left">⑤摘要</th>
+        <th class="b-left">⑥科目コード</th><th>⑦補助コード</th><th class="num">⑧金額</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>${body}</tbody>
+    <tfoot><tr>
+      <td colspan="4" class="hide-sm">合計</td>
+      <td colspan="3" class="total b-left"><span class="hide-sm-label">借方 </span><span class="mono" id="t-debit"></span></td>
+      <td class="b-left hide-sm"></td>
+      <td colspan="3" class="total b-left"><span class="hide-sm-label">貸方 </span><span class="mono" id="t-credit"></span></td>
+      <td class="hide-sm"></td>
+    </tr></tfoot>
+  </table></div>`;
+  renderStats();
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// 入力の反映（再描画はしないのでフォーカスが外れない）
+const list = document.getElementById("list");
+list.addEventListener("input", e => {
+  const { id, key } = e.target.dataset;
+  const row = rows.find(r => r.id === id);
+  if (!row) return;
+  const field = FIELDS.find(f => f.key === key);
+  let value = e.target.value;
+  if (field.num) value = value.replace(/[^\d]/g, "");
+  // 借方金額と貸方金額が同じだった場合は連動させる
+  if (key === "debitAmount" && String(row.creditAmount) === String(row.debitAmount)) {
+    row.creditAmount = value;
+    const credit = list.querySelector(`input[data-id="${id}"][data-key="creditAmount"]`);
+    if (credit) { credit.value = value ? Number(value).toLocaleString() : ""; credit.classList.toggle("missing", isMissing("creditAmount", value)); }
+  }
+  row[key] = value;
+  e.target.classList.toggle("missing", isMissing(key, value));
+  const badge = e.target.closest("tr").querySelector(".c-status");
+  if (badge) badge.innerHTML = statusBadge(row);
+  renderStats();
+  save();
+});
+// 金額はフォーカスが外れたらカンマ区切りで表示、日付変更時は並び替え
+list.addEventListener("change", e => {
+  const { id, key } = e.target.dataset;
+  const row = rows.find(r => r.id === id);
+  if (!row) return;
+  if (key === "date") render();
+  else if (FIELDS.find(f => f.key === key)?.num && row[key] !== "") e.target.value = Number(row[key]).toLocaleString();
+});
+
+list.addEventListener("click", e => {
+  const t = e.target.closest("[data-del], [data-retry], .thumb");
+  if (!t) return;
+  if (t.dataset.del) {
+    const row = rows.find(r => r.id === t.dataset.del);
+    if (row && (row.status !== "done" || confirm("この仕訳を削除しますか？"))) {
+      rows = rows.filter(r => r !== row);
+      save(); render();
+    }
+  } else if (t.dataset.retry) {
+    const row = rows.find(r => r.id === t.dataset.retry);
+    if (!fullImages.has(row.groupId)) {
+      alert("元の画像が残っていないため再読み取りできません。もう一度撮影してください。");
+      return;
+    }
+    Object.assign(row, { status: "reading", error: "" });
+    queue.push(row.groupId);
+    render(); pump();
+  } else {
+    document.getElementById("modalImg").src = fullImages.get(t.dataset.group) || t.src;
+    document.getElementById("modal").classList.add("open");
+  }
+});
+document.getElementById("modal").onclick = () => document.getElementById("modal").classList.remove("open");
+
+// ---- CSV ----
+const CSV_HEADERS = ["伝票日付", "借方勘定科目コード", "借方科目別補助コード", "借方金額", "摘要", "貸方勘定科目コード", "貸方科目別補助コード", "貸方金額"];
+document.getElementById("download").onclick = async () => {
+  const done = sortedRows().filter(r => r.status === "done");
+  const incomplete = done.filter(r => !r.date || !Number(r.debitAmount));
+  if (incomplete.length && !confirm(`日付か金額が空の行が ${incomplete.length} 件あります。このままダウンロードしますか？`)) return;
+
+  const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
+  const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const lines = done.map(r => [formatDate(r.date), r.debitCode, r.debitSub, r.debitAmount, r.summary, r.creditCode, r.creditSub, r.creditAmount].map(cell).join(","));
+  if (settings.includeHeader) lines.unshift(CSV_HEADERS.join(","));
+  const csv = lines.join("\r\n") + "\r\n";
+
+  const bytes = settings.encoding === "utf8"
+    ? new TextEncoder().encode("\uFEFF" + csv)
+    : new Uint8Array(Encoding.convert(Encoding.stringToCode(csv), { to: "SJIS", from: "UNICODE" }));
+  const blob = new Blob([bytes], { type: "text/csv" });
+  const stamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" }).replace(/[-: ]/g, "").slice(0, 12);
+  const name = `shiwake_${stamp}.csv`;
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+document.getElementById("clearAll").onclick = () => {
+  if (!rows.length || !confirm("取り込んだレシートをすべて消去しますか？")) return;
+  rows = []; queue = []; fullImages.clear();
+  save(); render();
+};
+
+// ---- 設定（APIキー） ----
+const settingsDlg = document.getElementById("settings");
+const apiKeyInput = document.getElementById("apiKey");
+function openSettings() { apiKeyInput.value = getApiKey(); settingsDlg.hidden = false; apiKeyInput.focus(); }
+function closeSettings() { settingsDlg.hidden = true; updateKeyBanner(); }
+function updateKeyBanner() { document.getElementById("keyBanner").hidden = !!getApiKey(); }
+for (const el of document.querySelectorAll(".open-settings")) el.addEventListener("click", e => { e.preventDefault(); openSettings(); });
+document.getElementById("settingsClose").onclick = closeSettings;
+document.getElementById("keySave").onclick = () => {
+  try { localStorage.setItem(API_KEY_STORAGE, apiKeyInput.value.trim()); } catch {}
+  closeSettings();
+};
+document.getElementById("keyDelete").onclick = () => {
+  if (!confirm("この端末に保存したAPIキーを削除しますか？")) return;
+  try { localStorage.removeItem(API_KEY_STORAGE); } catch {}
+  closeSettings();
+};
+
+// ---- カメラ（アプリ内で連続撮影） ----
+const cameraEl = document.getElementById("camera");
+const video = document.getElementById("video");
+let stream = null;
+let shotCount = 0;
+
+async function openCamera() {
+  if (!getApiKey()) { openSettings(); return; }
+  shotCount = 0;
+  document.getElementById("camCount").textContent = "0枚";
+  document.getElementById("camLast").hidden = true;
+  document.getElementById("camMsg").hidden = true;
+  cameraEl.classList.remove("no-stream");
+  cameraEl.hidden = false;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+    video.srcObject = stream;
+    await video.play();
+  } catch (err) {
+    // 権限拒否や非対応ブラウザでは、OS標準のカメラで撮る方法を案内する
+    document.getElementById("camMsgText").textContent =
+      err && err.name === "NotAllowedError" ? "カメラの使用が許可されていません。ブラウザの設定で許可するか、標準カメラで撮影してください。" : "カメラを起動できませんでした。";
+    document.getElementById("camMsg").hidden = false;
+    cameraEl.classList.add("no-stream");
+  }
+}
+
+function closeCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  video.srcObject = null;
+  cameraEl.hidden = true;
+}
+
+document.getElementById("shutter").onclick = () => {
+  if (!stream || !video.videoWidth) return;
+  const c = document.createElement("canvas");
+  c.width = video.videoWidth;
+  c.height = video.videoHeight;
+  c.getContext("2d").drawImage(video, 0, 0);
+  const flash = document.getElementById("camFlash");
+  flash.classList.add("on");
+  setTimeout(() => flash.classList.remove("on"), 60);
+  c.toBlob(blob => {
+    addFiles([new File([blob], `receipt_${Date.now()}.jpg`, { type: "image/jpeg" })]);
+    const last = document.getElementById("camLast");
+    last.src = URL.createObjectURL(blob);
+    last.hidden = false;
+    document.getElementById("camCount").textContent = `${++shotCount}枚`;
+  }, "image/jpeg", 0.92);
+};
+document.getElementById("camClose").onclick = closeCamera;
+document.getElementById("camDone").onclick = closeCamera;
+for (const el of document.querySelectorAll(".open-camera")) el.addEventListener("click", openCamera);
+// 標準カメラで撮った後はカメラ画面を閉じて一覧へ
+document.querySelector("#camMsg .file-picker").addEventListener("change", closeCamera);
+
+// 前回「読み取り中」のまま閉じた行は残さない
+rows = rows.filter(r => r.status !== "reading");
+render();
+updateKeyBanner();
+// スマホで開いたら、すぐにカメラを起動する
+if (matchMedia("(pointer: coarse)").matches && getApiKey()) openCamera();
+</script>
+</body>
+</html>
