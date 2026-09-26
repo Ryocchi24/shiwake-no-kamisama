@@ -165,6 +165,8 @@
   .tab-cnt { font-size: 11.5px; background: var(--info-soft); color: var(--info); border-radius: 999px; padding: 0 7px; min-width: 20px; text-align: center; }
   .tab.active .tab-cnt { background: var(--primary-soft); color: var(--primary); }
   #clearAll[hidden] { display: none; }
+  .month-field select { min-width: 132px; }
+  .panel[data-view="pending"] .month-field.mobile-hide { display: none; }
   .badge.plain { background: var(--info-soft); color: var(--info); }
   .btn-ok { background: var(--ok); border-color: var(--ok); color: #fff; height: 30px; padding: 0 12px; }
   .btn-ok:hover { background: #0e6a3f; }
@@ -277,6 +279,8 @@
     .mobile-capture .btn { height: 48px; justify-content: center; font-size: 15px; }
     .toast { bottom: calc(90px + env(safe-area-inset-bottom)); }
     .tabs { width: 100%; }
+    .month-field { width: 100%; }
+    .month-field select { flex: 1; height: 38px; font-size: 16px; }
     .panel[data-view="pending"] #download { display: none; }
     .tab { flex: 1; justify-content: center; padding: 7px 4px; }
     .row-actions .btn-sm { height: 32px; }
@@ -342,13 +346,14 @@
       <div class="stats">
         <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--warn)"></span>未確認</div><div class="stat-value mono" id="st-pending">0<small>件</small></div></div>
         <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--ok)"></span>確認済み</div><div class="stat-value mono" id="st-confirmed">0<small>件</small></div></div>
-        <div class="stat"><div class="stat-label">確認済みの合計</div><div class="stat-value mono" id="st-total">¥0</div></div>
+        <div class="stat"><div class="stat-label" id="st-total-label">合計</div><div class="stat-value mono" id="st-total">¥0</div></div>
         <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--primary)"></span>読取中</div><div class="stat-value mono" id="st-reading">0<small>件</small></div></div>
       </div>
 
       <div class="panel" id="panel">
         <div class="panel-head">
           <div class="tabs" id="tabs"></div>
+          <label class="field month-field">月<select id="monthFilter"></select></label>
           <span class="spacer"></span>
           <button class="btn btn-ghost" id="clearAll"><svg><use href="#i-trash"/></svg><span>消去</span></button>
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
@@ -869,11 +874,29 @@ const needsCheck = r => r.status === "done" && (!!r.note || !r.date || !Number(r
 // 読み取り中・エラーの行は未確認タブに表示する
 const stageOf = r => r.status === "done" ? (r.review || "pending") : "pending";
 
-function sortedRows(stage = currentTab) {
+// 月で絞り込む（"all" = すべて、"none" = 日付なし、"YYYY-MM"）
+let currentMonth = "all";
+const monthOf = r => r.date ? r.date.slice(0, 7) : "none";
+const monthLabel = m => m === "all" ? "すべての月" : m === "none" ? "日付なし" : `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
+
+function sortedRows(stage = currentTab, useMonth = true) {
   // 日付順（未入力・読み取り中は末尾）
   const k = r => r.date || "9999";
-  return companyRows().filter(r => stageOf(r) === stage).sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
+  return companyRows()
+    .filter(r => stageOf(r) === stage && (!useMonth || currentMonth === "all" || monthOf(r) === currentMonth))
+    .sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
 }
+
+function renderMonthFilter() {
+  const sel = document.getElementById("monthFilter");
+  const months = [...new Set(sortedRows(currentTab, false).filter(r => r.status === "done").map(monthOf))]
+    .sort((a, b) => a === "none" ? 1 : b === "none" ? -1 : b.localeCompare(a)); // 新しい月が上
+  if (currentMonth !== "all" && !months.includes(currentMonth)) currentMonth = "all";
+  sel.innerHTML = ["all", ...months].map(m => `<option value="${m}" ${m === currentMonth ? "selected" : ""}>${monthLabel(m)}</option>`).join("");
+  // スマホの1件ずつ確認では月の絞り込みは使わない
+  sel.closest(".month-field").classList.toggle("mobile-hide", mobileQuery.matches);
+}
+document.getElementById("monthFilter").addEventListener("change", e => { currentMonth = e.target.value; render(); });
 
 function statusBadge(row) {
   if (row.status === "reading") return `<span class="badge info"><span class="spinner"></span>読取中</span>`;
@@ -890,11 +913,18 @@ function renderStats() {
   const confirmed = done.filter(r => r.review === "confirmed");
   document.getElementById("st-pending").innerHTML = `${pending.length}<small>件</small>`;
   document.getElementById("st-confirmed").innerHTML = `${confirmed.length}<small>件</small>`;
-  document.getElementById("st-total").textContent = yen(confirmed.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
+  // 表示中（タブ＋月）の件数と合計。ミロクに取り込んだ後の件数・金額の照合に使う
+  const view = sortedRows().filter(r => r.status === "done");
+  const tabLabel = TABS.find(t => t.key === currentTab).label;
+  document.getElementById("st-total-label").textContent = `${tabLabel}・${monthLabel(currentMonth)}の合計（${view.length}件）`;
+  document.getElementById("st-total").textContent = yen(view.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
+  const exportTarget = sortedRows("confirmed").filter(r => r.status === "done");
   document.getElementById("st-reading").innerHTML = `${mine.filter(r => r.status === "reading").length}<small>件</small>`;
   const dl = document.getElementById("download");
-  dl.disabled = confirmed.length === 0;
-  dl.querySelector("span").textContent = `CSVダウンロード（確認済み ${confirmed.length}件）`;
+  dl.disabled = exportTarget.length === 0;
+  dl.querySelector("span").textContent = currentMonth === "all"
+    ? `CSVダウンロード（確認済み ${exportTarget.length}件）`
+    : `CSVダウンロード（${monthLabel(currentMonth)}・確認済み ${exportTarget.length}件）`;
   for (const t of TABS) {
     const el = document.querySelector(`[data-tab="${t.key}"] .tab-cnt`);
     if (el) el.textContent = companyRows().filter(r => stageOf(r) === t.key).length;
@@ -907,6 +937,7 @@ function renderStats() {
 
 function renderTabs() {
   document.getElementById("panel").dataset.view = currentTab;
+  renderMonthFilter();
   document.getElementById("tabs").innerHTML = TABS.map(t =>
     `<button class="tab ${t.key === currentTab ? "active" : ""}" data-tab="${t.key}">${t.label}<span class="tab-cnt"></span></button>`).join("");
   const clear = document.getElementById("clearAll");
@@ -1012,7 +1043,7 @@ function render() {
 
 // スマホ: 未確認のレシートを1件ずつ大きく表示して確認する
 function renderReviewCard(list) {
-  const queueRows = sortedRows("pending").filter(r => r.status !== "reading");
+  const queueRows = sortedRows("pending", false).filter(r => r.status !== "reading");
   const readingCount = companyRows().filter(r => r.status === "reading").length;
   const readingNote = readingCount ? `<div class="review-reading"><span class="spinner"></span>読み取り中 ${readingCount}件</div>` : "";
   if (!queueRows.length) {
@@ -1085,7 +1116,7 @@ function setReview(ids, review, message) {
 }
 
 function nextReviewId(currentId) {
-  const q = sortedRows("pending").filter(r => r.status !== "reading");
+  const q = sortedRows("pending", false).filter(r => r.status !== "reading");
   const i = q.findIndex(r => r.id === currentId);
   return q.length > 1 ? q[(i + 1) % q.length].id : null;
 }
@@ -1200,7 +1231,8 @@ document.getElementById("download").onclick = async () => {
 document.getElementById("clearAll").onclick = () => {
   const mine = sortedRows();
   const label = TABS.find(t => t.key === currentTab).label;
-  if (!mine.length || !confirm(`「${currentCompany().name}」の${label}の仕訳 ${mine.length} 件を消去しますか？`)) return;
+  const period = currentMonth === "all" ? "" : `（${monthLabel(currentMonth)}）`;
+  if (!mine.length || !confirm(`「${currentCompany().name}」の${label}${period}の仕訳 ${mine.length} 件を消去しますか？`)) return;
   const ids = new Set(mine.map(r => r.id));
   rows = rows.filter(r => !ids.has(r.id));
   save(); render(); pruneImages();
