@@ -1008,7 +1008,10 @@ document.getElementById("addCompany").onclick = () => {
   renderCompanyList();
   render();
 };
-document.getElementById("newCompany").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("addCompany").click(); });
+// 日本語入力の変換確定の Enter では追加しない
+document.getElementById("newCompany").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) document.getElementById("addCompany").click();
+});
 document.getElementById("companyList").addEventListener("change", e => {
   const id = e.target.dataset.rename;
   const c = companies.find(x => x.id === id);
