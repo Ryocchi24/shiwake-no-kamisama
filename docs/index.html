@@ -81,7 +81,7 @@
   .divider { width: 1px; height: 22px; background: var(--line); }
 
   .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1040px; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1060px; }
   th, td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: middle; }
   thead th { background: var(--surface-2); font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; position: sticky; top: 0; }
   thead tr.group th { font-weight: 700; text-align: center; border-bottom: 1px solid var(--line); padding: 6px; }
@@ -99,7 +99,7 @@
   td input.code { font-family: "Roboto Mono", monospace; }
   td input.code::placeholder { color: #c2c8d2; }
   td input.missing { border-color: #f0b4b4; background: var(--err-soft); }
-  td.c-date { width: 140px; } td.c-code { width: 76px; } td.c-amount { width: 112px; } td.c-summary { min-width: 200px; }
+  td.c-date { width: 132px; } td.c-code { width: 68px; } td.c-amount { width: 112px; min-width: 104px; } td.c-summary { min-width: 170px; }
   td.c-amount input { padding: 0 4px; }
   .thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 5px; cursor: zoom-in; border: 1px solid var(--line); display: block; }
   .note { font-size: 11.5px; color: var(--warn); margin: 2px 7px 0; display: flex; gap: 4px; }
@@ -159,6 +159,41 @@
   .move-list .btn { justify-content: flex-start; height: 40px; }
   .row-actions { display: flex; gap: 2px; }
   .icon-btn.move:hover { background: var(--primary-soft); color: var(--primary); }
+  .tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
+  .tab { font: inherit; font-size: 13px; font-weight: 500; border: none; background: none; color: var(--muted); padding: 5px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+  .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(15,23,42,.1); }
+  .tab-cnt { font-size: 11.5px; background: var(--info-soft); color: var(--info); border-radius: 999px; padding: 0 7px; min-width: 20px; text-align: center; }
+  .tab.active .tab-cnt { background: var(--primary-soft); color: var(--primary); }
+  #clearAll[hidden] { display: none; }
+  .badge.plain { background: var(--info-soft); color: var(--info); }
+  .btn-ok { background: var(--ok); border-color: var(--ok); color: #fff; height: 30px; padding: 0 12px; }
+  .btn-ok:hover { background: #0e6a3f; }
+  .btn-sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
+  tbody tr.leaving td { opacity: 0; transition: opacity .18s; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 80; background: #1b2433; color: #fff; border-radius: 10px;
+    padding: 10px 12px 10px 16px; display: flex; align-items: center; gap: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 13.5px; white-space: nowrap; }
+  .toast[hidden] { display: none; }
+  .toast-undo { font: inherit; font-weight: 700; color: #8fb4ff; background: none; border: none; cursor: pointer; padding: 4px 6px; }
+
+  .review { background: var(--surface); }
+  .review-top { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px 8px; }
+  .review-pos { color: var(--muted); font-size: 13px; }
+  .review-img { background: #20262f; display: flex; justify-content: center; }
+  .review-img img { max-width: 100%; max-height: 46vh; object-fit: contain; display: block; cursor: zoom-in; }
+  .review-body { padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 10px; }
+  .rv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rv-field { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); }
+  .rv-field input { font: inherit; font-size: 16px; color: var(--text); height: 42px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 0 10px; background: #fff; width: 100%; }
+  .rv-field input.num { text-align: right; font-family: "Roboto Mono", monospace; }
+  .rv-field input.missing { border-color: #f0b4b4; background: var(--err-soft); }
+  .rv-note { margin: 0; }
+  .rv-error { padding: 8px 0; flex-wrap: wrap; }
+  .rv-more summary { font-size: 13px; color: var(--muted); cursor: pointer; padding: 4px 0; }
+  .rv-more .rv-grid { margin: 8px 0 10px; }
+  .review-actions { display: flex; gap: 8px; padding: 12px 14px 16px; }
+  .review-actions .btn { height: 46px; justify-content: center; }
+  .review-actions .btn-big { flex: 1; font-size: 16px; height: 46px; }
+  .review-reading { display: flex; align-items: center; gap: 8px; color: var(--info); background: var(--info-soft); font-size: 13px; padding: 8px 14px; }
   .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
   .banner .btn { margin-left: auto; height: 32px; }
 
@@ -187,6 +222,7 @@
   .dialog h2 { margin: 0 0 16px; font-size: 17px; }
   .dlg-label { font-size: 13px; font-weight: 500; display: block; margin-bottom: 6px; }
   .dialog input { width: 100%; font: inherit; height: 40px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 10px; }
+  .csv-opts { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 18px; }
   .mode-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 13px; }
   .mode-box p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
   .dlg-help { font-size: 12.5px; color: var(--muted); margin: 8px 0 18px; }
@@ -233,6 +269,11 @@
     .mobile-capture { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
       background: var(--surface); border-top: 1px solid var(--line); z-index: 20; }
     .mobile-capture .btn { height: 48px; justify-content: center; font-size: 15px; }
+    .toast { bottom: calc(90px + env(safe-area-inset-bottom)); }
+    .tabs { width: 100%; }
+    .panel[data-view="pending"] #download { display: none; }
+    .tab { flex: 1; justify-content: center; padding: 7px 4px; }
+    .row-actions .btn-sm { height: 32px; }
   }
 </style>
 </head>
@@ -247,6 +288,7 @@
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
 </svg>
 
@@ -292,26 +334,18 @@
       <div class="banner" id="ocrBanner" hidden></div>
 
       <div class="stats">
-        <div class="stat"><div class="stat-label">仕訳件数</div><div class="stat-value mono" id="st-count">0<small>件</small></div></div>
-        <div class="stat"><div class="stat-label">合計金額</div><div class="stat-value mono" id="st-total">¥0</div></div>
-        <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--warn)"></span>要確認</div><div class="stat-value mono" id="st-warn">0<small>件</small></div></div>
+        <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--warn)"></span>未確認</div><div class="stat-value mono" id="st-pending">0<small>件</small></div></div>
+        <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--ok)"></span>確認済み</div><div class="stat-value mono" id="st-confirmed">0<small>件</small></div></div>
+        <div class="stat"><div class="stat-label">確認済みの合計</div><div class="stat-value mono" id="st-total">¥0</div></div>
         <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--primary)"></span>読取中</div><div class="stat-value mono" id="st-reading">0<small>件</small></div></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="panel">
         <div class="panel-head">
-          <span class="panel-title">仕訳一覧</span>
+          <div class="tabs" id="tabs"></div>
           <span class="spacer"></span>
-          <label class="field">日付形式
-            <select id="dateFormat"><option value="slash">YYYY/MM/DD</option><option value="compact">YYYYMMDD</option></select>
-          </label>
-          <label class="field">文字コード
-            <select id="encoding"><option value="sjis">Shift_JIS</option><option value="utf8">UTF-8</option></select>
-          </label>
-          <label class="field"><input id="includeHeader" type="checkbox"> 見出し行</label>
-          <span class="divider"></span>
-          <button class="btn btn-ghost" id="clearAll"><svg><use href="#i-trash"/></svg>全消去</button>
-          <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg>CSVダウンロード</button>
+          <button class="btn btn-ghost" id="clearAll"><svg><use href="#i-trash"/></svg><span>消去</span></button>
+          <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
         <div id="list"></div>
       </div>
@@ -323,6 +357,8 @@
   <label class="btn"><svg><use href="#i-upload"/></svg>画像を選ぶ<input class="file-picker" type="file" accept="image/*" multiple></label>
   <button class="btn btn-primary open-camera"><svg><use href="#i-camera"/></svg>撮影する</button>
 </div>
+
+<div class="toast" id="toast" hidden></div>
 
 <div class="modal" id="modal"><img id="modalImg" alt=""></div>
 
@@ -379,6 +415,16 @@
       <b>現在の読み取り方式：<span id="modeName"></span></b>
       <p>標準は <b>無料モード</b>（スマホの中で文字を読み取る方式）です。画像は端末の外に出ません。精度は控えめなので、一覧で確認・修正してください。</p>
     </div>
+    <div class="dlg-label">CSVの形式</div>
+    <div class="csv-opts">
+      <label class="field">日付形式
+        <select id="dateFormat"><option value="slash">YYYY/MM/DD</option><option value="compact">YYYYMMDD</option></select>
+      </label>
+      <label class="field">文字コード
+        <select id="encoding"><option value="sjis">Shift_JIS</option><option value="utf8">UTF-8</option></select>
+      </label>
+      <label class="field"><input id="includeHeader" type="checkbox"> 見出し行を入れる</label>
+    </div>
     <label class="dlg-label" for="apiKey">高精度モード用 APIキー（任意・有料）</label>
     <input id="apiKey" type="password" autocomplete="off" placeholder="空欄のままなら無料モード">
     <p class="dlg-help">Anthropic のAPIキーを入れると、AI（Claude）で高精度に読み取ります（1枚あたり数円）。キーはこの端末のブラウザ内にだけ保存されます。</p>
@@ -405,9 +451,51 @@ const SETTINGS_KEY = "receipt-settings-v1";
 const MAX_PARALLEL_AI = 3;  // Claude はサーバー側で処理するので並列で送る
 const MAX_PARALLEL_OCR = 1; // 端末内OCRはスマホの負荷が高いので1枚ずつ
 
-/** 1行 = 1仕訳。原寸画像はメモリ上のみ、thumb は保存用の小さい画像 */
+/** 1行 = 1仕訳。thumb は一覧用の小さい画像（localStorage）、大きい画像は IndexedDB に保存 */
 let rows = load(STORAGE_KEY, []);
-const fullImages = new Map(); // groupId -> dataURL（画面を開いている間だけ保持）
+const fullImages = new Map(); // groupId -> dataURL（読み込み済みの大きい画像のキャッシュ）
+
+// 大きい画像の保存場所（localStorage は容量が小さいため IndexedDB を使う）
+const imageStore = (() => {
+  let dbPromise = null;
+  const open = () => dbPromise ||= new Promise((resolve, reject) => {
+    const req = indexedDB.open("shiwake-images", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("images");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  const run = async (mode, fn) => {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("images", mode);
+      const req = fn(tx.objectStore("images"));
+      tx.oncomplete = () => resolve(req.result);
+      tx.onerror = () => reject(tx.error);
+    });
+  };
+  return {
+    get: key => run("readonly", st => st.get(key)),
+    put: (key, value) => run("readwrite", st => st.put(value, key)),
+    del: key => run("readwrite", st => st.delete(key)),
+    keys: () => run("readonly", st => st.getAllKeys()),
+  };
+})();
+async function getFullImage(groupId) {
+  if (fullImages.has(groupId)) return fullImages.get(groupId);
+  try {
+    const src = await imageStore.get(groupId);
+    if (src) fullImages.set(groupId, src);
+    return src || null;
+  } catch { return null; }
+}
+// どの仕訳からも使われなくなった画像を消す
+async function pruneImages() {
+  try {
+    const used = new Set(rows.map(r => r.groupId));
+    for (const key of await imageStore.keys()) if (!used.has(key)) await imageStore.del(key);
+    for (const key of fullImages.keys()) if (!used.has(key)) fullImages.delete(key);
+  } catch {}
+}
 let queue = [];
 let running = 0;
 
@@ -470,8 +558,9 @@ async function addFiles(fileList) {
   for (const file of files) {
     const groupId = uid();
     try {
-      const [full, thumb] = await Promise.all([resize(file, 1600, 0.85), resize(file, 400, 0.7)]);
+      const [full, thumb] = await Promise.all([resize(file, 1600, 0.85), resize(file, 240, 0.7)]);
       fullImages.set(groupId, full);
+      imageStore.put(groupId, full).catch(() => {});
       rows.push({ id: uid(), groupId, companyId: currentCompanyId, thumb, status: "reading" });
       queue.push(groupId);
     } catch (err) {
@@ -511,7 +600,8 @@ function pump() {
 async function readGroup(groupId) {
   const placeholder = rows.find(r => r.groupId === groupId && r.status === "reading");
   try {
-    const image = fullImages.get(groupId);
+    const image = await getFullImage(groupId);
+    if (!image) throw new Error("画像が見つかりません。もう一度撮影してください");
     const data = { receipts: getApiKey() ? await readReceipt(image.split(",")[1]) : await readReceiptFree(image) };
 
     const idx = rows.indexOf(placeholder);
@@ -519,7 +609,7 @@ async function readGroup(groupId) {
     const receipts = data.receipts.length ? data.receipts
       : [{ date: "", amount: 0, summary: "", note: "レシートを検出できませんでした" }];
     const newRows = receipts.map(r => ({
-      id: uid(), groupId, companyId: placeholder.companyId, thumb: placeholder.thumb, status: "done",
+      id: uid(), groupId, companyId: placeholder.companyId, thumb: placeholder.thumb, status: "done", review: "pending",
       date: r.date || "",
       debitCode: "", debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
@@ -757,37 +847,86 @@ const FIELDS = [
   { key: "creditAmount", label: "⑧貸方金額", num: true, cls: "c-amount" },
 ];
 
+// 確認の段階: pending（未確認）→ confirmed（確認済み）→ exported（出力済み）
+const TABS = [
+  { key: "pending", label: "未確認" },
+  { key: "confirmed", label: "確認済み" },
+  { key: "exported", label: "出力済み" },
+];
+let currentTab = "pending";
+let reviewId = null; // スマホの1件ずつ確認で表示中の仕訳
+const mobileQuery = matchMedia("(max-width: 860px)");
+mobileQuery.addEventListener("change", () => render());
+
 const isMissing = (key, v) => (key === "date" && !v) || ((key === "debitAmount" || key === "creditAmount") && !Number(v));
 const needsCheck = r => r.status === "done" && (!!r.note || !r.date || !Number(r.debitAmount) || Number(r.debitAmount) !== Number(r.creditAmount));
+// 読み取り中・エラーの行は未確認タブに表示する
+const stageOf = r => r.status === "done" ? (r.review || "pending") : "pending";
 
-function sortedRows() {
+function sortedRows(stage = currentTab) {
   // 日付順（未入力・読み取り中は末尾）
   const k = r => r.date || "9999";
-  return companyRows().sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
+  return companyRows().filter(r => stageOf(r) === stage).sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
 }
 
 function statusBadge(row) {
   if (row.status === "reading") return `<span class="badge info"><span class="spinner"></span>読取中</span>`;
   if (row.status === "error") return `<span class="badge err">エラー</span>`;
-  return needsCheck(row) ? `<span class="badge warn">要確認</span>` : `<span class="badge ok">OK</span>`;
+  if (row.review === "confirmed") return `<span class="badge ok">確認済</span>`;
+  if (row.review === "exported") return `<span class="badge info">出力済</span>`;
+  return needsCheck(row) ? `<span class="badge warn">要確認</span>` : `<span class="badge plain">未確認</span>`;
 }
 
 function renderStats() {
-  const done = companyRows().filter(r => r.status === "done");
-  document.getElementById("st-count").innerHTML = `${done.length}<small>件</small>`;
-  document.getElementById("st-total").textContent = yen(done.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
-  document.getElementById("st-warn").innerHTML = `${done.filter(needsCheck).length}<small>件</small>`;
-  document.getElementById("st-reading").innerHTML = `${companyRows().filter(r => r.status === "reading").length}<small>件</small>`;
-  document.getElementById("download").disabled = done.length === 0;
+  const mine = companyRows();
+  const done = mine.filter(r => r.status === "done");
+  const pending = mine.filter(r => stageOf(r) === "pending" && r.status !== "reading");
+  const confirmed = done.filter(r => r.review === "confirmed");
+  document.getElementById("st-pending").innerHTML = `${pending.length}<small>件</small>`;
+  document.getElementById("st-confirmed").innerHTML = `${confirmed.length}<small>件</small>`;
+  document.getElementById("st-total").textContent = yen(confirmed.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
+  document.getElementById("st-reading").innerHTML = `${mine.filter(r => r.status === "reading").length}<small>件</small>`;
+  const dl = document.getElementById("download");
+  dl.disabled = confirmed.length === 0;
+  dl.querySelector("span").textContent = `CSVダウンロード（確認済み ${confirmed.length}件）`;
+  for (const t of TABS) {
+    const el = document.querySelector(`[data-tab="${t.key}"] .tab-cnt`);
+    if (el) el.textContent = companyRows().filter(r => stageOf(r) === t.key).length;
+  }
+  const shown = sortedRows().filter(r => r.status === "done");
   const tDebit = document.getElementById("t-debit"), tCredit = document.getElementById("t-credit");
-  if (tDebit) tDebit.textContent = yen(done.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
-  if (tCredit) tCredit.textContent = yen(done.reduce((s, r) => s + Number(r.creditAmount || 0), 0));
+  if (tDebit) tDebit.textContent = yen(shown.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
+  if (tCredit) tCredit.textContent = yen(shown.reduce((s, r) => s + Number(r.creditAmount || 0), 0));
+}
+
+function renderTabs() {
+  document.getElementById("panel").dataset.view = currentTab;
+  document.getElementById("tabs").innerHTML = TABS.map(t =>
+    `<button class="tab ${t.key === currentTab ? "active" : ""}" data-tab="${t.key}">${t.label}<span class="tab-cnt"></span></button>`).join("");
+  const clear = document.getElementById("clearAll");
+  clear.hidden = currentTab === "pending";
+  clear.querySelector("span").textContent = currentTab === "exported" ? "出力済みを消去" : "確認済みを消去";
+}
+document.getElementById("tabs").addEventListener("click", e => {
+  const t = e.target.closest("[data-tab]");
+  if (!t) return;
+  currentTab = t.dataset.tab;
+  render();
+});
+
+function inputHtml(row, f) {
+  const v = row[f.key] ?? "";
+  const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
+  const attrs = f.type === "date" ? 'type="date"' : f.num ? 'inputmode="numeric"' : "";
+  const cls = [f.num ? "num" : "", f.code ? "code" : "", isMissing(f.key, v) ? "missing" : ""].join(" ");
+  return `<input ${attrs} class="${cls}" ${f.code ? 'placeholder="—"' : ""} data-id="${row.id}" data-key="${f.key}" value="${escapeHtml(shown)}">`;
 }
 
 function render() {
   const list = document.getElementById("list");
-  renderStats();
   renderCompany();
+  renderTabs();
+  renderStats();
 
   if (!currentCompany()) {
     list.innerHTML = `<div class="dropzone"><svg><use href="#i-building"/></svg>
@@ -795,34 +934,45 @@ function render() {
       <button class="btn btn-primary open-companies">会社を登録する</button></div>`;
     return;
   }
-  if (!companyRows().length) {
-    list.innerHTML = `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
-      <b>まだレシートがありません</b>「撮影する」でレシートを撮るか、画像をここにドラッグ＆ドロップしてください。</div>`;
+  if (currentTab === "pending" && mobileQuery.matches) return renderReviewCard(list);
+
+  const items = sortedRows();
+  if (!items.length) {
+    const empty = {
+      pending: companyRows().length
+        ? `<b>未確認のレシートはありません</b>確認済みの仕訳は「確認済み」タブからCSVでダウンロードできます。`
+        : `<b>まだレシートがありません</b>「撮影する」でレシートを撮るか、画像をここにドラッグ＆ドロップしてください。`,
+      confirmed: `<b>確認済みの仕訳はありません</b>「未確認」タブで内容を確認して「OK」を押すと、ここに移ります。`,
+      exported: `<b>出力済みの仕訳はありません</b>CSVをダウンロードした仕訳がここに入ります。`,
+    }[currentTab];
+    list.innerHTML = `<div class="dropzone"><svg><use href="#i-receipt"/></svg>${empty}</div>`;
     return;
   }
 
-  const del = id => `<td class="c-del"><div class="row-actions">${companies.length > 1 ? `<button class="icon-btn move" data-move="${id}" title="別の会社へ移動"><svg><use href="#i-move"/></svg></button>` : ""}<button class="icon-btn" data-del="${id}" title="削除"><svg><use href="#i-trash"/></svg></button></div></td>`;
+  const actions = row => {
+    const move = companies.length > 1 ? `<button class="icon-btn move" data-move="${row.id}" title="別の会社へ移動"><svg><use href="#i-move"/></svg></button>` : "";
+    const del = `<button class="icon-btn" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg></button>`;
+    let main = "";
+    if (row.status === "done" && currentTab === "pending") main = `<button class="btn btn-ok" data-ok="${row.id}"><svg><use href="#i-check"/></svg>OK</button>`;
+    if (currentTab === "confirmed") main = `<button class="btn btn-sm" data-back="${row.id}" title="未確認に戻す">↩ 戻す</button>`;
+    if (currentTab === "exported") main = `<button class="btn btn-sm" data-back="${row.id}" title="確認済みに戻す">↩ 戻す</button>`;
+    return `<td class="c-del"><div class="row-actions">${main}${move}${del}</div></td>`;
+  };
   let body = "";
-  sortedRows().forEach((row, i) => {
+  items.forEach((row, i) => {
     const thumb = `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="レシート"></td>`;
     const head = `<td class="rowno">${i + 1}</td><td class="c-status">${statusBadge(row)}</td>${thumb}`;
     if (row.status !== "done") {
       const msg = row.status === "reading"
         ? `<span class="status-msg">読み取っています…</span>`
         : `<span class="status-msg error">${escapeHtml(row.error)}<button class="btn" data-retry="${row.id}">再読み取り</button></span>`;
-      body += `<tr class="is-${row.status}">${head}<td colspan="${FIELDS.length}" class="c-msg">${msg}</td>${del(row.id)}</tr>`;
+      body += `<tr class="is-${row.status}" data-row="${row.id}">${head}<td colspan="${FIELDS.length}" class="c-msg">${msg}</td>${actions(row)}</tr>`;
       return;
     }
-    body += `<tr>${head}` + FIELDS.map(f => {
-      const v = row[f.key] ?? "";
-      const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
-      const attrs = f.type === "date" ? 'type="date"' : f.num ? 'inputmode="numeric"' : "";
-      const cls = [f.num ? "num" : "", f.code ? "code" : "", isMissing(f.key, v) ? "missing" : ""].join(" ");
-      return `<td class="${f.cls}" data-label="${f.label}">
-        <input ${attrs} class="${cls}" ${f.code ? 'placeholder="—"' : ""} data-id="${row.id}" data-key="${f.key}" value="${escapeHtml(shown)}">
+    body += `<tr data-row="${row.id}">${head}` + FIELDS.map(f => `<td class="${f.cls}" data-label="${f.label}">
+        ${inputHtml(row, f)}
         ${f.key === "summary" && row.note ? `<div class="note">⚠ ${escapeHtml(row.note)}</div>` : ""}
-      </td>`;
-    }).join("") + `${del(row.id)}</tr>`;
+      </td>`).join("") + `${actions(row)}</tr>`;
   });
 
   list.innerHTML = `<div class="table-wrap"><table>
@@ -836,9 +986,9 @@ function render() {
       </tr>
       <tr>
         <th>No.</th><th>状態</th><th>証憑</th><th>①伝票日付</th>
-        <th class="b-left">②科目コード</th><th>③補助コード</th><th class="num">④金額</th>
+        <th class="b-left" title="勘定科目コード">②科目</th><th title="科目別補助コード">③補助</th><th class="num">④金額</th>
         <th class="b-left">⑤摘要</th>
-        <th class="b-left">⑥科目コード</th><th>⑦補助コード</th><th class="num">⑧金額</th>
+        <th class="b-left" title="勘定科目コード">⑥科目</th><th title="科目別補助コード">⑦補助</th><th class="num">⑧金額</th>
         <th></th>
       </tr>
     </thead>
@@ -854,8 +1004,84 @@ function render() {
   renderStats();
 }
 
+// スマホ: 未確認のレシートを1件ずつ大きく表示して確認する
+function renderReviewCard(list) {
+  const queueRows = sortedRows("pending").filter(r => r.status !== "reading");
+  const readingCount = companyRows().filter(r => r.status === "reading").length;
+  const readingNote = readingCount ? `<div class="review-reading"><span class="spinner"></span>読み取り中 ${readingCount}件</div>` : "";
+  if (!queueRows.length) {
+    list.innerHTML = readingNote + `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
+      ${companyRows().length ? `<b>未確認のレシートはありません</b>確認済みの仕訳は「確認済み」タブからCSVでダウンロードできます。`
+        : `<b>まだレシートがありません</b>下の「撮影する」でレシートを撮ってください。`}</div>`;
+    return;
+  }
+  let row = queueRows.find(r => r.id === reviewId);
+  if (!row) { row = queueRows[0]; reviewId = row.id; }
+  const pos = queueRows.indexOf(row) + 1;
+
+  const field = key => {
+    const f = FIELDS.find(x => x.key === key);
+    return `<label class="rv-field"><span>${f.label.slice(1)}</span>${inputHtml(row, f)}</label>`;
+  };
+  const bodyHtml = row.status === "error"
+    ? `<div class="status-msg error rv-error">${escapeHtml(row.error)}<button class="btn" data-retry="${row.id}">再読み取り</button></div>`
+    : `${row.note ? `<div class="note rv-note">⚠ ${escapeHtml(row.note)}</div>` : ""}
+       <div class="rv-grid">${field("date")}${field("debitAmount")}</div>
+       ${field("summary")}
+       <details class="rv-more"><summary>科目コード・貸方金額</summary>
+         <div class="rv-grid">${field("debitCode")}${field("debitSub")}${field("creditCode")}${field("creditSub")}</div>
+         ${field("creditAmount")}
+       </details>`;
+
+  list.innerHTML = `${readingNote}<div class="review" data-row="${row.id}">
+    <div class="review-top"><span>${statusBadge(row)}</span><span class="review-pos">${pos} / ${queueRows.length}件</span></div>
+    <div class="review-img"><img class="thumb-lg" data-group="${row.groupId}" src="${row.thumb}" alt="レシート"></div>
+    <div class="review-body">${bodyHtml}</div>
+    <div class="review-actions">
+      <button class="btn" data-del="${row.id}"><svg><use href="#i-trash"/></svg>削除</button>
+      ${queueRows.length > 1 ? `<button class="btn" data-skip="${row.id}">あとで</button>` : ""}
+      ${row.status === "done" ? `<button class="btn btn-ok btn-big" data-ok="${row.id}"><svg><use href="#i-check"/></svg>OK</button>` : ""}
+    </div>
+  </div>`;
+  // 大きい画像は端末内の保存場所から読み込む
+  getFullImage(row.groupId).then(src => {
+    const img = list.querySelector(`.thumb-lg[data-group="${row.groupId}"]`);
+    if (src && img) img.src = src;
+  });
+}
+
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---- 確認（OK）・元に戻す ----
+let toastTimer = null;
+function showToast(message, undo) {
+  const toast = document.getElementById("toast");
+  toast.innerHTML = `<span>${escapeHtml(message)}</span>${undo ? `<button class="toast-undo">元に戻す</button>` : ""}`;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 5000);
+  const btn = toast.querySelector(".toast-undo");
+  if (btn) btn.onclick = () => { toast.hidden = true; undo(); };
+}
+
+function setReview(ids, review, message) {
+  const targets = rows.filter(r => ids.includes(r.id));
+  const before = targets.map(r => [r, r.review]);
+  targets.forEach(r => { r.review = review; });
+  save(); render();
+  showToast(message, () => {
+    before.forEach(([r, prev]) => { r.review = prev; });
+    if (before.length === 1) reviewId = before[0][0].id;
+    save(); render();
+  });
+}
+
+function nextReviewId(currentId) {
+  const q = sortedRows("pending").filter(r => r.status !== "reading");
+  const i = q.findIndex(r => r.id === currentId);
+  return q.length > 1 ? q[(i + 1) % q.length].id : null;
 }
 
 // 入力の反映（再描画はしないのでフォーカスが外れない）
@@ -875,7 +1101,8 @@ list.addEventListener("input", e => {
   }
   row[key] = value;
   e.target.classList.toggle("missing", isMissing(key, value));
-  const badge = e.target.closest("tr").querySelector(".c-status");
+  const holder = e.target.closest("[data-row]");
+  const badge = holder && holder.querySelector(".c-status, .review-top span");
   if (badge) badge.innerHTML = statusBadge(row);
   renderStats();
   save();
@@ -889,20 +1116,33 @@ list.addEventListener("change", e => {
   else if (FIELDS.find(f => f.key === key)?.num && row[key] !== "") e.target.value = Number(row[key]).toLocaleString();
 });
 
-list.addEventListener("click", e => {
-  const t = e.target.closest("[data-del], [data-retry], [data-move], .thumb");
+list.addEventListener("click", async e => {
+  const t = e.target.closest("[data-del], [data-retry], [data-move], [data-ok], [data-back], [data-skip], .thumb, .thumb-lg");
   if (!t) return;
-  if (t.dataset.move) {
+  if (t.dataset.ok) {
+    reviewId = nextReviewId(t.dataset.ok);
+    const tr = t.closest("tr");
+    if (tr) { tr.classList.add("leaving"); await new Promise(r => setTimeout(r, 180)); }
+    setReview([t.dataset.ok], "confirmed", "確認済みにしました");
+  } else if (t.dataset.back) {
+    const row = rows.find(r => r.id === t.dataset.back);
+    const to = row.review === "exported" ? "confirmed" : "pending";
+    setReview([row.id], to, to === "pending" ? "未確認に戻しました" : "確認済みに戻しました");
+  } else if (t.dataset.skip) {
+    reviewId = nextReviewId(t.dataset.skip);
+    render();
+  } else if (t.dataset.move) {
     openMove(t.dataset.move);
   } else if (t.dataset.del) {
     const row = rows.find(r => r.id === t.dataset.del);
     if (row && (row.status !== "done" || confirm("この仕訳を削除しますか？"))) {
+      if (row.id === reviewId) reviewId = nextReviewId(row.id);
       rows = rows.filter(r => r !== row);
-      save(); render();
+      save(); render(); pruneImages();
     }
   } else if (t.dataset.retry) {
     const row = rows.find(r => r.id === t.dataset.retry);
-    if (!fullImages.has(row.groupId)) {
+    if (!(await getFullImage(row.groupId))) {
       alert("元の画像が残っていないため再読み取りできません。もう一度撮影してください。");
       return;
     }
@@ -910,8 +1150,11 @@ list.addEventListener("click", e => {
     queue.push(row.groupId);
     render(); pump();
   } else {
-    document.getElementById("modalImg").src = fullImages.get(t.dataset.group) || t.src;
+    const modalImg = document.getElementById("modalImg");
+    modalImg.src = t.src;
     document.getElementById("modal").classList.add("open");
+    const full = await getFullImage(t.dataset.group);
+    if (full) modalImg.src = full;
   }
 });
 document.getElementById("modal").onclick = () => document.getElementById("modal").classList.remove("open");
@@ -919,7 +1162,8 @@ document.getElementById("modal").onclick = () => document.getElementById("modal"
 // ---- CSV ----
 const CSV_HEADERS = ["伝票日付", "借方勘定科目コード", "借方科目別補助コード", "借方金額", "摘要", "貸方勘定科目コード", "貸方科目別補助コード", "貸方金額"];
 document.getElementById("download").onclick = async () => {
-  const done = sortedRows().filter(r => r.status === "done");
+  const done = sortedRows("confirmed").filter(r => r.status === "done");
+  if (!done.length) return;
   const incomplete = done.filter(r => !r.date || !Number(r.debitAmount));
   if (incomplete.length && !confirm(`日付か金額が空の行が ${incomplete.length} 件あります。このままダウンロードしますか？`)) return;
 
@@ -930,7 +1174,7 @@ document.getElementById("download").onclick = async () => {
   const csv = lines.join("\r\n") + "\r\n";
 
   const bytes = settings.encoding === "utf8"
-    ? new TextEncoder().encode("\uFEFF" + csv)
+    ? new TextEncoder().encode("﻿" + csv)
     : new Uint8Array(Encoding.convert(Encoding.stringToCode(csv), { to: "SJIS", from: "UNICODE" }));
   const blob = new Blob([bytes], { type: "text/csv" });
   const stamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" }).replace(/[-: ]/g, "").slice(0, 12);
@@ -939,16 +1183,21 @@ document.getElementById("download").onclick = async () => {
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+
+  // 二重取り込みを防ぐため、出力した仕訳は「出力済み」に移す
+  await new Promise(r => setTimeout(r, 400));
+  if (confirm(`ダウンロードした ${done.length} 件を「出力済み」に移しますか？\n（ミロク会計への二重取り込み防止のため）`)) {
+    setReview(done.map(r => r.id), "exported", `${done.length}件を出力済みにしました`);
+  }
 };
 
 document.getElementById("clearAll").onclick = () => {
-  const mine = companyRows();
-  if (!mine.length || !confirm(`「${currentCompany().name}」の仕訳 ${mine.length} 件をすべて消去しますか？`)) return;
-  const groups = new Set(mine.map(r => r.groupId));
-  rows = rows.filter(r => r.companyId !== currentCompanyId);
-  queue = queue.filter(g => !groups.has(g));
-  groups.forEach(g => fullImages.delete(g));
-  save(); render();
+  const mine = sortedRows();
+  const label = TABS.find(t => t.key === currentTab).label;
+  if (!mine.length || !confirm(`「${currentCompany().name}」の${label}の仕訳 ${mine.length} 件を消去しますか？`)) return;
+  const ids = new Set(mine.map(r => r.id));
+  rows = rows.filter(r => !ids.has(r.id));
+  save(); render(); pruneImages();
 };
 
 // ---- 会社の切り替え・管理 ----
@@ -1029,7 +1278,7 @@ document.getElementById("companyList").addEventListener("click", e => {
   companies = companies.filter(x => x !== c);
   if (currentCompanyId === c.id) currentCompanyId = companies[0]?.id || null;
   saveCompanies(); save();
-  renderCompanyList(); render();
+  renderCompanyList(); render(); pruneImages();
 });
 
 const moveDlg = document.getElementById("moveDlg");
@@ -1143,6 +1392,8 @@ if (rows.some(r => !r.companyId)) {
 }
 if (!currentCompany()) currentCompanyId = companies[0]?.id || null;
 saveCompanies();
+rows.forEach(r => { if (r.status === "done" && !r.review) r.review = "pending"; });
+pruneImages();
 render();
 updateMode();
 </script>
