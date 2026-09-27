@@ -164,9 +164,6 @@
   .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(15,23,42,.1); }
   .tab-cnt { font-size: 11.5px; background: var(--info-soft); color: var(--info); border-radius: 999px; padding: 0 7px; min-width: 20px; text-align: center; }
   .tab.active .tab-cnt { background: var(--primary-soft); color: var(--primary); }
-  #clearAll[hidden] { display: none; }
-  .month-field select { min-width: 132px; }
-  .panel[data-view="pending"] .month-field.mobile-hide { display: none; }
   .no-img { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; border: 1px dashed var(--line-strong); color: var(--muted); font-size: 10px; }
   .no-img-lg { color: #c9d1dc; font-size: 13px; padding: 28px 0; }
   .badge.plain { background: var(--info-soft); color: var(--info); }
@@ -203,6 +200,15 @@
   .review-actions .btn { height: 46px; justify-content: center; }
   .review-actions .btn-big { flex: 1; font-size: 16px; height: 46px; }
   .review-reading { display: flex; align-items: center; gap: 8px; color: var(--info); background: var(--info-soft); font-size: 13px; padding: 8px 14px; }
+  .methods { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; }
+  .method { font: inherit; font-size: 13.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  .method.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+  .method-no { font-weight: 700; }
+  .soon-tag { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
+  .method-soon { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 8px; padding: 14px 16px; color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .method-soon[hidden] { display: none; }
+  body.method-off .open-camera, body.method-off .actions .btn, body.method-off .mobile-capture .btn { opacity: .4; pointer-events: none; }
   .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
   .banner .btn { margin-left: auto; height: 32px; }
 
@@ -254,6 +260,9 @@
     .company-chip { display: none; }
     .content { padding: 16px 16px 110px; }
     .page-head .actions { display: none; }
+    .methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; overflow: visible; }
+    .method { flex-direction: column; gap: 2px; white-space: normal; text-align: center; font-size: 12px; line-height: 1.35; padding: 8px 4px; justify-content: center; }
+    .page-head { margin-bottom: 12px; }
     .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
     .stat { padding: 10px 12px; }
     .stat-value { font-size: 18px; }
@@ -281,8 +290,6 @@
     .mobile-capture .btn { height: 48px; justify-content: center; font-size: 15px; }
     .toast { bottom: calc(90px + env(safe-area-inset-bottom)); }
     .tabs { width: 100%; }
-    .month-field { width: 100%; }
-    .month-field select { flex: 1; height: 38px; font-size: 16px; }
     .tab { flex: 1; justify-content: center; padding: 7px 4px; }
     .row-actions .btn-sm { height: 32px; }
   }
@@ -308,12 +315,12 @@
     <div class="brand"><span class="brand-mark">神</span>仕訳の神様</div>
     <nav class="nav">
       <div class="nav-label">仕訳</div>
-      <a href="#" class="active"><svg><use href="#i-receipt"/></svg>レシート取込</a>
+      <a href="#" class="active"><svg><use href="#i-receipt"/></svg>取り込み</a>
       <div class="nav-label">マスタ</div>
       <a href="#" class="open-companies"><svg><use href="#i-building"/></svg>会社</a>
       <a class="disabled"><svg><use href="#i-list"/></svg>勘定科目<span class="soon">準備中</span></a>
       <div class="nav-label">保管</div>
-      <a class="disabled"><svg><use href="#i-folder"/></svg>証憑フォルダ<span class="soon">準備中</span></a>
+      <a class="disabled"><svg><use href="#i-folder"/></svg>格納済み<span class="soon">準備中</span></a>
       <div class="nav-label">システム</div>
       <a href="#" class="open-settings"><svg><use href="#i-gear"/></svg>設定</a>
     </nav>
@@ -326,15 +333,14 @@
         <button class="company-switch" id="companySwitch" aria-haspopup="true"><svg><use href="#i-building"/></svg><span id="companyName">会社を選択</span><span class="caret">▾</span></button>
         <div class="company-menu" id="companyMenu" hidden></div>
       </div>
-      <div class="crumb">仕訳 / <b>レシート取込</b></div>
+      <div class="crumb">仕訳 / <b>取り込み</b></div>
       <button class="icon-btn topbar-gear open-settings" title="設定"><svg><use href="#i-gear"/></svg></button>
     </div>
 
     <div class="content">
       <div class="page-head">
         <div>
-          <h1>レシート取込<span class="company-chip" id="headCompany"></span></h1>
-          <p>レシートを撮影すると、日付・金額・摘要を読み取ってCSVにします。<span class="mode-tag" id="modeTag"></span></p>
+          <h1>取り込み<span class="company-chip" id="headCompany"></span></h1>
         </div>
         <div class="actions">
           <label class="btn"><svg><use href="#i-upload"/></svg>画像をアップロード<input class="file-picker" type="file" accept="image/*" multiple></label>
@@ -342,15 +348,20 @@
         </div>
       </div>
 
+      <div class="methods" id="methods" role="tablist" aria-label="取り込み方法">
+        <button class="method" data-method="receipt"><span class="method-no">①</span>レシート</button>
+        <button class="method" data-method="format2"><span class="method-no">②</span>現金預金収支日計表<span class="soon-tag">準備中</span></button>
+        <button class="method" data-method="format3"><span class="method-no">③</span>その他のフォーマット<span class="soon-tag">準備中</span></button>
+      </div>
+      <div class="method-soon" id="methodSoon" hidden>この取り込み方法は準備中です。フォーマットが決まり次第、ここから読み込めるようになります。</div>
+
       <div class="banner" id="ocrBanner" hidden></div>
 
 
       <div class="panel" id="panel">
         <div class="panel-head">
           <div class="tabs" id="tabs"></div>
-          <label class="field month-field">月<select id="monthFilter"></select></label>
           <span class="spacer"></span>
-          <button class="btn btn-ghost" id="clearAll"><svg><use href="#i-trash"/></svg><span>消去</span></button>
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
         <div id="list"></div>
@@ -556,6 +567,7 @@ addEventListener("drop", e => {
 async function addFiles(fileList) {
   const files = Array.from(fileList);
   if (!files.length) return;
+  if ((settings.method || "receipt") !== "receipt") { alert("この取り込み方法は準備中です。「① レシート」を選んでください。"); return; }
   if (!currentCompany()) {
     alert("先に会社を登録・選択してください。");
     openCompanies();
@@ -853,11 +865,10 @@ const FIELDS = [
   { key: "creditAmount", label: "⑧貸方金額", num: true, cls: "c-amount" },
 ];
 
-// 確認の段階: pending（未確認）→ confirmed（確認済み）→ exported（出力済み）
+// 確認の段階: pending（未確認）→ confirmed（確認済み）→ exported（CSV出力後。格納済みとして保管し、この画面には出さない）
 const TABS = [
   { key: "pending", label: "未確認" },
   { key: "confirmed", label: "確認済み" },
-  { key: "exported", label: "出力済み" },
 ];
 let currentTab = "pending";
 let reviewId = null; // スマホの1件ずつ確認で表示中の仕訳
@@ -869,49 +880,29 @@ const needsCheck = r => r.status === "done" && (!!r.note || !r.date || !Number(r
 // 読み取り中・エラーの行は未確認タブに表示する
 const stageOf = r => r.status === "done" ? (r.review || "pending") : "pending";
 
-// 月で絞り込む（"all" = すべて、"none" = 日付なし、"YYYY-MM"）
-let currentMonth = "all";
-const monthOf = r => r.date ? r.date.slice(0, 7) : "none";
-const monthLabel = m => m === "all" ? "すべての月" : m === "none" ? "日付なし" : `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
-
-function sortedRows(stage = currentTab, useMonth = true) {
+function sortedRows(stage = currentTab) {
   // 日付順（未入力・読み取り中は末尾）
   const k = r => r.date || "9999";
   return companyRows()
-    .filter(r => stageOf(r) === stage && (!useMonth || currentMonth === "all" || monthOf(r) === currentMonth))
+    .filter(r => stageOf(r) === stage)
     .sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
 }
-
-function renderMonthFilter() {
-  const sel = document.getElementById("monthFilter");
-  const months = [...new Set(sortedRows(currentTab, false).filter(r => r.status === "done").map(monthOf))]
-    .sort((a, b) => a === "none" ? 1 : b === "none" ? -1 : b.localeCompare(a)); // 新しい月が上
-  if (currentMonth !== "all" && !months.includes(currentMonth)) currentMonth = "all";
-  sel.innerHTML = ["all", ...months].map(m => `<option value="${m}" ${m === currentMonth ? "selected" : ""}>${monthLabel(m)}</option>`).join("");
-  // スマホの1件ずつ確認では月の絞り込みは使わない
-  sel.closest(".month-field").classList.toggle("mobile-hide", mobileQuery.matches);
-}
-document.getElementById("monthFilter").addEventListener("change", e => { currentMonth = e.target.value; render(); });
 
 function statusBadge(row) {
   if (row.status === "reading") return `<span class="badge info"><span class="spinner"></span>読取中</span>`;
   if (row.status === "error") return `<span class="badge err">エラー</span>`;
   if (row.review === "confirmed") return `<span class="badge ok">確認済</span>`;
-  if (row.review === "exported") return `<span class="badge info">出力済</span>`;
   return needsCheck(row) ? `<span class="badge warn">要確認</span>` : `<span class="badge plain">未確認</span>`;
 }
 
-// CSVに出すのは「今表示しているタブ（と月）」の仕訳。スマホの1件ずつ確認では未確認すべて
-const csvTargetRows = () => {
-  const allMonths = currentTab === "pending" && mobileQuery.matches;
-  return sortedRows(currentTab, !allMonths).filter(r => r.status === "done");
-};
+// CSVに出すのは「確認済み」の仕訳
+const csvTargetRows = () => sortedRows("confirmed").filter(r => r.status === "done");
 
 function renderStats() {
   const exportTarget = csvTargetRows();
   const dl = document.getElementById("download");
   dl.disabled = exportTarget.length === 0;
-  dl.querySelector("span").textContent = `CSVダウンロード（${exportTarget.length}件）`;
+  dl.querySelector("span").textContent = `CSVダウンロード（確認済み ${exportTarget.length}件）`;
   for (const t of TABS) {
     const el = document.querySelector(`[data-tab="${t.key}"] .tab-cnt`);
     if (el) el.textContent = companyRows().filter(r => stageOf(r) === t.key).length;
@@ -924,12 +915,8 @@ function renderStats() {
 
 function renderTabs() {
   document.getElementById("panel").dataset.view = currentTab;
-  renderMonthFilter();
   document.getElementById("tabs").innerHTML = TABS.map(t =>
     `<button class="tab ${t.key === currentTab ? "active" : ""}" data-tab="${t.key}">${t.label}<span class="tab-cnt"></span></button>`).join("");
-  const clear = document.getElementById("clearAll");
-  clear.hidden = currentTab === "pending";
-  clear.querySelector("span").textContent = currentTab === "exported" ? "出力済みを消去" : "確認済みを消去";
 }
 document.getElementById("tabs").addEventListener("click", e => {
   const t = e.target.closest("[data-tab]");
@@ -967,7 +954,6 @@ function render() {
         ? `<b>未確認のレシートはありません</b>確認済みの仕訳は「確認済み」タブからCSVでダウンロードできます。`
         : `<b>まだレシートがありません</b>「撮影する」でレシートを撮るか、画像をここにドラッグ＆ドロップしてください。`,
       confirmed: `<b>確認済みの仕訳はありません</b>「未確認」タブで内容を確認して「OK」を押すと、ここに移ります。`,
-      exported: `<b>出力済みの仕訳はありません</b>CSVをダウンロードした仕訳がここに入ります。`,
     }[currentTab];
     list.innerHTML = `<div class="dropzone"><svg><use href="#i-receipt"/></svg>${empty}</div>`;
     return;
@@ -979,14 +965,13 @@ function render() {
     let main = "";
     if (row.status === "done" && currentTab === "pending") main = `<button class="btn btn-ok" data-ok="${row.id}"><svg><use href="#i-check"/></svg>OK</button>`;
     if (currentTab === "confirmed") main = `<button class="btn btn-sm" data-back="${row.id}" title="未確認に戻す">↩ 戻す</button>`;
-    if (currentTab === "exported") main = `<button class="btn btn-sm" data-back="${row.id}" title="確認済みに戻す">↩ 戻す</button>`;
     return `<td class="c-del"><div class="row-actions">${main}${move}${del}</div></td>`;
   };
   let body = "";
   items.forEach((row, i) => {
     const thumb = row.thumb
       ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="レシート"></td>`
-      : `<td class="c-thumb"><span class="no-img">手入力</span></td>`;
+      : `<td class="c-thumb"><span class="no-img">画像なし</span></td>`;
     const head = `<td class="rowno">${i + 1}</td><td class="c-status">${statusBadge(row)}</td>${thumb}`;
     if (row.status !== "done") {
       const msg = row.status === "reading"
@@ -1061,7 +1046,7 @@ function renderReviewCard(list) {
 
   list.innerHTML = `${readingNote}<div class="review" data-row="${row.id}">
     <div class="review-top"><span>${statusBadge(row)}</span><span class="review-pos">${pos} / ${queueRows.length}件</span></div>
-    <div class="review-img">${row.thumb ? `<img class="thumb-lg" data-group="${row.groupId}" src="${row.thumb}" alt="レシート">` : `<div class="no-img-lg">手入力の仕訳（画像なし）</div>`}</div>
+    <div class="review-img">${row.thumb ? `<img class="thumb-lg" data-group="${row.groupId}" src="${row.thumb}" alt="レシート">` : `<div class="no-img-lg">画像なし</div>`}</div>
     <div class="review-body">${bodyHtml}</div>
     <div class="review-actions">
       <button class="btn" data-del="${row.id}"><svg><use href="#i-trash"/></svg>削除</button>
@@ -1152,8 +1137,7 @@ list.addEventListener("click", async e => {
     setReview([t.dataset.ok], "confirmed", "確認済みにしました");
   } else if (t.dataset.back) {
     const row = rows.find(r => r.id === t.dataset.back);
-    const to = row.review === "exported" ? "confirmed" : "pending";
-    setReview([row.id], to, to === "pending" ? "未確認に戻しました" : "確認済みに戻しました");
+    setReview([row.id], "pending", "未確認に戻しました");
   } else if (t.dataset.skip) {
     reviewId = nextReviewId(t.dataset.skip);
     render();
@@ -1210,21 +1194,8 @@ document.getElementById("download").onclick = async () => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 
-  // 二重取り込みを防ぐため、出力した仕訳は「出力済み」に移す
-  await new Promise(r => setTimeout(r, 400));
-  if (currentTab !== "exported" && confirm(`ダウンロードした ${done.length} 件を「出力済み」に移しますか？\n（ミロク会計への二重取り込み防止のため）`)) {
-    setReview(done.map(r => r.id), "exported", `${done.length}件を出力済みにしました`);
-  }
-};
-
-document.getElementById("clearAll").onclick = () => {
-  const mine = sortedRows();
-  const label = TABS.find(t => t.key === currentTab).label;
-  const period = currentMonth === "all" ? "" : `（${monthLabel(currentMonth)}）`;
-  if (!mine.length || !confirm(`「${currentCompany().name}」の${label}${period}の仕訳 ${mine.length} 件を消去しますか？`)) return;
-  const ids = new Set(mine.map(r => r.id));
-  rows = rows.filter(r => !ids.has(r.id));
-  save(); render(); pruneImages();
+  // 二重取り込みを防ぐため、出力した仕訳は一覧から外して「格納済み」として保管する
+  setReview(done.map(r => r.id), "exported", `${done.length}件をダウンロードしました`);
 };
 
 // ---- 会社の切り替え・管理 ----
@@ -1326,6 +1297,23 @@ document.getElementById("moveList").onclick = e => {
 };
 document.getElementById("moveClose").onclick = () => { moveDlg.hidden = true; };
 
+// ---- 取り込み方法（①レシート ②③は今後フォーマットを追加） ----
+function renderMethod() {
+  const method = settings.method || "receipt";
+  for (const b of document.querySelectorAll(".method")) b.classList.toggle("active", b.dataset.method === method);
+  const ready = method === "receipt";
+  document.getElementById("methodSoon").hidden = ready;
+  document.body.classList.toggle("method-off", !ready);
+}
+document.getElementById("methods").addEventListener("click", e => {
+  const b = e.target.closest("[data-method]");
+  if (!b) return;
+  settings.method = b.dataset.method;
+  saveSettings();
+  renderMethod();
+});
+renderMethod();
+
 // ---- 設定（APIキー） ----
 const settingsDlg = document.getElementById("settings");
 const apiKeyInput = document.getElementById("apiKey");
@@ -1334,7 +1322,6 @@ function closeSettings() { settingsDlg.hidden = true; updateMode(); }
 function updateMode() {
   const name = getApiKey() ? "高精度モード（Claude）" : "無料モード（端末内）";
   document.getElementById("modeName").textContent = name;
-  document.getElementById("modeTag").textContent = name;
 }
 for (const el of document.querySelectorAll(".open-settings")) el.addEventListener("click", e => { e.preventDefault(); openSettings(); });
 document.getElementById("settingsClose").onclick = closeSettings;
