@@ -843,7 +843,7 @@ function extractAmount(lines) {
 // 一番上はロゴ（英字や崩れた文字）のことが多いので、日本語の店名の行を優先する
 function extractStore(lines, confs = []) {
   // 宛名（〜様・〜御中）、但し書き、金額・日付・住所の行は店名にしない
-  const skip = /領収|レシート|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|様$|御中$|^但|上記|金額|合計|¥|\d\s*円|円也|^金\s|運転手|担当|レジ|\d{4}年|令和|\d{1,2}[/.]\d{1,2}|[都道府県].*[市区町村郡]|^[\d\s\-:/.,¥]+$/i;
+  const skip = /領収|レシート|売上票|伝票|控え|明細|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|様$|御中$|^但|上記|金額|合計|¥|\d\s*円|円也|^金\s|運転手|担当|レジ|\d{4}年|令和|\d{1,2}[/.]\d{1,2}|[都道府県].*[市区町村郡]|^[\d\s\-:/.,¥]+$/i;
   const japanese = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
   // 店の情報（電話・住所・登録番号）の行。店名はこの近くにあることが多い
   const storeInfo = /TEL|電話|登録番号|〒|[都道府県].*[市区町村郡]/i;
@@ -856,7 +856,7 @@ function extractStore(lines, confs = []) {
   for (let i = 0; i < top.length; i++) {
     if (!label.test(top[i])) continue;
     const rest = clean(top[i].replace(label, "").replace(/MERCHANT/i, ""));
-    if (japanese.test(rest)) return rest.slice(0, 24);
+    if (japanese.test(rest) && !skip.test(rest)) return rest.slice(0, 24);
     const next = clean(top[i + 1] || "");
     if (japanese.test(next) && !skip.test(top[i + 1])) return next.slice(0, 24);
   }
