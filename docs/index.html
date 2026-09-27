@@ -167,6 +167,8 @@
   #clearAll[hidden] { display: none; }
   .month-field select { min-width: 132px; }
   .panel[data-view="pending"] .month-field.mobile-hide { display: none; }
+  .no-img { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; border: 1px dashed var(--line-strong); color: var(--muted); font-size: 10px; }
+  .no-img-lg { color: #c9d1dc; font-size: 13px; padding: 28px 0; }
   .badge.plain { background: var(--info-soft); color: var(--info); }
   .btn-ok { background: var(--ok); border-color: var(--ok); color: #fff; height: 30px; padding: 0 12px; }
   .btn-ok:hover { background: #0e6a3f; }
@@ -281,7 +283,6 @@
     .tabs { width: 100%; }
     .month-field { width: 100%; }
     .month-field select { flex: 1; height: 38px; font-size: 16px; }
-    .panel[data-view="pending"] #download { display: none; }
     .tab { flex: 1; justify-content: center; padding: 7px 4px; }
     .row-actions .btn-sm { height: 32px; }
   }
@@ -333,7 +334,7 @@
       <div class="page-head">
         <div>
           <h1>レシート取込<span class="company-chip" id="headCompany"></span></h1>
-          <p>レシートを撮影・アップロードすると、日付・金額・摘要を自動で読み取ります。<span class="mode-tag" id="modeTag"></span></p>
+          <p>レシートを撮影すると、日付・金額・摘要を読み取ってCSVにします。<span class="mode-tag" id="modeTag"></span></p>
         </div>
         <div class="actions">
           <label class="btn"><svg><use href="#i-upload"/></svg>画像をアップロード<input class="file-picker" type="file" accept="image/*" multiple></label>
@@ -343,18 +344,13 @@
 
       <div class="banner" id="ocrBanner" hidden></div>
 
-      <div class="stats">
-        <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--warn)"></span>未確認</div><div class="stat-value mono" id="st-pending">0<small>件</small></div></div>
-        <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--ok)"></span>確認済み</div><div class="stat-value mono" id="st-confirmed">0<small>件</small></div></div>
-        <div class="stat"><div class="stat-label" id="st-total-label">合計</div><div class="stat-value mono" id="st-total">¥0</div></div>
-        <div class="stat"><div class="stat-label"><span class="dot" style="background:var(--primary)"></span>読取中</div><div class="stat-value mono" id="st-reading">0<small>件</small></div></div>
-      </div>
 
       <div class="panel" id="panel">
         <div class="panel-head">
           <div class="tabs" id="tabs"></div>
           <label class="field month-field">月<select id="monthFilter"></select></label>
           <span class="spacer"></span>
+          <button class="btn" id="addRow"><span>＋ 手入力で追加</span></button>
           <button class="btn btn-ghost" id="clearAll"><svg><use href="#i-trash"/></svg><span>消去</span></button>
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
@@ -906,25 +902,17 @@ function statusBadge(row) {
   return needsCheck(row) ? `<span class="badge warn">要確認</span>` : `<span class="badge plain">未確認</span>`;
 }
 
+// CSVに出すのは「今表示しているタブ（と月）」の仕訳。スマホの1件ずつ確認では未確認すべて
+const csvTargetRows = () => {
+  const allMonths = currentTab === "pending" && mobileQuery.matches;
+  return sortedRows(currentTab, !allMonths).filter(r => r.status === "done");
+};
+
 function renderStats() {
-  const mine = companyRows();
-  const done = mine.filter(r => r.status === "done");
-  const pending = mine.filter(r => stageOf(r) === "pending" && r.status !== "reading");
-  const confirmed = done.filter(r => r.review === "confirmed");
-  document.getElementById("st-pending").innerHTML = `${pending.length}<small>件</small>`;
-  document.getElementById("st-confirmed").innerHTML = `${confirmed.length}<small>件</small>`;
-  // 表示中（タブ＋月）の件数と合計。ミロクに取り込んだ後の件数・金額の照合に使う
-  const view = sortedRows().filter(r => r.status === "done");
-  const tabLabel = TABS.find(t => t.key === currentTab).label;
-  document.getElementById("st-total-label").textContent = `${tabLabel}・${monthLabel(currentMonth)}の合計（${view.length}件）`;
-  document.getElementById("st-total").textContent = yen(view.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
-  const exportTarget = sortedRows("confirmed").filter(r => r.status === "done");
-  document.getElementById("st-reading").innerHTML = `${mine.filter(r => r.status === "reading").length}<small>件</small>`;
+  const exportTarget = csvTargetRows();
   const dl = document.getElementById("download");
   dl.disabled = exportTarget.length === 0;
-  dl.querySelector("span").textContent = currentMonth === "all"
-    ? `CSVダウンロード（確認済み ${exportTarget.length}件）`
-    : `CSVダウンロード（${monthLabel(currentMonth)}・確認済み ${exportTarget.length}件）`;
+  dl.querySelector("span").textContent = `CSVダウンロード（${exportTarget.length}件）`;
   for (const t of TABS) {
     const el = document.querySelector(`[data-tab="${t.key}"] .tab-cnt`);
     if (el) el.textContent = companyRows().filter(r => stageOf(r) === t.key).length;
@@ -997,7 +985,9 @@ function render() {
   };
   let body = "";
   items.forEach((row, i) => {
-    const thumb = `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="レシート"></td>`;
+    const thumb = row.thumb
+      ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="レシート"></td>`
+      : `<td class="c-thumb"><span class="no-img">手入力</span></td>`;
     const head = `<td class="rowno">${i + 1}</td><td class="c-status">${statusBadge(row)}</td>${thumb}`;
     if (row.status !== "done") {
       const msg = row.status === "reading"
@@ -1072,7 +1062,7 @@ function renderReviewCard(list) {
 
   list.innerHTML = `${readingNote}<div class="review" data-row="${row.id}">
     <div class="review-top"><span>${statusBadge(row)}</span><span class="review-pos">${pos} / ${queueRows.length}件</span></div>
-    <div class="review-img"><img class="thumb-lg" data-group="${row.groupId}" src="${row.thumb}" alt="レシート"></div>
+    <div class="review-img">${row.thumb ? `<img class="thumb-lg" data-group="${row.groupId}" src="${row.thumb}" alt="レシート">` : `<div class="no-img-lg">手入力の仕訳（画像なし）</div>`}</div>
     <div class="review-body">${bodyHtml}</div>
     <div class="review-actions">
       <button class="btn" data-del="${row.id}"><svg><use href="#i-trash"/></svg>削除</button>
@@ -1199,7 +1189,7 @@ document.getElementById("modal").onclick = () => document.getElementById("modal"
 // ---- CSV ----
 const CSV_HEADERS = ["伝票日付", "借方勘定科目コード", "借方科目別補助コード", "借方金額", "摘要", "貸方勘定科目コード", "貸方科目別補助コード", "貸方金額"];
 document.getElementById("download").onclick = async () => {
-  const done = sortedRows("confirmed").filter(r => r.status === "done");
+  const done = csvTargetRows();
   if (!done.length) return;
   const incomplete = done.filter(r => !r.date || !Number(r.debitAmount));
   if (incomplete.length && !confirm(`日付か金額が空の行が ${incomplete.length} 件あります。このままダウンロードしますか？`)) return;
@@ -1223,9 +1213,25 @@ document.getElementById("download").onclick = async () => {
 
   // 二重取り込みを防ぐため、出力した仕訳は「出力済み」に移す
   await new Promise(r => setTimeout(r, 400));
-  if (confirm(`ダウンロードした ${done.length} 件を「出力済み」に移しますか？\n（ミロク会計への二重取り込み防止のため）`)) {
+  if (currentTab !== "exported" && confirm(`ダウンロードした ${done.length} 件を「出力済み」に移しますか？\n（ミロク会計への二重取り込み防止のため）`)) {
     setReview(done.map(r => r.id), "exported", `${done.length}件を出力済みにしました`);
   }
+};
+
+// レシート画像なしで1行追加する（日計表などを見ながら手で入力する用）
+document.getElementById("addRow").onclick = () => {
+  if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
+  const row = {
+    id: uid(), groupId: uid(), companyId: currentCompanyId, thumb: "", status: "done", review: "pending", manual: true,
+    date: "", debitCode: "", debitSub: "", debitAmount: "", summary: "", creditCode: "", creditSub: "", creditAmount: "", note: "",
+  };
+  rows.push(row);
+  currentTab = "pending";
+  currentMonth = "all";
+  reviewId = row.id;
+  save(); render();
+  const input = list.querySelector(`input[data-id="${row.id}"][data-key="date"]`);
+  if (input) { input.scrollIntoView({ block: "center" }); input.focus(); }
 };
 
 document.getElementById("clearAll").onclick = () => {
