@@ -482,6 +482,9 @@ const MAX_PARALLEL_OCR = 1; // 端末内OCRはスマホの負荷が高いので1
 /** 1行 = 1仕訳。thumb は一覧用の小さい画像（localStorage）、大きい画像は IndexedDB に保存 */
 let rows = load(STORAGE_KEY, []);
 const fullImages = new Map(); // groupId -> dataURL（読み込み済みの大きい画像のキャッシュ）
+// 読み取り専用の、さらに大きい画像（小さい文字をつぶさないため）。読み取りが終わったら捨てる
+const ocrImages = new Map();
+const OCR_MAX_SIDE = 3000;
 
 // 大きい画像の保存場所（localStorage は容量が小さいため IndexedDB を使う）
 const imageStore = (() => {
@@ -522,6 +525,7 @@ async function pruneImages() {
     const used = new Set(rows.map(r => r.groupId));
     for (const key of await imageStore.keys()) if (!used.has(key)) await imageStore.del(key);
     for (const key of fullImages.keys()) if (!used.has(key)) fullImages.delete(key);
+    for (const key of ocrImages.keys()) if (!used.has(key)) ocrImages.delete(key);
   } catch {}
 }
 let queue = [];
@@ -588,8 +592,14 @@ async function addFiles(fileList) {
   for (const file of files) {
     const groupId = uid();
     try {
-      const [full, thumb] = await Promise.all([resize(file, 1600, 0.85), resize(file, 240, 0.7)]);
+      const [full, thumb, forOcr] = await Promise.all([
+        resize(file, 1600, 0.85),
+        resize(file, 240, 0.7),
+        // iPhoneアプリの文字認識は大きい画像のほうが正確（Web版の文字認識は重くなるので保存用と同じ大きさ）
+        NATIVE ? resize(file, OCR_MAX_SIDE, 0.9) : null,
+      ]);
       fullImages.set(groupId, full);
+      if (forOcr) ocrImages.set(groupId, forOcr);
       imageStore.put(groupId, full).catch(() => {});
       rows.push({ id: uid(), groupId, companyId: currentCompanyId, source: "receipt", thumb, status: "reading" });
       queue.push(groupId);
@@ -630,7 +640,7 @@ function pump() {
 async function readGroup(groupId) {
   const placeholder = rows.find(r => r.groupId === groupId && r.status === "reading");
   try {
-    const image = await getFullImage(groupId);
+    const image = ocrImages.get(groupId) || await getFullImage(groupId);
     if (!image) throw new Error("画像が見つかりません。もう一度撮影してください");
     const data = { receipts: getApiKey() ? await readReceipt(image.split(",")[1]) : await readReceiptFree(image) };
 
@@ -648,6 +658,7 @@ async function readGroup(groupId) {
       ocrText: r.ocrText || "",
     }));
     rows.splice(idx, 1, ...newRows);
+    ocrImages.delete(groupId);
   } catch (err) {
     if (placeholder) Object.assign(placeholder, { status: "error", error: err.message });
   }
@@ -1405,6 +1416,7 @@ let shotCount = 0;
 
 async function openCamera() {
   if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
+  if (NATIVE) return scanReceipts();
   shotCount = 0;
   document.getElementById("camCount").textContent = "0枚";
   document.getElementById("camLast").hidden = true;
@@ -1424,6 +1436,24 @@ async function openCamera() {
       err && err.name === "NotAllowedError" ? "カメラの使用が許可されていません。ブラウザの設定で許可するか、標準カメラで撮影してください。" : "カメラを起動できませんでした。";
     document.getElementById("camMsg").hidden = false;
     cameraEl.classList.add("no-stream");
+  }
+}
+
+// iPhoneアプリでは標準の書類スキャンを使う（四隅の自動検出・傾き補正・影の除去で読み取りが正確になる）。
+// 1回のスキャンで何枚でも続けて撮れる
+async function scanReceipts() {
+  try {
+    const { images } = await callNative("scanDocument");
+    if (!images || !images.length) return; // 閉じた
+    const files = images.map((b64, i) => {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+      return new File([bytes], `scan_${Date.now()}_${i}.jpg`, { type: "image/jpeg" });
+    });
+    await addFiles(files);
+  } catch (err) {
+    alert(err.message || "スキャンを開けませんでした");
   }
 }
 
