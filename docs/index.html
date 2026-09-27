@@ -208,6 +208,12 @@
   .method.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
   .method-no { font-weight: 700; }
   .soon-tag { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
+  .doc-types { display: flex; gap: 6px; margin: -6px 0 16px; flex-wrap: wrap; }
+  .doc-types[hidden] { display: none; }
+  .doc-type { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--muted); border-radius: 999px; padding: 5px 14px; cursor: pointer; }
+  .doc-type.active { background: var(--text); border-color: var(--text); color: #fff; }
+  .doc-type.active .soon-tag { color: #cfd5de; border-color: #6a7385; }
   .method-soon { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 8px; padding: 14px 16px; color: var(--muted); font-size: 13px; margin-bottom: 16px; }
   .method-soon[hidden] { display: none; }
   body.method-off #panel, body.method-off .page-head .actions, body.method-off .mobile-capture, body.method-off #ocrBanner { display: none !important; }
@@ -268,6 +274,9 @@
     .content { padding: 16px 16px 110px; }
     .page-head .actions { display: none; }
     .methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; overflow: visible; }
+    .doc-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: -4px 0 14px; }
+    .doc-type { justify-content: center; gap: 4px; font-size: 12px; padding: 7px 4px; white-space: nowrap; }
+    .doc-type .soon-tag { font-size: 9.5px; padding: 0 3px; }
     .method { flex-direction: column; gap: 2px; white-space: normal; text-align: center; font-size: 12px; line-height: 1.35; padding: 8px 4px; justify-content: center; }
     .page-head { margin-bottom: 12px; }
     .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -356,9 +365,15 @@
       </div>
 
       <div class="methods" id="methods" role="tablist" aria-label="取り込み方法">
-        <button class="method" data-method="receipt"><span class="method-no">①</span>レシート</button>
+        <button class="method" data-method="receipt"><span class="method-no">①</span>原始資料</button>
         <button class="method" data-method="format2"><span class="method-no">②</span>現金預金収支日計表<span class="soon-tag">準備中</span></button>
         <button class="method" data-method="format3"><span class="method-no">③</span>試算表入力<span class="soon-tag">準備中</span></button>
+      </div>
+      <!-- ①原始資料の種類（レシート・領収書／給与台帳／通帳） -->
+      <div class="doc-types" id="docTypes" role="tablist" aria-label="原始資料の種類">
+        <button class="doc-type" data-doc="receipt">レシート・領収書</button>
+        <button class="doc-type" data-doc="payroll">給与台帳<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="passbook">通帳<span class="soon-tag">準備中</span></button>
       </div>
       <section class="method-soon" id="methodSoon" hidden>
         <h2 id="methodSoonTitle"></h2>
@@ -583,7 +598,10 @@ addEventListener("drop", e => {
 async function addFiles(fileList) {
   const files = Array.from(fileList);
   if (!files.length) return;
-  if ((settings.method || "receipt") !== "receipt") { alert("この取り込み方法は準備中です。「① レシート」を選んでください。"); return; }
+  if ((settings.method || "receipt") !== "receipt" || (settings.docType || "receipt") !== "receipt") {
+    alert("この取り込み方法は準備中です。「① 原始資料」の「レシート・領収書」を選んでください。");
+    return;
+  }
   if (!currentCompany()) {
     alert("先に会社を登録・選択してください。");
     openCompanies();
@@ -1371,15 +1389,29 @@ document.getElementById("moveList").onclick = e => {
 document.getElementById("moveClose").onclick = () => { moveDlg.hidden = true; };
 
 // ---- 取り込み方法（①レシート ②③は今後フォーマットを追加） ----
+// ①原始資料は、さらに種類（レシート・領収書／給与台帳／通帳）ごとに読み込み方を分ける
 function renderMethod() {
   const method = settings.method || "receipt";
+  const doc = settings.docType || "receipt";
   for (const b of document.querySelectorAll(".method")) b.classList.toggle("active", b.dataset.method === method);
-  const ready = method === "receipt";
+  for (const b of document.querySelectorAll(".doc-type")) b.classList.toggle("active", b.dataset.doc === doc);
+  document.getElementById("docTypes").hidden = method !== "receipt";
+  const ready = method === "receipt" && doc === "receipt";
   document.getElementById("methodSoon").hidden = ready;
-  const active = document.querySelector(`.method[data-method="${method}"]`);
-  document.getElementById("methodSoonTitle").textContent = active ? active.textContent.replace("準備中", "").trim() : "";
+  const label = el => el ? el.textContent.replace("準備中", "").trim() : "";
+  const activeMethod = document.querySelector(`.method[data-method="${method}"]`);
+  const activeDoc = document.querySelector(`.doc-type[data-doc="${doc}"]`);
+  document.getElementById("methodSoonTitle").textContent =
+    method === "receipt" ? `${label(activeMethod)} ― ${label(activeDoc)}` : label(activeMethod);
   document.body.classList.toggle("method-off", !ready);
 }
+document.getElementById("docTypes").addEventListener("click", e => {
+  const b = e.target.closest("[data-doc]");
+  if (!b) return;
+  settings.docType = b.dataset.doc;
+  saveSettings();
+  renderMethod();
+});
 document.getElementById("methods").addEventListener("click", e => {
   const b = e.target.closest("[data-method]");
   if (!b) return;
