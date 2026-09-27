@@ -814,6 +814,8 @@ function validDate(y, m, d) {
 const pad = n => String(n).padStart(2, "0");
 
 function extractDate(text) {
+  // 日付と時刻の間の空白が読み取りで消えて「26/09/2609:00:47」のようにくっつくことがあるので、時刻の前に空白を入れる
+  text = text.replace(/(\d)(\d{1,2}:\d{2}(?::\d{2})?)/g, "$1 $2");
   const candidates = [];
   const push = (y, m, d) => { if (validDate(y, m, d)) candidates.push(`${y}-${pad(m)}-${pad(d)}`); };
   for (const m of text.matchAll(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})/g)) push(+m[1], +m[2], +m[3]);
