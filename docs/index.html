@@ -211,6 +211,8 @@
   .method-soon { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 8px; padding: 14px 16px; color: var(--muted); font-size: 13px; margin-bottom: 16px; }
   .method-soon[hidden] { display: none; }
   body.method-off #panel, body.method-off .page-head .actions, body.method-off .mobile-capture, body.method-off #ocrBanner { display: none !important; }
+  /* CSVダウンロードは確認済みタブでだけ出す */
+  .panel[data-view="pending"] #download { display: none; }
   .method-soon h2 { font-size: 16px; margin: 0 0 6px; color: var(--text); }
   .method-soon { padding: 40px 20px; text-align: center; }
   .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
