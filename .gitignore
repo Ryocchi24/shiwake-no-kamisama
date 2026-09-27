@@ -1,3 +1,5 @@
 .DS_Store
 .env
 node_modules/
+# お客さんの実データを含む可能性があるサンプルはGitHubに上げない
+samples/
