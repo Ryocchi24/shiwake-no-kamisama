@@ -350,7 +350,6 @@
           <div class="tabs" id="tabs"></div>
           <label class="field month-field">月<select id="monthFilter"></select></label>
           <span class="spacer"></span>
-          <button class="btn" id="addRow"><span>＋ 手入力で追加</span></button>
           <button class="btn btn-ghost" id="clearAll"><svg><use href="#i-trash"/></svg><span>消去</span></button>
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
@@ -1216,22 +1215,6 @@ document.getElementById("download").onclick = async () => {
   if (currentTab !== "exported" && confirm(`ダウンロードした ${done.length} 件を「出力済み」に移しますか？\n（ミロク会計への二重取り込み防止のため）`)) {
     setReview(done.map(r => r.id), "exported", `${done.length}件を出力済みにしました`);
   }
-};
-
-// レシート画像なしで1行追加する（日計表などを見ながら手で入力する用）
-document.getElementById("addRow").onclick = () => {
-  if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
-  const row = {
-    id: uid(), groupId: uid(), companyId: currentCompanyId, thumb: "", status: "done", review: "pending", manual: true,
-    date: "", debitCode: "", debitSub: "", debitAmount: "", summary: "", creditCode: "", creditSub: "", creditAmount: "", note: "",
-  };
-  rows.push(row);
-  currentTab = "pending";
-  currentMonth = "all";
-  reviewId = row.id;
-  save(); render();
-  const input = list.querySelector(`input[data-id="${row.id}"][data-key="date"]`);
-  if (input) { input.scrollIntoView({ block: "center" }); input.focus(); }
 };
 
 document.getElementById("clearAll").onclick = () => {
