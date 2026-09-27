@@ -839,15 +839,56 @@ function extractAmount(lines) {
   return yen.length ? Math.max(...yen) : 0;
 }
 
-function extractStore(lines) {
+// 店名: レシート上部の行に「店名らしさ」の点数をつけて、一番高い行を選ぶ。
+// 一番上はロゴ（英字や崩れた文字）のことが多いので、日本語の店名の行を優先する
+function extractStore(lines, confs = []) {
   // 宛名（〜様・〜御中）、但し書き、金額・日付・住所の行は店名にしない
-  const skip = /領収|レシート|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|様$|御中$|^但|上記|金額|合計|¥|円|^金\s|運転手|担当|\d{4}年|令和|[都道府県].*[市区町村郡]|^[\d\s\-:/.,¥]+$/i;
-  for (const line of lines.slice(0, 12)) {
-    const t = line.replace(/[^\p{L}\p{N}ー・&\s]/gu, "").trim();
-    const letters = (t.match(/[\p{L}]/gu) || []).length;
-    if (letters >= 2 && !skip.test(line)) return t.slice(0, 20);
+  const skip = /領収|レシート|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|様$|御中$|^但|上記|金額|合計|¥|\d\s*円|円也|^金\s|運転手|担当|レジ|\d{4}年|令和|\d{1,2}[/.]\d{1,2}|[都道府県].*[市区町村郡]|^[\d\s\-:/.,¥]+$/i;
+  const japanese = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+  // 店の情報（電話・住所・登録番号）の行。店名はこの近くにあることが多い
+  const storeInfo = /TEL|電話|登録番号|〒|[都道府県].*[市区町村郡]/i;
+  const clean = line => line.replace(/[^\p{L}\p{N}ー・&\-\s]/gu, "").replace(/\s+/g, " ").trim()
+    .replace(/(?<=[\p{Script=Katakana}\p{Script=Han}ー])[A-Za-z]$/u, "");      // 日本語の後ろに紛れた1文字の英字（読み間違い）を除く
+  // 「加盟店名」「店舗名」などの見出し。店名は見出しの後ろか、次の行に書かれている
+  const label = /^(加盟店名?|店舗名|店名|MERCHANT)[\s:：]*/i;
+
+  const top = lines.slice(0, 12);
+  for (let i = 0; i < top.length; i++) {
+    if (!label.test(top[i])) continue;
+    const rest = clean(top[i].replace(label, "").replace(/MERCHANT/i, ""));
+    if (japanese.test(rest)) return rest.slice(0, 24);
+    const next = clean(top[i + 1] || "");
+    if (japanese.test(next) && !skip.test(top[i + 1])) return next.slice(0, 24);
   }
-  return "";
+  let best = null;
+  top.forEach((line, i) => {
+    const t = clean(line);
+    const letters = (t.match(/\p{L}/gu) || []).length;
+    if (letters < 2 || skip.test(line)) return;
+    let score = 0;
+    if (japanese.test(t)) score += 3; else score -= 3;                 // 英字だけの行はロゴのことが多い
+    if (/[^\s]店$|店舗|本店|支店|営業所/.test(t)) score += 2;
+    if (/株式会社|有限会社|合同会社|㈱|\(株\)/.test(line)) score += 2;
+    if (storeInfo.test(top[i - 1] || "") || storeInfo.test(top[i + 1] || "") || storeInfo.test(top[i + 2] || "")) score += 1;
+    const conf = confs[i] ?? 1;
+    if (conf < 0.5) score -= 2; else if (conf < 0.7) score -= 1;    // 崩れた文字（ロゴなど）は自信が低い
+    const digits = (t.match(/\d/g) || []).length;
+    if (digits / t.length > 0.3) score -= 2;
+    if (t.length > 22) score -= 2;                                     // 長い行は店名より案内文のことが多い
+    score -= i * 0.3;                                                  // 同じくらいなら上の行を優先
+    if (!best || score > best.score) best = { score, i, t };
+  });
+  if (!best) return "";
+  // 店名と支店名（〜店）が2行に分かれている場合はつなげる（例: ファミリーマート 新宿西口店）
+  const isBranch = t => /^[^\s]{1,10}店$/.test(t);
+  const usable = i => {
+    const t = clean(top[i] || "");
+    return t && japanese.test(t) && !skip.test(top[i]) && !isBranch(t);
+  };
+  if (isBranch(best.t) && usable(best.i - 1)) return `${clean(top[best.i - 1])} ${best.t}`.slice(0, 24);
+  const next = clean(top[best.i + 1] || "");
+  if (!/店$/.test(best.t) && isBranch(next) && !skip.test(top[best.i + 1])) return `${best.t} ${next}`.slice(0, 24);
+  return best.t.slice(0, 24);
 }
 
 // iPhoneアプリの中で開いているときは、iPhone標準の文字認識（Vision）を使う
@@ -862,7 +903,7 @@ function groupLines(items, width, height, theta) {
   const cos = Math.cos(theta), sin = Math.sin(theta);
   const pts = items.map(it => {
     const cx = (it.x + it.w / 2) * width, cy = (it.y + it.h / 2) * height;
-    return { text: it.text, x: cx * cos + cy * sin, y: -cx * sin + cy * cos, h: it.h * height };
+    return { text: it.text, conf: it.confidence, x: cx * cos + cy * sin, y: -cx * sin + cy * cos, h: it.h * height };
   });
   const lines = [];
   for (const p of pts.sort((a, b) => a.y - b.y)) {
@@ -873,7 +914,7 @@ function groupLines(items, width, height, theta) {
   return lines.sort((a, b) => a.y - b.y);
 }
 
-function itemsToText(items, width = 1, height = 1) {
+function itemsToLines(items, width = 1, height = 1) {
   // 目安の傾き: 長い行の傾きの中央値（短い文字は傾きが0で返ることが多いため除く）
   const maxW = Math.max(0, ...items.map(i => i.w));
   const angles = items.filter(i => typeof i.angle === "number" && i.w >= maxW * 0.3).map(i => i.angle).sort((a, b) => a - b);
@@ -884,20 +925,23 @@ function itemsToText(items, width = 1, height = 1) {
     const score = [lines.length, Math.abs(theta - guess)];
     if (!best || score[0] < best.score[0] || (score[0] === best.score[0] && score[1] < best.score[1])) best = { lines, score };
   }
-  return (best ? best.lines : [])
-    .map(l => l.items.sort((a, b) => a.x - b.x).map(i => i.text).join("  "))
-    .join("\n");
+  // 1行の文字と、その行でいちばん低い「文字認識の自信」（0〜1）
+  return (best ? best.lines : []).map(l => {
+    const sorted = l.items.sort((a, b) => a.x - b.x);
+    return { text: sorted.map(i => i.text).join("  "), conf: Math.min(...sorted.map(i => i.conf ?? 1)) };
+  });
 }
 
+// 戻り値: 行ごとの { text, conf }（conf は文字認識の自信。分からない場合は 1）
 async function recognizeText(dataUrl) {
   if (NATIVE) {
     const res = await callNative("recognizeText", { image: dataUrl.split(",")[1] });
-    return itemsToText(res.items || [], res.width, res.height);
+    return itemsToLines(res.items || [], res.width, res.height);
   }
   const worker = await getOcrWorker();
   const canvas = await preprocessForOcr(dataUrl);
   const { data } = await worker.recognize(canvas);
-  return data.text || "";
+  return (data.text || "").split(/\r?\n/).map(text => ({ text, conf: 1 }));
 }
 
 // 領収書の「但し 〇〇代として」から品目を取り出す
@@ -910,12 +954,15 @@ function extractPurpose(lines) {
 }
 
 async function readReceiptFree(dataUrl) {
-  const text = normalizeText(await recognizeText(dataUrl));
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  if (!lines.length) return [];
+  const recognized = (await recognizeText(dataUrl))
+    .map(l => ({ text: normalizeText(l.text).trim(), conf: l.conf }))
+    .filter(l => l.text);
+  if (!recognized.length) return [];
+  const lines = recognized.map(l => l.text);
+  const text = lines.join("\n");
   const date = extractDate(text);
   const amount = extractAmount(lines);
-  const store = extractStore(lines);
+  const store = extractStore(lines, recognized.map(l => l.conf));
   const purpose = extractPurpose(lines);
   const summary = [store, purpose].filter(Boolean).join(" ");
   return [{ date, amount, store, summary, ocrText: text, note: "" }];
