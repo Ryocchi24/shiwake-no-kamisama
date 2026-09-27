@@ -211,8 +211,6 @@
   .method-soon { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 8px; padding: 14px 16px; color: var(--muted); font-size: 13px; margin-bottom: 16px; }
   .method-soon[hidden] { display: none; }
   body.method-off #panel, body.method-off .page-head .actions, body.method-off .mobile-capture, body.method-off #ocrBanner { display: none !important; }
-  /* CSVダウンロードは確認済みタブでだけ出す */
-  .panel[data-view="pending"] #download { display: none; }
   .method-soon h2 { font-size: 16px; margin: 0 0 6px; color: var(--text); }
   .method-soon { padding: 40px 20px; text-align: center; }
   .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
@@ -369,7 +367,7 @@
 
       <div class="panel" id="panel">
         <div class="panel-head">
-          <div class="tabs" id="tabs"></div>
+          <span class="panel-title">読み取り結果</span>
           <span class="spacer"></span>
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
@@ -547,7 +545,6 @@ const companyRows = () => rows.filter(r => r.companyId === currentCompanyId && (
 const countFor = id => rows.filter(r => r.companyId === id && r.status === "done").length;
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-const yen = n => "¥" + Number(n || 0).toLocaleString();
 
 // ---- 設定 ----
 const settings = Object.assign({ dateFormat: "slash", encoding: "sjis", includeHeader: true }, load(SETTINGS_KEY, {}));
@@ -872,19 +869,10 @@ const FIELDS = [
   { key: "creditAmount", label: "⑧貸方金額", num: true, cls: "c-amount" },
 ];
 
-// 確認の段階: pending（未確認）→ confirmed（確認済み）→ exported（CSV出力後。格納済みとして保管し、この画面には出さない）
-const TABS = [
-  { key: "pending", label: "未確認" },
-  { key: "confirmed", label: "確認済み" },
-];
-let currentTab = "pending";
-let reviewId = null; // スマホの1件ずつ確認で表示中の仕訳
-const mobileQuery = matchMedia("(max-width: 860px)");
-mobileQuery.addEventListener("change", () => render());
-
 const isMissing = (key, v) => (key === "date" && !v) || ((key === "debitAmount" || key === "creditAmount") && !Number(v));
+// 注意書きは今の入力内容から毎回判定する（入力すれば消える）
 function warningsOf(r) {
-  if (r.status !== "done" || r.review === "confirmed") return [];
+  if (r.status !== "done") return [];
   const w = [];
   if (!r.date) w.push("日付が空です");
   if (!Number(r.debitAmount)) w.push("金額が空です");
@@ -893,58 +881,33 @@ function warningsOf(r) {
   if (r.note) w.push(r.note);
   return w;
 }
-const needsCheck = r => warningsOf(r).length > 0;
-const noteHtml = (r, extra = "") => {
+const noteHtml = r => {
   const w = warningsOf(r);
-  return `<div class="note ${extra}" data-note-for="${r.id}" ${w.length ? "" : "hidden"}>⚠ ${escapeHtml(w.join("／"))}</div>`;
+  return `<div class="note" data-note-for="${r.id}" ${w.length ? "" : "hidden"}>⚠ ${escapeHtml(w.join("／"))}</div>`;
 };
-// 読み取り中・エラーの行は未確認タブに表示する
-const stageOf = r => r.status === "done" ? (r.review || "pending") : "pending";
 
-function sortedRows(stage = currentTab) {
+// 一覧に出すのは、まだCSVに出力していない仕訳（出力済みは「格納済み」として保管）
+function sortedRows() {
   // 日付順（未入力・読み取り中は末尾）
   const k = r => r.date || "9999";
   return companyRows()
-    .filter(r => stageOf(r) === stage)
+    .filter(r => r.review !== "exported")
     .sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
 }
+const csvTargetRows = () => sortedRows().filter(r => r.status === "done");
 
 function statusBadge(row) {
   if (row.status === "reading") return `<span class="badge info"><span class="spinner"></span>読取中</span>`;
   if (row.status === "error") return `<span class="badge err">エラー</span>`;
-  if (row.review === "confirmed") return `<span class="badge ok">確認済</span>`;
-  return needsCheck(row) ? `<span class="badge warn">要確認</span>` : `<span class="badge plain">未確認</span>`;
+  return warningsOf(row).length ? `<span class="badge warn">要確認</span>` : "";
 }
-
-// CSVに出すのは「確認済み」の仕訳
-const csvTargetRows = () => sortedRows("confirmed").filter(r => r.status === "done");
 
 function renderStats() {
-  const exportTarget = csvTargetRows();
+  const target = csvTargetRows();
   const dl = document.getElementById("download");
-  dl.disabled = exportTarget.length === 0;
-  dl.querySelector("span").textContent = `CSVダウンロード（確認済み ${exportTarget.length}件）`;
-  for (const t of TABS) {
-    const el = document.querySelector(`[data-tab="${t.key}"] .tab-cnt`);
-    if (el) el.textContent = companyRows().filter(r => stageOf(r) === t.key).length;
-  }
-  const shown = sortedRows().filter(r => r.status === "done");
-  const tDebit = document.getElementById("t-debit"), tCredit = document.getElementById("t-credit");
-  if (tDebit) tDebit.textContent = yen(shown.reduce((s, r) => s + Number(r.debitAmount || 0), 0));
-  if (tCredit) tCredit.textContent = yen(shown.reduce((s, r) => s + Number(r.creditAmount || 0), 0));
+  dl.disabled = target.length === 0;
+  dl.querySelector("span").textContent = `CSVダウンロード（${target.length}件）`;
 }
-
-function renderTabs() {
-  document.getElementById("panel").dataset.view = currentTab;
-  document.getElementById("tabs").innerHTML = TABS.map(t =>
-    `<button class="tab ${t.key === currentTab ? "active" : ""}" data-tab="${t.key}">${t.label}<span class="tab-cnt"></span></button>`).join("");
-}
-document.getElementById("tabs").addEventListener("click", e => {
-  const t = e.target.closest("[data-tab]");
-  if (!t) return;
-  currentTab = t.dataset.tab;
-  render();
-});
 
 function inputHtml(row, f) {
   const v = row[f.key] ?? "";
@@ -957,7 +920,6 @@ function inputHtml(row, f) {
 function render() {
   const list = document.getElementById("list");
   renderCompany();
-  renderTabs();
   renderStats();
 
   if (!currentCompany()) {
@@ -966,27 +928,18 @@ function render() {
       <button class="btn btn-primary open-companies">会社を登録する</button></div>`;
     return;
   }
-  if (currentTab === "pending" && mobileQuery.matches) return renderReviewCard(list);
 
   const items = sortedRows();
   if (!items.length) {
-    const empty = {
-      pending: companyRows().length
-        ? `<b>未確認のレシートはありません</b>確認済みの仕訳は「確認済み」タブからCSVでダウンロードできます。`
-        : `<b>まだレシートがありません</b>「撮影する」でレシートを撮るか、画像をここにドラッグ＆ドロップしてください。`,
-      confirmed: `<b>確認済みの仕訳はありません</b>「未確認」タブで内容を確認して「OK」を押すと、ここに移ります。`,
-    }[currentTab];
-    list.innerHTML = `<div class="dropzone"><svg><use href="#i-receipt"/></svg>${empty}</div>`;
+    list.innerHTML = `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
+      <b>まだレシートがありません</b>「撮影する」でレシートを撮ると、ここに読み取った内容が並びます。</div>`;
     return;
   }
 
   const actions = row => {
     const move = companies.length > 1 ? `<button class="icon-btn move" data-move="${row.id}" title="別の会社へ移動"><svg><use href="#i-move"/></svg></button>` : "";
     const del = `<button class="icon-btn" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg></button>`;
-    let main = "";
-    if (row.status === "done" && currentTab === "pending") main = `<button class="btn btn-ok" data-ok="${row.id}"><svg><use href="#i-check"/></svg>OK</button>`;
-    if (currentTab === "confirmed") main = `<button class="btn btn-sm" data-back="${row.id}" title="未確認に戻す">↩ 戻す</button>`;
-    return `<td class="c-del"><div class="row-actions">${main}${move}${del}</div></td>`;
+    return `<td class="c-del"><div class="row-actions">${move}${del}</div></td>`;
   };
   let body = "";
   items.forEach((row, i) => {
@@ -1025,68 +978,15 @@ function render() {
       </tr>
     </thead>
     <tbody>${body}</tbody>
-    <tfoot><tr>
-      <td colspan="4" class="hide-sm">合計</td>
-      <td colspan="3" class="total b-left"><span class="hide-sm-label">借方 </span><span class="mono" id="t-debit"></span></td>
-      <td class="b-left hide-sm"></td>
-      <td colspan="3" class="total b-left"><span class="hide-sm-label">貸方 </span><span class="mono" id="t-credit"></span></td>
-      <td class="hide-sm"></td>
-    </tr></tfoot>
   </table></div>`;
   renderStats();
-}
-
-// スマホ: 未確認のレシートを1件ずつ大きく表示して確認する
-function renderReviewCard(list) {
-  const queueRows = sortedRows("pending", false).filter(r => r.status !== "reading");
-  const readingCount = companyRows().filter(r => r.status === "reading").length;
-  const readingNote = readingCount ? `<div class="review-reading"><span class="spinner"></span>読み取り中 ${readingCount}件</div>` : "";
-  if (!queueRows.length) {
-    list.innerHTML = readingNote + `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
-      ${companyRows().length ? `<b>未確認のレシートはありません</b>確認済みの仕訳は「確認済み」タブからCSVでダウンロードできます。`
-        : `<b>まだレシートがありません</b>下の「撮影する」でレシートを撮ってください。`}</div>`;
-    return;
-  }
-  let row = queueRows.find(r => r.id === reviewId);
-  if (!row) { row = queueRows[0]; reviewId = row.id; }
-  const pos = queueRows.indexOf(row) + 1;
-
-  const field = key => {
-    const f = FIELDS.find(x => x.key === key);
-    return `<label class="rv-field"><span>${f.label.slice(1)}</span>${inputHtml(row, f)}</label>`;
-  };
-  const bodyHtml = row.status === "error"
-    ? `<div class="status-msg error rv-error">${escapeHtml(row.error)}<button class="btn" data-retry="${row.id}">再読み取り</button></div>`
-    : `${noteHtml(row, "rv-note")}
-       <div class="rv-grid">${field("date")}${field("debitAmount")}</div>
-       ${field("summary")}
-       <details class="rv-more"><summary>科目コード・貸方金額</summary>
-         <div class="rv-grid">${field("debitCode")}${field("debitSub")}${field("creditCode")}${field("creditSub")}</div>
-         ${field("creditAmount")}
-       </details>`;
-
-  list.innerHTML = `${readingNote}<div class="review" data-row="${row.id}">
-    <div class="review-top"><span>${statusBadge(row)}</span><span class="review-pos">${pos} / ${queueRows.length}件</span></div>
-    <div class="review-img">${row.thumb ? `<img class="thumb-lg" data-group="${row.groupId}" src="${row.thumb}" alt="レシート">` : `<div class="no-img-lg">画像なし</div>`}</div>
-    <div class="review-body">${bodyHtml}</div>
-    <div class="review-actions">
-      <button class="btn" data-del="${row.id}"><svg><use href="#i-trash"/></svg>削除</button>
-      ${queueRows.length > 1 ? `<button class="btn" data-skip="${row.id}">あとで</button>` : ""}
-      ${row.status === "done" ? `<button class="btn btn-ok btn-big" data-ok="${row.id}"><svg><use href="#i-check"/></svg>OK</button>` : ""}
-    </div>
-  </div>`;
-  // 大きい画像は端末内の保存場所から読み込む
-  getFullImage(row.groupId).then(src => {
-    const img = list.querySelector(`.thumb-lg[data-group="${row.groupId}"]`);
-    if (src && img) img.src = src;
-  });
 }
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// ---- 確認（OK）・元に戻す ----
+// ---- お知らせ・元に戻す ----
 let toastTimer = null;
 function showToast(message, undo) {
   const toast = document.getElementById("toast");
@@ -1105,15 +1005,8 @@ function setReview(ids, review, message) {
   save(); render();
   showToast(message, () => {
     before.forEach(([r, prev]) => { r.review = prev; });
-    if (before.length === 1) reviewId = before[0][0].id;
     save(); render();
   });
-}
-
-function nextReviewId(currentId) {
-  const q = sortedRows("pending", false).filter(r => r.status !== "reading");
-  const i = q.findIndex(r => r.id === currentId);
-  return q.length > 1 ? q[(i + 1) % q.length].id : null;
 }
 
 // 入力の反映（再描画はしないのでフォーカスが外れない）
@@ -1133,8 +1026,7 @@ list.addEventListener("input", e => {
   }
   row[key] = value;
   e.target.classList.toggle("missing", isMissing(key, value));
-  const holder = e.target.closest("[data-row]");
-  const badge = holder && holder.querySelector(".c-status, .review-top span");
+  const badge = e.target.closest("[data-row]")?.querySelector(".c-status");
   if (badge) badge.innerHTML = statusBadge(row);
   const noteEl = list.querySelector(`[data-note-for="${row.id}"]`);
   if (noteEl) {
@@ -1155,25 +1047,13 @@ list.addEventListener("change", e => {
 });
 
 list.addEventListener("click", async e => {
-  const t = e.target.closest("[data-del], [data-retry], [data-move], [data-ok], [data-back], [data-skip], .thumb, .thumb-lg");
+  const t = e.target.closest("[data-del], [data-retry], [data-move], .thumb");
   if (!t) return;
-  if (t.dataset.ok) {
-    reviewId = nextReviewId(t.dataset.ok);
-    const tr = t.closest("tr");
-    if (tr) { tr.classList.add("leaving"); await new Promise(r => setTimeout(r, 180)); }
-    setReview([t.dataset.ok], "confirmed", "確認済みにしました");
-  } else if (t.dataset.back) {
-    const row = rows.find(r => r.id === t.dataset.back);
-    setReview([row.id], "pending", "未確認に戻しました");
-  } else if (t.dataset.skip) {
-    reviewId = nextReviewId(t.dataset.skip);
-    render();
-  } else if (t.dataset.move) {
+  if (t.dataset.move) {
     openMove(t.dataset.move);
   } else if (t.dataset.del) {
     const row = rows.find(r => r.id === t.dataset.del);
     if (row && (row.status !== "done" || confirm("この仕訳を削除しますか？"))) {
-      if (row.id === reviewId) reviewId = nextReviewId(row.id);
       rows = rows.filter(r => r !== row);
       save(); render(); pruneImages();
     }
