@@ -20,5 +20,20 @@
 現在は ①④⑤⑧ を自動入力し、②③⑥⑦ は空欄（画面で手入力も可）です。
 
 ## 構成
-- `docs/index.html` だけで動く静的アプリ（GitHub Pages で公開）
-- 手元で試すとき: `cd docs && python3 -m http.server 3000` → http://localhost:3000
+- `docs/index.html` … 画面（Webアプリ）。GitHub Pages で公開し、iPhoneアプリの中でもそのまま使う
+- `ios/` … iPhoneアプリ（Capacitor）。`ios/App/App/ShiwakeNative.swift` で次の機能をアプリに追加している
+  - iPhone標準の文字認識（Vision）でレシートを読む（無料・端末内で処理）
+  - 共有シートでCSVを保存する（「ファイルに保存」など）
+- Webで開いた場合は、文字認識に Tesseract.js（無料・端末内）を使う
+
+## 画面を変更したあとにアプリへ反映する
+```
+npm install        # 初回のみ
+npx cap sync ios   # docs/ の内容をアプリにコピー
+npx cap open ios   # Xcode を開く → 実行ボタンでiPhoneへインストール
+```
+
+## 手元で Web 版を試す
+```
+cd docs && python3 -m http.server 3000   # → http://localhost:3000
+```

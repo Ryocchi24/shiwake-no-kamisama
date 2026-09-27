@@ -255,7 +255,10 @@
     .topbar .crumb { display: none; }
     .topbar .mobile-brand { display: flex; }
     .topbar-gear { color: #fff; }
-    .topbar { flex-wrap: wrap; height: auto; padding: 10px 16px; row-gap: 10px; }
+    /* iPhoneは16px未満の入力欄をタップすると画面を拡大するため、スマホでは16pxにする */
+    .dialog input, .dialog select, .field select { font-size: 16px; }
+    /* iPhoneの時計・電池表示と重ならないよう、上に余白をとる（アプリ・ホーム画面から開いたとき） */
+    .topbar { flex-wrap: wrap; height: auto; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; row-gap: 10px; }
     .company-wrap { order: 3; width: 100%; }
     .company-switch { width: 100%; max-width: none; height: 38px; background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); color: #fff; }
     .company-switch svg, .company-switch .caret { color: #fff; }
@@ -461,10 +464,11 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2.2.0/encoding.min.js"></script>
+<script src="vendor/encoding.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
 <script type="module">
-import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm";
+// 高精度モード（Claude）の部品は、使うときだけネットから読み込む（アプリを電波がなくても開けるように）
+const ANTHROPIC_SDK_URL = "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm";
 
 const MODEL = "claude-opus-5";
 const API_KEY_STORAGE = "shiwake-api-key";
@@ -694,6 +698,7 @@ function getApiKey() { try { return localStorage.getItem(API_KEY_STORAGE) || "";
 async function readReceipt(imageBase64) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("APIキーが未設定です（右上の設定から登録してください）");
+  const { default: Anthropic } = await import(ANTHROPIC_SDK_URL);
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   let response;
   try {
@@ -819,12 +824,12 @@ function amountsIn(line) {
 
 function extractAmount(lines) {
   const exclude = /小計|お?預|釣|つり|税率|対象|内税|外税|消費税|点数|ポイント|電話|TEL|No\.|番号/i;
-  const priorities = [/合\s*計|総\s*額|ご?請求/, /お買上|お買い上げ|領収金額|お支払|支払金額/, /(?<!小)計/];
+  const priorities = [/合\s*計|総\s*額|ご?請求/, /お買上|お買い上げ|領収金額|お支払|支払金額|金\s*額|^金\s*[¥\d]|円也/, /(?<!小)計/];
   for (const re of priorities) {
     for (let i = 0; i < lines.length; i++) {
       if (!re.test(lines[i]) || exclude.test(lines[i])) continue;
       // 金額が同じ行になければ次の行を見る
-      const nums = amountsIn(lines[i].replace(/.*?(合\s*計|総\s*額|請求|お買上|お買い上げ|領収金額|お支払|支払金額|計)/, ""));
+      const nums = amountsIn(lines[i].replace(/.*?(合\s*計|総\s*額|請求|お買上|お買い上げ|領収金額|お支払|支払金額|金\s*額|^金|計)/, ""));
       const found = nums.length ? nums : amountsIn(lines[i + 1] || "");
       if (found.length) return Math.max(...found);
     }
@@ -835,8 +840,9 @@ function extractAmount(lines) {
 }
 
 function extractStore(lines) {
-  const skip = /領収|レシート|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|^[\d\s\-:/.,¥]+$/i;
-  for (const line of lines.slice(0, 8)) {
+  // 宛名（〜様・〜御中）、但し書き、金額・日付・住所の行は店名にしない
+  const skip = /領収|レシート|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|様$|御中$|^但|上記|金額|合計|¥|円|^金\s|運転手|担当|\d{4}年|令和|[都道府県].*[市区町村郡]|^[\d\s\-:/.,¥]+$/i;
+  for (const line of lines.slice(0, 12)) {
     const t = line.replace(/[^\p{L}\p{N}ー・&\s]/gu, "").trim();
     const letters = (t.match(/[\p{L}]/gu) || []).length;
     if (letters >= 2 && !skip.test(line)) return t.slice(0, 20);
@@ -844,17 +850,75 @@ function extractStore(lines) {
   return "";
 }
 
-async function readReceiptFree(dataUrl) {
+// iPhoneアプリの中で開いているときは、iPhone標準の文字認識（Vision）を使う
+const NATIVE = window.Capacitor?.isNativePlatform?.() ? window.Capacitor : null;
+const callNative = (method, options) => NATIVE.nativePromise("ShiwakeNative", method, options);
+
+// 文字認識は「かたまり」ごとに位置付きで返るので、同じ高さにあるものを1行にまとめる
+// （レシートの「合計」と右端の「¥1,280」を同じ行として扱うため）。
+// 斜めに撮った写真にも対応するため、傾きの候補を少しずつ変えてまとめてみて、
+// 行数が一番少なくなる（左右の組が一番多くそろう）傾きを採用する
+function groupLines(items, width, height, theta) {
+  const cos = Math.cos(theta), sin = Math.sin(theta);
+  const pts = items.map(it => {
+    const cx = (it.x + it.w / 2) * width, cy = (it.y + it.h / 2) * height;
+    return { text: it.text, x: cx * cos + cy * sin, y: -cx * sin + cy * cos, h: it.h * height };
+  });
+  const lines = [];
+  for (const p of pts.sort((a, b) => a.y - b.y)) {
+    const line = lines.find(l => Math.abs(l.y - p.y) < Math.min(l.h, p.h) * 0.5);
+    if (line) { line.items.push(p); line.y = (line.y + p.y) / 2; line.h = Math.max(line.h, p.h); }
+    else lines.push({ y: p.y, h: p.h, items: [p] });
+  }
+  return lines.sort((a, b) => a.y - b.y);
+}
+
+function itemsToText(items, width = 1, height = 1) {
+  // 目安の傾き: 長い行の傾きの中央値（短い文字は傾きが0で返ることが多いため除く）
+  const maxW = Math.max(0, ...items.map(i => i.w));
+  const angles = items.filter(i => typeof i.angle === "number" && i.w >= maxW * 0.3).map(i => i.angle).sort((a, b) => a - b);
+  const guess = angles.length ? angles[Math.floor(angles.length / 2)] : 0;
+  let best = null;
+  for (let theta = guess - 0.1; theta <= guess + 0.1; theta += 0.004) {
+    const lines = groupLines(items, width, height, theta);
+    const score = [lines.length, Math.abs(theta - guess)];
+    if (!best || score[0] < best.score[0] || (score[0] === best.score[0] && score[1] < best.score[1])) best = { lines, score };
+  }
+  return (best ? best.lines : [])
+    .map(l => l.items.sort((a, b) => a.x - b.x).map(i => i.text).join("  "))
+    .join("\n");
+}
+
+async function recognizeText(dataUrl) {
+  if (NATIVE) {
+    const res = await callNative("recognizeText", { image: dataUrl.split(",")[1] });
+    return itemsToText(res.items || [], res.width, res.height);
+  }
   const worker = await getOcrWorker();
   const canvas = await preprocessForOcr(dataUrl);
   const { data } = await worker.recognize(canvas);
-  const text = normalizeText(data.text || "");
+  return data.text || "";
+}
+
+// 領収書の「但し 〇〇代として」から品目を取り出す
+function extractPurpose(lines) {
+  for (const line of lines) {
+    const m = line.match(/^但し?\s*(.+?)(?:として)?\s*$/);
+    if (m && m[1]) return m[1].trim().slice(0, 20);
+  }
+  return "";
+}
+
+async function readReceiptFree(dataUrl) {
+  const text = normalizeText(await recognizeText(dataUrl));
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (!lines.length) return [];
   const date = extractDate(text);
   const amount = extractAmount(lines);
   const store = extractStore(lines);
-  return [{ date, amount, store, summary: store, ocrText: text, note: "" }];
+  const purpose = extractPurpose(lines);
+  const summary = [store, purpose].filter(Boolean).join(" ");
+  return [{ date, amount, store, summary, ocrText: text, note: "" }];
 }
 
 // ---- 表示 ----
@@ -1101,6 +1165,16 @@ document.getElementById("download").onclick = async () => {
 // ファイルの保存。スマホはリンクからのダウンロードが不安定（特にiPhone）なので、
 // 標準の共有シート（「ファイルに保存」など）を使う。保存できたら true
 async function saveFile(blob, name) {
+  if (NATIVE) {
+    // アプリでは iPhone の共有シートを直接開く
+    const data = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1]);
+      reader.readAsDataURL(blob);
+    });
+    const { completed } = await callNative("shareFile", { data, filename: name });
+    return !!completed;
+  }
   const file = new File([blob], name, { type: blob.type });
   const touch = matchMedia("(pointer: coarse)").matches;
   if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1261,7 +1335,7 @@ const apiKeyInput = document.getElementById("apiKey");
 function openSettings() { apiKeyInput.value = getApiKey(); updateMode(); settingsDlg.hidden = false; }
 function closeSettings() { settingsDlg.hidden = true; updateMode(); }
 function updateMode() {
-  const name = getApiKey() ? "高精度モード（Claude）" : "無料モード（端末内）";
+  const name = getApiKey() ? "高精度モード（Claude）" : NATIVE ? "無料モード（iPhone標準の文字認識）" : "無料モード（端末内）";
   document.getElementById("modeName").textContent = name;
 }
 for (const el of document.querySelectorAll(".open-settings")) el.addEventListener("click", e => { e.preventDefault(); openSettings(); });

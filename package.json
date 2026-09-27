@@ -1,0 +1,17 @@
+{
+  "name": "shiwake-no-kamisama",
+  "version": "0.1.0",
+  "private": true,
+  "description": "仕訳の神様（iPhoneアプリ版の入れ物。画面は docs/ のWebアプリをそのまま使う）",
+  "scripts": {
+    "sync": "cap sync ios",
+    "open": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2"
+  }
+}
