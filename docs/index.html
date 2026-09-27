@@ -999,14 +999,9 @@ function showToast(message, undo) {
 }
 
 function setReview(ids, review, message) {
-  const targets = rows.filter(r => ids.includes(r.id));
-  const before = targets.map(r => [r, r.review]);
-  targets.forEach(r => { r.review = review; });
+  rows.filter(r => ids.includes(r.id)).forEach(r => { r.review = review; });
   save(); render();
-  showToast(message, () => {
-    before.forEach(([r, prev]) => { r.review = prev; });
-    save(); render();
-  });
+  showToast(message);
 }
 
 // 入力の反映（再描画はしないのでフォーカスが外れない）
