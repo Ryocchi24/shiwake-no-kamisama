@@ -102,6 +102,7 @@
   td.c-date { width: 132px; } td.c-code { width: 68px; } td.c-amount { width: 112px; min-width: 104px; } td.c-summary { min-width: 170px; }
   td.c-amount input { padding: 0 4px; }
   .thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 5px; cursor: zoom-in; border: 1px solid var(--line); display: block; }
+  .note[hidden] { display: none; }
   .note { font-size: 11.5px; color: var(--warn); margin: 2px 7px 0; display: flex; gap: 4px; }
   .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
   .badge.ok { background: var(--ok-soft); color: var(--ok); }
@@ -174,6 +175,7 @@
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 80; background: #1b2433; color: #fff; border-radius: 10px;
     padding: 10px 12px 10px 16px; display: flex; align-items: center; gap: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 13.5px; white-space: nowrap; }
   .toast[hidden] { display: none; }
+  .toast-close { font: inherit; color: #aeb8cc; background: none; border: none; cursor: pointer; padding: 4px; }
   .toast-undo { font: inherit; font-weight: 700; color: #8fb4ff; background: none; border: none; cursor: pointer; padding: 4px 6px; }
 
   .review { background: var(--surface); }
@@ -208,7 +210,9 @@
   .soon-tag { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
   .method-soon { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 8px; padding: 14px 16px; color: var(--muted); font-size: 13px; margin-bottom: 16px; }
   .method-soon[hidden] { display: none; }
-  body.method-off .open-camera, body.method-off .actions .btn, body.method-off .mobile-capture .btn { opacity: .4; pointer-events: none; }
+  body.method-off #panel, body.method-off .page-head .actions, body.method-off .mobile-capture, body.method-off #ocrBanner { display: none !important; }
+  .method-soon h2 { font-size: 16px; margin: 0 0 6px; color: var(--text); }
+  .method-soon { padding: 40px 20px; text-align: center; }
   .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
   .banner .btn { margin-left: auto; height: 32px; }
 
@@ -353,7 +357,10 @@
         <button class="method" data-method="format2"><span class="method-no">②</span>現金預金収支日計表<span class="soon-tag">準備中</span></button>
         <button class="method" data-method="format3"><span class="method-no">③</span>その他のフォーマット<span class="soon-tag">準備中</span></button>
       </div>
-      <div class="method-soon" id="methodSoon" hidden>この取り込み方法は準備中です。フォーマットが決まり次第、ここから読み込めるようになります。</div>
+      <section class="method-soon" id="methodSoon" hidden>
+        <h2 id="methodSoonTitle"></h2>
+        この取り込み方法は準備中です。フォーマットが決まり次第、ここから読み込めるようになります。
+      </section>
 
       <div class="banner" id="ocrBanner" hidden></div>
 
@@ -532,7 +539,9 @@ function saveCompanies() {
   } catch {}
 }
 const currentCompany = () => companies.find(c => c.id === currentCompanyId) || null;
-const companyRows = () => rows.filter(r => r.companyId === currentCompanyId);
+// 取り込み方法（①レシート ②③…）ごとに一覧を分けて管理する
+const currentSource = () => settings.method || "receipt";
+const companyRows = () => rows.filter(r => r.companyId === currentCompanyId && (r.source || "receipt") === currentSource());
 const countFor = id => rows.filter(r => r.companyId === id && r.status === "done").length;
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -579,7 +588,7 @@ async function addFiles(fileList) {
       const [full, thumb] = await Promise.all([resize(file, 1600, 0.85), resize(file, 240, 0.7)]);
       fullImages.set(groupId, full);
       imageStore.put(groupId, full).catch(() => {});
-      rows.push({ id: uid(), groupId, companyId: currentCompanyId, thumb, status: "reading" });
+      rows.push({ id: uid(), groupId, companyId: currentCompanyId, source: "receipt", thumb, status: "reading" });
       queue.push(groupId);
     } catch (err) {
       alert(`${file.name}: ${err.message}`);
@@ -627,7 +636,7 @@ async function readGroup(groupId) {
     const receipts = data.receipts.length ? data.receipts
       : [{ date: "", amount: 0, summary: "", note: "レシートを検出できませんでした" }];
     const newRows = receipts.map(r => ({
-      id: uid(), groupId, companyId: placeholder.companyId, thumb: placeholder.thumb, status: "done", review: "pending",
+      id: uid(), groupId, companyId: placeholder.companyId, source: placeholder.source || "receipt", thumb: placeholder.thumb, status: "done", review: "pending",
       date: r.date || "",
       debitCode: "", debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
@@ -846,11 +855,7 @@ async function readReceiptFree(dataUrl) {
   const date = extractDate(text);
   const amount = extractAmount(lines);
   const store = extractStore(lines);
-  const missing = [!date && "日付", !amount && "金額", !store && "店名"].filter(Boolean);
-  return [{
-    date, amount, store, summary: store, ocrText: text,
-    note: missing.length ? `${missing.join("・")}を読み取れませんでした` : "",
-  }];
+  return [{ date, amount, store, summary: store, ocrText: text, note: "" }];
 }
 
 // ---- 表示 ----
@@ -876,7 +881,21 @@ const mobileQuery = matchMedia("(max-width: 860px)");
 mobileQuery.addEventListener("change", () => render());
 
 const isMissing = (key, v) => (key === "date" && !v) || ((key === "debitAmount" || key === "creditAmount") && !Number(v));
-const needsCheck = r => r.status === "done" && (!!r.note || !r.date || !Number(r.debitAmount) || Number(r.debitAmount) !== Number(r.creditAmount));
+function warningsOf(r) {
+  if (r.status !== "done" || r.review === "confirmed") return [];
+  const w = [];
+  if (!r.date) w.push("日付が空です");
+  if (!Number(r.debitAmount)) w.push("金額が空です");
+  else if (Number(r.debitAmount) !== Number(r.creditAmount)) w.push("借方と貸方の金額が違います");
+  if (!String(r.summary || "").trim()) w.push("摘要が空です");
+  if (r.note) w.push(r.note);
+  return w;
+}
+const needsCheck = r => warningsOf(r).length > 0;
+const noteHtml = (r, extra = "") => {
+  const w = warningsOf(r);
+  return `<div class="note ${extra}" data-note-for="${r.id}" ${w.length ? "" : "hidden"}>⚠ ${escapeHtml(w.join("／"))}</div>`;
+};
 // 読み取り中・エラーの行は未確認タブに表示する
 const stageOf = r => r.status === "done" ? (r.review || "pending") : "pending";
 
@@ -982,7 +1001,7 @@ function render() {
     }
     body += `<tr data-row="${row.id}">${head}` + FIELDS.map(f => `<td class="${f.cls}" data-label="${f.label}">
         ${inputHtml(row, f)}
-        ${f.key === "summary" && row.note ? `<div class="note">⚠ ${escapeHtml(row.note)}</div>` : ""}
+        ${f.key === "summary" ? noteHtml(row) : ""}
       </td>`).join("") + `${actions(row)}</tr>`;
   });
 
@@ -1036,7 +1055,7 @@ function renderReviewCard(list) {
   };
   const bodyHtml = row.status === "error"
     ? `<div class="status-msg error rv-error">${escapeHtml(row.error)}<button class="btn" data-retry="${row.id}">再読み取り</button></div>`
-    : `${row.note ? `<div class="note rv-note">⚠ ${escapeHtml(row.note)}</div>` : ""}
+    : `${noteHtml(row, "rv-note")}
        <div class="rv-grid">${field("date")}${field("debitAmount")}</div>
        ${field("summary")}
        <details class="rv-more"><summary>科目コード・貸方金額</summary>
@@ -1115,6 +1134,12 @@ list.addEventListener("input", e => {
   const holder = e.target.closest("[data-row]");
   const badge = holder && holder.querySelector(".c-status, .review-top span");
   if (badge) badge.innerHTML = statusBadge(row);
+  const noteEl = list.querySelector(`[data-note-for="${row.id}"]`);
+  if (noteEl) {
+    const w = warningsOf(row);
+    noteEl.hidden = !w.length;
+    noteEl.textContent = `⚠ ${w.join("／")}`;
+  }
   renderStats();
   save();
 });
@@ -1190,13 +1215,50 @@ document.getElementById("download").onclick = async () => {
   const stamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" }).replace(/[-: ]/g, "").slice(0, 12);
   const company = (currentCompany()?.name || "会社").replace(/[\\/:*?"<>|]/g, "_");
   const name = `${company}_仕訳_${stamp}.csv`;
-  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  if (!(await saveFile(blob, name))) return; // 保存をキャンセルした場合は一覧に残す
 
   // 二重取り込みを防ぐため、出力した仕訳は一覧から外して「格納済み」として保管する
-  setReview(done.map(r => r.id), "exported", `${done.length}件をダウンロードしました`);
+  setReview(done.map(r => r.id), "exported", `${done.length}件を保存しました`);
 };
+
+// ファイルの保存。スマホはリンクからのダウンロードが不安定（特にiPhone）なので、
+// 標準の共有シート（「ファイルに保存」など）を使う。保存できたら true
+async function saveFile(blob, name) {
+  const file = new File([blob], name, { type: blob.type });
+  const touch = matchMedia("(pointer: coarse)").matches;
+  if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return true;
+    } catch (err) {
+      if (err.name === "AbortError") return false; // 共有シートを閉じた
+      if (err.name === "NotAllowedError") return tapToShare(file); // 確認ダイアログなどで操作の直後と判定されなかった
+      // それ以外はリンクからのダウンロードに切り替える
+    }
+  }
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // すぐに破棄すると保存画面で中身が読めなくなるため、しばらく残す
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  return true;
+}
+
+// 共有シートはタップの直後にしか開けないため、もう一度タップしてもらう
+function tapToShare(file) {
+  return new Promise(resolve => {
+    const toast = document.getElementById("toast");
+    toast.innerHTML = `<span>CSVの準備ができました</span><button class="toast-undo">保存する</button><button class="toast-close" aria-label="閉じる">✕</button>`;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toast.querySelector(".toast-undo").onclick = async () => {
+      toast.hidden = true;
+      try { await navigator.share({ files: [file] }); resolve(true); } catch { resolve(false); }
+    };
+    toast.querySelector(".toast-close").onclick = () => { toast.hidden = true; resolve(false); };
+  });
+}
 
 // ---- 会社の切り替え・管理 ----
 const companyMenu = document.getElementById("companyMenu");
@@ -1303,6 +1365,8 @@ function renderMethod() {
   for (const b of document.querySelectorAll(".method")) b.classList.toggle("active", b.dataset.method === method);
   const ready = method === "receipt";
   document.getElementById("methodSoon").hidden = ready;
+  const active = document.querySelector(`.method[data-method="${method}"]`);
+  document.getElementById("methodSoonTitle").textContent = active ? active.textContent.replace("準備中", "").trim() : "";
   document.body.classList.toggle("method-off", !ready);
 }
 document.getElementById("methods").addEventListener("click", e => {
@@ -1406,7 +1470,11 @@ if (rows.some(r => !r.companyId)) {
 }
 if (!currentCompany()) currentCompanyId = companies[0]?.id || null;
 saveCompanies();
-rows.forEach(r => { if (r.status === "done" && !r.review) r.review = "pending"; });
+rows.forEach(r => {
+  if (r.status === "done" && !r.review) r.review = "pending";
+  if (/^(日付|金額|店名)(・(日付|金額|店名))*を読み取れませんでした$/.test(r.note || "")) r.note = "";
+});
+save();
 pruneImages();
 render();
 updateMode();
