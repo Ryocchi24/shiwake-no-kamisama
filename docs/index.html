@@ -228,7 +228,6 @@
   .dlg-system { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
   .dlg-system label { display: flex; align-items: center; gap: 8px; }
   .dlg-system [hidden], #masterTabs[hidden], #masterTabs .tab[hidden] { display: none; }
-  #newCompanyType { height: 40px; font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; background: var(--surface-2); }
   .dlg-system select { height: 32px; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; background: var(--surface); }
   .dlg-sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6px; }
   #masterDlg[hidden] { display: none; }
@@ -385,16 +384,21 @@
   .company-add .add-row input { border-radius: 10px; background: var(--surface-2); border-color: var(--line); }
   .company-add .add-row input:focus { outline: none; background: #fff; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
   #companiesView .company-list { padding: 4px 8px 8px; }
-  #companiesView .company-item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto auto; align-items: center; gap: 12px; padding: 10px 10px; border-bottom: 1px solid var(--line); border-radius: 0; }
+  #companiesView .company-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 12px; padding: 10px 10px; border-bottom: 1px solid var(--line); border-radius: 0; }
   #companiesView .company-item:hover { background: var(--surface-2); }
-  .co-avatar { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; font-size: 16px; color: var(--primary); background: var(--primary-soft); }
-  .co-main { min-width: 0; display: flex; flex-direction: column; }
-  #companiesView .co-main input { width: 100%; max-width: 360px; height: 30px; font: inherit; font-size: 15px; font-weight: 600; color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: 0 6px; margin-left: -7px; background: transparent; text-overflow: ellipsis; }
+  .co-main { min-width: 0; display: flex; align-items: center; gap: 8px; }
+  #companiesView .co-main input { flex: 0 1 auto; min-width: 4em; max-width: 100%; height: 30px; font: inherit; font-size: 15px; font-weight: 600; color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: 0 6px; margin-left: -7px; background: transparent; text-overflow: ellipsis; }
   #companiesView .co-main input:hover { border-color: var(--line); }
   #companiesView .co-main input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
   .co-meta { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
   .company-item .current-tag { font-weight: 600; font-size: 10.5px; }
-  .method-tag { font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--info-soft); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .method-tag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--info-soft); border-radius: 999px; padding: 2px 9px; white-space: nowrap; flex: none; }
+  .method-tag.t-receipt { color: #127a4a; background: #e4f5ec; }
+  .method-tag.t-format2 { color: #9a6200; background: #fff4d9; }
+  .method-tag.t-format3 { color: var(--primary); background: var(--primary-soft); }
+  .type-pick { display: inline-flex; gap: 2px; padding: 3px; background: #eceef2; border-radius: 10px; flex: none; }
+  .type-pick button { font: inherit; font-size: 13px; font-weight: 600; border: none; background: none; color: var(--muted); padding: 0 14px; height: 34px; border-radius: 8px; cursor: pointer; }
+  .type-pick button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(17,24,39,.1); }
   /* 会社の設定 */
   .dialog { border-radius: 16px; padding: 24px; box-shadow: 0 24px 60px rgba(17,24,39,.22); }
   .dialog h2 { font-size: 18px; }
@@ -489,18 +493,19 @@
     .doc-types { margin: 0 0 14px; }
     .doc-type { padding: 7px 4px; }
     #companiesView .company-list { padding: 0; }
-    #companiesView .company-item { grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 10px 8px; padding: 14px 16px; }
-    #companiesView .co-main { grid-column: 2 / 4; padding-left: 4px; }
+    #companiesView .company-item { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 10px 8px; padding: 14px 16px; }
+    #companiesView .co-main { grid-column: 1 / 3; padding-left: 6px; }
     #companiesView .company-item .btn-sm { grid-row: 2; height: 38px; justify-content: center; }
-    #companiesView .company-item .open-master { grid-column: 1 / 3; }
-    #companiesView .company-item [data-use] { grid-column: 3 / 5; }
-    #companiesView .company-item .icon-btn { grid-column: 4; grid-row: 1; }
+    #companiesView .company-item .open-master { grid-column: 1 / 2; }
+    #companiesView .company-item [data-use] { grid-column: 2 / 4; }
+    #companiesView .company-item .icon-btn { grid-column: 3; grid-row: 1; }
     #companiesView .co-main input { max-width: none; font-size: 16px; }
     .mobile-capture .btn { border-radius: 12px; }
     .dropzone .btn, .add-more { display: none; }
     .company-add .add-row { flex-wrap: wrap; }
     .company-add .add-row input { flex: 1 1 100%; font-size: 16px; }
-    #newCompanyType { flex: 1; font-size: 16px; }
+    #newCompanyType { flex: 1; }
+    #newCompanyType button { flex: 1; padding: 0 4px; }
     .std-tools .tabs { width: 100%; }
     .std-tools select, .std-tools input { width: 100%; font-size: 16px; }
     .std-row { padding: 9px 14px; }
@@ -607,7 +612,9 @@
         <div class="panel-head"><span class="panel-title">会社を追加</span></div>
         <div class="add-row">
           <input id="newCompany" type="text" placeholder="例: 株式会社サンプル" autocomplete="off">
-          <select id="newCompanyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">現金預金収支日計表</option><option value="format3">試算表</option></select>
+          <div class="type-pick" id="newCompanyType" role="radiogroup" aria-label="取り込むもの">
+            <button type="button" class="active" data-type="receipt">原始資料</button><button type="button" data-type="format2">日計表</button><button type="button" data-type="format3">試算表</button>
+          </div>
           <button class="btn btn-primary" id="addCompany">追加</button>
         </div>
       </div>
@@ -824,8 +831,6 @@ const currentCompany = () => companies.find(c => c.id === currentCompanyId) || n
 // 取り込み方法（①レシート ②③…）ごとに一覧を分けて管理する
 const currentSource = () => settings.method || "receipt";
 const companyRows = () => rows.filter(r => r.companyId === currentCompanyId && (r.source || "receipt") === currentSource());
-// 会社のアイコンの文字（「株式会社」などを除いた最初の1文字）
-const coInitial = name => (String(name || "").replace(/株式会社|有限会社|合同会社|一般社団法人|\(株\)|（株）|\(有\)|（有）|\s/g, "") || "?").slice(0, 1);
 const countFor = id => rows.filter(r => r.companyId === id && r.status === "done").length;
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -2466,10 +2471,9 @@ function renderCompanyList() {
   const listEl = document.getElementById("companyList");
   document.getElementById("companyCount").textContent = companies.length ? `${companies.length}社` : "";
   listEl.innerHTML = companies.length ? companies.map(c => `<div class="company-item">
-      <span class="co-avatar">${escapeHtml(coInitial(c.name))}</span>
       <div class="co-main">
-        <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
-        <span class="co-meta">${countFor(c.id)}件${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}<span class="method-tag">${escapeHtml(methodLabel(c))}</span></span>
+        <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名" style="width: calc(${[...c.name].length}em + 14px)">
+        <span class="method-tag t-${c.method || "receipt"}">${escapeHtml(methodLabel(c))}</span>
       </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社の設定</button>
       <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
@@ -2480,11 +2484,15 @@ document.addEventListener("click", e => {
   const t = e.target.closest(".open-companies");
   if (t) { e.preventDefault(); openCompanies(); }
 });
+document.getElementById("newCompanyType").onclick = e => {
+  const b = e.target.closest("[data-type]"); if (!b) return;
+  for (const x of document.querySelectorAll("#newCompanyType [data-type]")) x.classList.toggle("active", x === b);
+};
 document.getElementById("addCompany").onclick = () => {
   const input = document.getElementById("newCompany");
   const name = input.value.trim();
   if (!name) { input.focus(); return; }
-  const c = { id: uid(), name, method: document.getElementById("newCompanyType").value };
+  const c = { id: uid(), name, method: document.querySelector("#newCompanyType .active")?.dataset.type || "receipt" };
   companies.push(c);
   switchCompany(c.id); // 追加した会社にそのまま切り替える
   input.value = "";
