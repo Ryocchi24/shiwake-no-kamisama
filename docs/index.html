@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>仕訳の神様</title>
 <meta name="theme-color" content="#0d1629">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -565,6 +565,8 @@
     .dropzone .btn, .add-more { display: none; }
     #companySearch { order: 3; width: 100%; margin: 0; font-size: 16px; height: 38px; }
     #openAddCompany { margin-left: auto; }
+    /* iPhoneは16px未満の入力欄を触ると画面を拡大するので、スマホの入力欄はすべて16pxにする */
+    input, select, textarea { font-size: 16px !important; }
     .std-tools .tabs { width: 100%; }
     .std-tools select, .std-tools input { width: 100%; font-size: 16px; }
     .std-row { padding: 9px 14px; }
