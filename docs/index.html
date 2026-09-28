@@ -357,6 +357,9 @@
   .dropzone { border: 1.5px dashed var(--line-strong); border-radius: 12px; margin: 18px; padding: 56px 16px; background: var(--surface-2); }
   .dropzone svg { width: 32px; height: 32px; color: #b4bcc9; }
   .dropzone b { font-size: 15px; font-weight: 600; margin: 10px 0 2px; }
+  .dropzone .btn { display: flex; width: fit-content; margin: 16px auto 0; }
+  .dropzone .btn svg { width: 16px; height: 16px; color: inherit; }
+  body.web .open-camera { display: none; }
   .badge { font-weight: 600; }
   /* 会社の画面 */
   .company-add { box-shadow: var(--shadow); }
@@ -475,6 +478,9 @@
     #companiesView .company-item .icon-btn { grid-column: 4; grid-row: 1; }
     #companiesView .co-main input { max-width: none; font-size: 16px; }
     .mobile-capture .btn { border-radius: 12px; }
+    .dropzone .btn { display: none; }
+    body.web .mobile-capture { grid-template-columns: 1fr; }
+    body.web .mobile-capture label.btn { background: var(--primary); border-color: var(--primary); color: #fff; }
   }
 </style>
 </head>
@@ -1312,9 +1318,15 @@ function render() {
   if (!items.length) {
     list.innerHTML = currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
-      <b>試算表を選んでください</b>Excel・PDF・画像</div>`
+      <b>試算表を選んでください</b>Excel・PDF・画像
+      <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div>`
+      : NATIVE
+      ? `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
+      <b>レシートを撮影してください</b>
+      <button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button></div>`
       : `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
-      <b>レシートを撮影してください</b></div>`;
+      <b>レシートの画像を選んでください</b>
+      <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>画像を選ぶ</button></div>`;
     return;
   }
 
@@ -2533,6 +2545,13 @@ document.getElementById("shutter").onclick = () => {
 document.getElementById("camClose").onclick = closeCamera;
 document.getElementById("camDone").onclick = closeCamera;
 for (const el of document.querySelectorAll(".open-camera")) el.addEventListener("click", openCamera);
+// 一覧が空のときのボタン
+list.addEventListener("click", e => {
+  if (e.target.closest(".drop-pick")) document.querySelector(".file-picker:not([capture])").click();
+  else if (e.target.closest(".drop-camera")) openCamera();
+});
+// Web版は撮影ボタンを出さない（スマホのブラウザでも「画像を選ぶ」からカメラで撮れる）
+document.body.classList.toggle("web", !NATIVE);
 // 標準カメラで撮った後はカメラ画面を閉じて一覧へ
 document.querySelector("#camMsg .file-picker").addEventListener("change", closeCamera);
 
