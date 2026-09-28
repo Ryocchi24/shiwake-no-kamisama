@@ -632,9 +632,11 @@
       </div>
       <!-- ①原始資料の種類（レシート・領収書／給与台帳／通帳） -->
       <div class="doc-types" id="docTypes" role="tablist" aria-label="原始資料の種類">
-        <button class="doc-type" data-doc="receipt">レシート・領収書</button>
-        <button class="doc-type" data-doc="payroll">給与台帳<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="receipt">領収書</button>
         <button class="doc-type" data-doc="passbook">通帳<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="payroll">給与台帳<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="sales">売上請求書<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="purchase">仕入請求書<span class="soon-tag">準備中</span></button>
       </div>
       <section class="method-soon" id="methodSoon" hidden>
         <h2 id="methodSoonTitle"></h2>
@@ -1451,10 +1453,10 @@ function render() {
       <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div>`
       : NATIVE
       ? `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
-      <b>レシートを撮影してください</b>
+      <b>領収書を撮影してください</b>
       <button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button></div>`
       : `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
-      <b>レシートの画像を選んでください</b>
+      <b>領収書の画像を選んでください</b>
       <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>画像を選ぶ</button></div>`;
     return;
   }
@@ -2697,7 +2699,7 @@ function renderMethod() {
   const activeMethod = document.querySelector(`.method[data-method="${method}"]`);
   const activeDoc = document.querySelector(`.doc-type[data-doc="${doc}"]`);
   document.getElementById("methodSoonTitle").textContent =
-    method === "receipt" ? `${label(activeMethod)} ― ${label(activeDoc)}` : label(activeMethod);
+    method === "receipt" ? label(activeDoc) : label(activeMethod).replace(/^[①②③]/, "");
   document.body.classList.toggle("method-off", !ready);
 }
 document.getElementById("docTypes").addEventListener("click", e => {
