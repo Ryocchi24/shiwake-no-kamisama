@@ -250,7 +250,7 @@
   .master-row.rule { grid-template-columns: 1fr 100px 1fr 36px; }
   .master-csv { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
   .master-csv summary { cursor: pointer; }
-  .master-csv-body { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+  .master-csv-body { display: flex; gap: 8px; margin-top: 8px; }
   .master-list { overflow: auto; border: 1px solid var(--line); border-radius: 8px; min-height: 120px; }
   .master-row { display: grid; grid-template-columns: 90px 1fr 36px; gap: 6px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); }
   .master-row.mapping { grid-template-columns: 70px 1fr 110px 1fr 36px; }
@@ -419,10 +419,6 @@
   .method-tag.t-format2 { color: #9a6200; background: #fff4d9; }
   .method-tag.t-format3 { color: var(--primary); background: var(--primary-soft); }
   #addDlg[hidden] { display: none; }
-  #addDlg .from-file { margin: -6px 0 14px; }
-  .lock-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); margin-left: 4px; }
-  .lock-mark { cursor: default; font-size: 13px; }
-  .lock-mark:hover { background: none; }
   .dlg-note { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
   .file-rows { display: flex; flex-direction: column; gap: 8px; }
   .file-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 14px; cursor: pointer; }
@@ -768,8 +764,6 @@
       <div class="master-csv-body">
         <button class="btn btn-sm" id="masterReset">すべて消す</button>
         <button class="btn btn-sm" id="masterExport">CSVに書き出す</button>
-        <button class="btn btn-sm" id="companyExport">会社データを書き出す</button>
-        <label class="lock-check"><input type="checkbox" id="companyLock"> 削除できないようにする</label>
       </div>
     </details>
     <div class="dlg-actions" style="margin-top:14px"><span style="flex:1"></span><button class="btn btn-primary" id="masterClose">閉じる</button></div>
@@ -782,7 +776,6 @@
 <div class="dialog-back" id="addDlg" hidden>
   <div class="dialog">
     <h2>会社を追加</h2>
-    <label class="btn btn-sm from-file">会社データのファイルから追加<input type="file" id="companyImport" accept=".json,application/json,text/plain" hidden></label>
     <label class="dlg-label" for="newCompany">会社名</label>
     <input id="newCompany" type="text" placeholder="例: 株式会社サンプル" autocomplete="off">
     <div class="dlg-label" style="margin-top:16px">取り込むもの</div>
@@ -2156,7 +2149,6 @@ function openMaster(cid = currentCompanyId) {
   masterCid = cid;
   document.getElementById("masterCompany").textContent = company.name;
   document.getElementById("companyNameInput").value = company.name;
-  document.getElementById("companyLock").checked = !!company.locked;
   document.getElementById("masterSearch").value = "";
   renderMaster();
   masterDlg.hidden = false;
@@ -2171,39 +2163,6 @@ companySystemSel.onchange = () => {
   if (c) { c.system = companySystemSel.value; saveCompanies(); }
   renderMaster(); renderCompanyList(); render();
 };
-document.getElementById("companyLock").addEventListener("change", e => {
-  const c = companies.find(x => x.id === masterCid);
-  if (c) { c.locked = e.target.checked; saveCompanies(); renderCompanyList(); }
-});
-// 会社データのファイル: 会社名・取り込むもの・元の会計ソフト・ミロク科目マスタ・別会計ソフト対応表・領収書の自動入力をまとめたもの
-// （別の端末やお父さんに、会社の設定をそのまま渡すため）
-document.getElementById("companyExport").onclick = async () => {
-  const c = companies.find(x => x.id === masterCid); if (!c) return;
-  const data = { type: "shiwake-company", version: 1,
-    company: { name: c.name, method: c.method || "receipt", system: c.system || "", locked: !!c.locked },
-    master: masterOf(c.id), mapping: mappingOf(c.id), receipt: receiptSettings[c.id] || null };
-  const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
-  await saveFile(blob, `${c.name.replace(/[\\/:*?"<>|]/g, "_")}_会社データ.json`);
-};
-document.getElementById("companyImport").addEventListener("change", async e => {
-  const file = e.target.files[0]; e.target.value = ""; if (!file) return;
-  let data;
-  try { data = JSON.parse(await file.text()); } catch { data = null; }
-  if (!data || data.type !== "shiwake-company" || !data.company?.name) { alert("会社データのファイルではありませんでした。"); return; }
-  const name = data.company.name;
-  if (companies.some(c => c.name === name) && !confirm(`「${name}」はすでにあります。別の会社としてもう1つ追加しますか？`)) return;
-  const c = { id: uid(), name, method: data.company.method || "receipt", locked: !!data.company.locked };
-  if (data.company.system) c.system = data.company.system;
-  companies.push(c);
-  setCompanyMaster(c.id, Array.isArray(data.master) ? data.master.filter(m => m && m.code) : []);
-  mappings[c.id] = data.mapping && typeof data.mapping === "object" ? data.mapping : {};
-  if (data.receipt) { receiptSettings[c.id] = data.receipt; saveReceiptSettings(); }
-  saveMasters();
-  addDlg.hidden = true;
-  switchCompany(c.id);
-  renderCompanyList();
-  showToast(`「${name}」を追加しました（${masterOf(c.id).length}科目・対応 ${Object.keys(mappingOf(c.id)).length}件）`);
-});
 document.getElementById("companyNameInput").addEventListener("change", e => {
   const c = companies.find(x => x.id === masterCid);
   const name = e.target.value.trim();
@@ -2492,7 +2451,7 @@ function renderCompanyList() {
       </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社設定</button>
       <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
-      ${c.locked ? `<span class="icon-btn lock-mark" title="削除できない会社">🔒</span>` : `<button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>`}
+      <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
     </div>`).join("");
 }
 document.addEventListener("click", e => {
@@ -2571,7 +2530,6 @@ document.getElementById("companyList").addEventListener("click", e => {
   const t = e.target.closest("[data-remove]");
   if (!t) return;
   const c = companies.find(x => x.id === t.dataset.remove);
-  if (!c || c.locked) return;
   const n = rows.filter(r => r.companyId === c.id).length;
   if (!confirm(n ? `「${c.name}」を削除すると、仕訳 ${n} 件も削除されます。よろしいですか？` : `「${c.name}」を削除しますか？`)) return;
   rows = rows.filter(r => r.companyId !== c.id);
