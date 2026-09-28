@@ -557,7 +557,7 @@
       <div class="nav-label">仕訳</div>
       <a href="#" data-view="import"><svg><use href="#i-receipt"/></svg>取り込み</a>
       <div class="nav-label">マスタ</div>
-      <a href="#" data-view="companies"><svg><use href="#i-building"/></svg>会社設定</a>
+      <a href="#" data-view="companies"><svg><use href="#i-building"/></svg>会社マスタ</a>
       <a href="#" data-view="standards"><svg><use href="#i-list"/></svg>標準マスタ</a>
     </nav>
   </aside>
@@ -567,7 +567,7 @@
       <div class="brand mobile-brand" style="padding:0"><img class="brand-mark" src="apple-touch-icon.png" alt="">仕訳の神様</div>
       <nav class="mobile-nav" aria-label="画面の切り替え">
         <button data-view="import">取り込み</button>
-        <button data-view="companies">会社設定</button>
+        <button data-view="companies">会社マスタ</button>
         <button data-view="standards">標準マスタ</button>
       </nav>
       <div class="crumb" id="crumb">仕訳 / <b>取り込み</b></div>
@@ -631,7 +631,7 @@
      <section id="companiesView" hidden>
       <div class="page-head">
         <div>
-          <h1>会社設定</h1>
+          <h1>会社マスタ</h1>
         </div>
       </div>
       <div class="panel">
@@ -644,7 +644,7 @@
       </div>
      </section>
 
-     <!-- 標準マスタの画面（見るだけ。会社ごとの手直しは会社設定で） -->
+     <!-- 標準マスタの画面（見るだけ。会社ごとの手直しは会社マスタで） -->
      <section id="standardsView" hidden>
       <div class="page-head"><div><h1>標準マスタ</h1></div></div>
       <div class="std-tools">
@@ -2471,7 +2471,7 @@ function showView(view) {
   document.body.classList.toggle("view-companies", view === "companies");
   document.body.classList.toggle("view-standards", view === "standards");
   for (const el of document.querySelectorAll("[data-view]")) el.classList.toggle("active", el.dataset.view === view);
-  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : view === "standards" ? "マスタ / <b>標準マスタ</b>" : "マスタ / <b>会社設定</b>";
+  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : view === "standards" ? "マスタ / <b>標準マスタ</b>" : "マスタ / <b>会社マスタ</b>";
   if (view === "companies") renderCompanyList(); else if (view === "standards") renderStandards(); else render();
   scrollTo(0, 0);
 }
