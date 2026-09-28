@@ -228,7 +228,12 @@
   .trial-tag { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; background: var(--info-soft); color: var(--info); font-size: 10px; }
   .dialog-wide { max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; }
   .dlg-system { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
-  .dlg-system label { display: flex; align-items: center; gap: 8px; }
+  .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 280px); align-items: center; gap: 8px 12px !important; }
+  .dlg-system label { display: contents; }
+  .dlg-system label[hidden] { display: none; }
+  .dlg-system select { width: 100%; }
+  .dlg-system input { height: 32px; width: 100%; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; }
+  .co-name { font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
   .dlg-system [hidden], #masterTabs[hidden], #masterTabs .tab[hidden] { display: none; }
   .dlg-system select { height: 32px; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; background: var(--surface); }
   .dlg-sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6px; }
@@ -727,6 +732,7 @@
   <div class="dialog dialog-wide">
     <h2>会社設定 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="dlg-system">
+      <label>会社名 <input id="companyNameInput" type="text" autocomplete="off" aria-label="会社名"></label>
       <label>取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">現金預金収支日計表</option><option value="format3">試算表</option></select></label>
       <label id="companySystemWrap">元の会計ソフト <select id="companySystem" aria-label="元の会計ソフト"></select></label>
     </div>
@@ -2255,6 +2261,7 @@ function openMaster(cid = currentCompanyId) {
   if (!company) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
   masterCid = cid;
   document.getElementById("masterCompany").textContent = company.name;
+  document.getElementById("companyNameInput").value = company.name;
   document.getElementById("masterSearch").value = "";
   renderMaster();
   masterDlg.hidden = false;
@@ -2269,6 +2276,14 @@ companySystemSel.onchange = () => {
   if (c) { c.system = companySystemSel.value; saveCompanies(); }
   renderMaster(); renderCompanyList(); render();
 };
+document.getElementById("companyNameInput").addEventListener("change", e => {
+  const c = companies.find(x => x.id === masterCid);
+  const name = e.target.value.trim();
+  if (!c || !name) { e.target.value = c?.name || ""; return; }
+  c.name = name; saveCompanies();
+  document.getElementById("masterCompany").textContent = name;
+  renderCompanyList(); render();
+});
 const companyTypeSel = document.getElementById("companyType");
 companyTypeSel.onchange = () => {
   const c = companies.find(x => x.id === masterCid);
@@ -2572,7 +2587,7 @@ function renderCompanyList() {
     : !shown.length ? `<div class="company-empty">見つかりません</div>`
     : shown.map(c => `<div class="company-item">
       <div class="co-main">
-        <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名" style="width: calc(${[...c.name].length}em + 14px)">
+        <span class="co-name">${escapeHtml(c.name)}</span>
         <span class="method-tag t-${c.method || "receipt"}">${escapeHtml(methodLabel(c))}</span>
       </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社設定</button>
@@ -2625,13 +2640,6 @@ document.getElementById("addCompany").onclick = () => {
 // 日本語入力の変換確定の Enter では追加しない
 document.getElementById("newCompany").addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) document.getElementById("addCompany").click();
-});
-document.getElementById("companyList").addEventListener("change", e => {
-  const id = e.target.dataset.rename;
-  const c = companies.find(x => x.id === id);
-  if (!c) return;
-  const name = e.target.value.trim();
-  if (name) { c.name = name; saveCompanies(); render(); } else e.target.value = c.name;
 });
 document.getElementById("companyList").addEventListener("click", e => {
   const use = e.target.closest("[data-use]");
