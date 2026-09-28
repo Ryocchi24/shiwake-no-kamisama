@@ -389,6 +389,7 @@
   #companiesView .co-main input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
   .co-meta { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
   .company-item .current-tag { font-weight: 600; font-size: 10.5px; }
+  .method-tag { font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--info-soft); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
   /* 会社の設定 */
   .dialog { border-radius: 16px; padding: 24px; box-shadow: 0 24px 60px rgba(17,24,39,.22); }
   .dialog h2 { font-size: 18px; }
@@ -574,6 +575,7 @@
           <span class="panel-title">読み取り結果</span>
           <!-- 試算表入力のときだけ表示: 借方・貸方の合計の確認、伝票日付の一括変更、マスタ -->
           <div class="trial-bar" id="trialBar" hidden>
+            <span class="method-tag" id="trialSystem"></span>
             <span class="trial-balance" id="trialBalance"></span>
             <label class="field">伝票日付<input type="date" id="trialDate"></label>
           </div>
@@ -1348,7 +1350,7 @@ function render() {
   if (!items.length) {
     list.innerHTML = currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
-      <b>試算表を選んでください</b>Excel・PDF・画像
+      <b>${escapeHtml(systemOf().name)}の試算表を選んでください</b>Excel・PDF・画像
       <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div>`
       : NATIVE
       ? `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
@@ -2134,6 +2136,7 @@ function renderTrialBar() {
   bar.hidden = !isTrial || !items.length;
   if (bar.hidden) return;
   const d = items.reduce((s, r) => s + Number(r.debitAmount || 0), 0), c = items.reduce((s, r) => s + Number(r.creditAmount || 0), 0);
+  document.getElementById("trialSystem").textContent = systemOf().name;
   const el = document.getElementById("trialBalance");
   if (!items.length) { el.textContent = ""; el.className = "trial-balance"; }
   else if (d === c) { el.textContent = `✓ 借方・貸方とも ${d.toLocaleString()}円（一致）`; el.className = "trial-balance ok"; }
@@ -2411,6 +2414,8 @@ function renderCompany() {
 }
 function switchCompany(id) {
   currentCompanyId = id;
+  const c = currentCompany();
+  if (c?.method) { settings.method = c.method; settings.docType = c.docType || "receipt"; saveSettings(); renderMethod(); }
   saveCompanies();
   render();
 }
@@ -2424,6 +2429,12 @@ function openCompanies() {
   showView("companies");
   setTimeout(() => document.getElementById("newCompany").focus(), 50);
 }
+// 会社一覧のタグ: 「原始資料（レシート）」「試算表（PCA会計）」など
+function methodLabel(c) {
+  if (c.method === TRIAL_SOURCE) return `試算表（${systemOf(c.id).name}）`;
+  if (c.method === "format2") return "日計表";
+  return `原始資料（${{ payroll: "給与台帳", passbook: "通帳" }[c.docType] || "レシート"}）`;
+}
 function renderCompanyList() {
   const listEl = document.getElementById("companyList");
   document.getElementById("companyCount").textContent = companies.length ? `${companies.length}社` : "";
@@ -2431,7 +2442,7 @@ function renderCompanyList() {
       <span class="co-avatar">${escapeHtml(coInitial(c.name))}</span>
       <div class="co-main">
         <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
-        <span class="co-meta">${countFor(c.id)}件${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}</span>
+        <span class="co-meta">${countFor(c.id)}件${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}${c.method ? `<span class="method-tag">${escapeHtml(methodLabel(c))}</span>` : ""}</span>
       </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社の設定</button>
       <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
@@ -2527,14 +2538,22 @@ document.getElementById("docTypes").addEventListener("click", e => {
   const b = e.target.closest("[data-doc]");
   if (!b) return;
   settings.docType = b.dataset.doc;
-  saveSettings();
+  saveSettings(); rememberMethod();
   renderMethod();
 });
+// 会社ごとに、最後に使った取り込み方法を覚える（会社を選び直すと、その方法に切り替わる）
+function rememberMethod() {
+  const c = currentCompany();
+  if (!c) return;
+  c.method = settings.method || "receipt";
+  c.docType = settings.docType || "receipt";
+  saveCompanies();
+}
 document.getElementById("methods").addEventListener("click", e => {
   const b = e.target.closest("[data-method]");
   if (!b) return;
   settings.method = b.dataset.method;
-  saveSettings();
+  saveSettings(); rememberMethod();
   renderMethod();
   render(); // 取り込み方法ごとに一覧が分かれているため
 });
