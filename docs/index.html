@@ -228,7 +228,7 @@
   .trial-tag { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; background: var(--info-soft); color: var(--info); font-size: 10px; }
   .dialog-wide { max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; }
   .dlg-system { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
-  .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 280px); align-items: center; gap: 8px 12px !important; }
+  .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px 12px !important; }
   .dlg-system label { display: contents; }
   .dlg-system label[hidden] { display: none; }
   .dlg-system select { width: 100%; }
@@ -240,7 +240,7 @@
   #masterDlg[hidden] { display: none; }
   #masterDlg .tabs { margin-bottom: 8px; }
   .master-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-  .master-tools input[type=search] { flex: 1; min-width: 160px; height: 30px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; }
+  .master-tools input[type=search] { flex: 1 1 100%; min-width: 160px; height: 30px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; }
   .master-csv[hidden] { display: none; }
   .rc-credit { display: grid; grid-template-columns: auto 110px 1fr; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
   .rc-credit b { font-size: 13px; }
@@ -422,7 +422,7 @@
   .dlg-note { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
   .file-rows { display: flex; flex-direction: column; gap: 8px; }
   .file-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 14px; cursor: pointer; }
-  .file-row[hidden], #masterImportBtn[hidden] { display: none; }
+  .file-row[hidden], #masterImportBtn[hidden], #masterExport[hidden] { display: none; }
   .file-row-name { font-size: 14px; font-weight: 600; }
   .file-row-status { margin-left: auto; font-size: 13px; color: var(--muted); }
   .file-row-status.ok { color: var(--ok); font-weight: 600; }
@@ -780,14 +780,14 @@
     <div class="master-tools">
       <button class="btn btn-sm" id="masterAdd">＋ 追加</button>
       <label class="btn btn-sm" id="masterImportBtn">ファイルから読み込む<input type="file" id="masterImport" accept=".csv,.xlsx,.xlsm,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
-      <button class="btn btn-sm btn-ghost" id="masterReset">標準に戻す</button>
       <input type="search" id="masterSearch" placeholder="コード・科目名で絞り込み">
     </div>
     <div class="master-list" id="masterList"></div>
     <!-- 普段は使わないので折りたたむ（別の会社のマスタをまとめて登録する・別の端末に移すとき用） -->
     <details class="master-csv" id="masterCsv">
-      <summary>書き出し</summary>
+      <summary>その他</summary>
       <div class="master-csv-body">
+        <button class="btn btn-sm" id="masterReset">標準に戻す</button>
         <button class="btn btn-sm" id="masterExport">CSVに書き出す</button>
       </div>
     </details>
@@ -2428,7 +2428,7 @@ function renderMaster() {
   document.getElementById("masterTabs").hidden = tabs.length < 2;
   for (const b of document.querySelectorAll("[data-mtab]")) b.classList.toggle("active", b.dataset.mtab === masterTab);
   document.getElementById("masterReset").textContent = masterTab === "master" ? "標準に戻す" : "すべて消す";
-  document.getElementById("masterCsv").hidden = masterTab === "receipt";
+  document.getElementById("masterExport").hidden = masterTab === "receipt";
   document.getElementById("masterImportBtn").hidden = masterTab === "receipt";
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
@@ -2485,6 +2485,10 @@ document.getElementById("masterTabs").onclick = e => {
 };
 document.getElementById("masterSearch").oninput = renderMaster;
 document.getElementById("masterClose").onclick = () => {
+  // 「＋ 追加」で作ったまま空の行は、閉じるときに片付ける
+  if (masters[masterCid]) { masters[masterCid] = masters[masterCid].filter(m => m.code || m.name); saveMasters(); }
+  const rc = receiptSettings[masterCid];
+  if (rc) { rc.rules = rc.rules.filter(x => x.keyword || x.code); saveReceiptSettings(); }
   masterDlg.hidden = true; renderMasterCodes();
   if (currentView === "companies") renderCompanyList(); else render();
 };
