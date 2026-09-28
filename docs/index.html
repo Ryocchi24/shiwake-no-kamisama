@@ -1531,6 +1531,87 @@ const DEFAULT_MASTER = [
   {"code": "4341", "name": "期首仕掛棚卸高"},
   {"code": "4342", "name": "期末仕掛棚卸高"}
 ];
+// 標準の対応（元の科目 → ミロクのコード）。実際にミロクへ入力した振替伝票から確定したもの。
+// 会社の対応表に登録がない科目は、まずこれを使う（元の番号が一致し、科目名もほぼ同じとき）。
+const DEFAULT_MAPPING = [
+  {"srcCode": "111", "srcName": "現金", "code": "1101"},
+  {"srcCode": "121", "srcName": "当座A銀行", "code": "1103"},
+  {"srcCode": "122", "srcName": "当座B銀行", "code": "1104"},
+  {"srcCode": "125", "srcName": "当座D銀行", "code": "51"},
+  {"srcCode": "126", "srcName": "当座E銀行", "code": "52"},
+  {"srcCode": "131", "srcName": "普通G農協", "code": "1107"},
+  {"srcCode": "144", "srcName": "定期積金G農協", "code": "1122"},
+  {"srcCode": "151", "srcName": "受取手形", "code": "1131"},
+  {"srcCode": "152", "srcName": "売掛金", "code": "1142"},
+  {"srcCode": "160", "srcName": "電子記録債権", "code": "1151"},
+  {"srcCode": "175", "srcName": "製品", "code": "1172"},
+  {"srcCode": "176", "srcName": "原材料", "code": "1173"},
+  {"srcCode": "177", "srcName": "仕掛品", "code": "1174"},
+  {"srcCode": "186", "srcName": "仮払金", "code": "1155"},
+  {"srcCode": "187", "srcName": "預け金", "code": "1158"},
+  {"srcCode": "193", "srcName": "仮払消費税（5%）", "code": "8001"},
+  {"srcCode": "214", "srcName": "機械装置", "code": "1203"},
+  {"srcCode": "246", "srcName": "保険積立金", "code": "1235"},
+  {"srcCode": "302", "srcName": "電子記録債務", "code": "2102"},
+  {"srcCode": "312", "srcName": "買掛金", "code": "2103"},
+  {"srcCode": "321", "srcName": "短期借入金", "code": "2105"},
+  {"srcCode": "322", "srcName": "未払金", "code": "2106"},
+  {"srcCode": "323", "srcName": "未払費用", "code": "2107"},
+  {"srcCode": "324", "srcName": "未払金1", "code": "2115"},
+  {"srcCode": "326", "srcName": "預り金", "code": "2109"},
+  {"srcCode": "329", "srcName": "仮受金", "code": "2110"},
+  {"srcCode": "335", "srcName": "仮受消費税（5%）", "code": "8000"},
+  {"srcCode": "337", "srcName": "賞与引当金", "code": "2114"},
+  {"srcCode": "341", "srcName": "長期借入金", "code": "2201"},
+  {"srcCode": "352", "srcName": "償却引当金", "code": "2203"},
+  {"srcCode": "358", "srcName": "長期未払金", "code": "2204"},
+  {"srcCode": "360", "srcName": "リース債務", "code": "2205"},
+  {"srcCode": "511", "srcName": "売上高", "code": "4101"},
+  {"srcCode": "591", "srcName": "期末製品棚卸高", "code": "4206"},
+  {"srcCode": "611", "srcName": "原材料仕入高", "code": "4302"},
+  {"srcCode": "612", "srcName": "補助材料仕入高", "code": "4303"},
+  {"srcCode": "631", "srcName": "期末材料棚卸高", "code": "4305"},
+  {"srcCode": "641", "srcName": "（製）労務費", "code": "4311"},
+  {"srcCode": "642", "srcName": "（労務費賞与", "code": "4313"},
+  {"srcCode": "645", "srcName": "（製）法定福利費", "code": "4316"},
+  {"srcCode": "651", "srcName": "（製）外注加工費", "code": "4321"},
+  {"srcCode": "652", "srcName": "（製）外注印刷費", "code": "4326"},
+  {"srcCode": "653", "srcName": "（写真製版費", "code": "4330"},
+  {"srcCode": "656", "srcName": "（製）修繕費", "code": "4328"},
+  {"srcCode": "657", "srcName": "（製）図案版下費", "code": "4334"},
+  {"srcCode": "659", "srcName": "（裏）雑費", "code": "4335"},
+  {"srcCode": "661", "srcName": "（製）減価償却費", "code": "4327"},
+  {"srcCode": "663", "srcName": "（製）写植費", "code": "4336"},
+  {"srcCode": "665", "srcName": "（製）電力費", "code": "4322"},
+  {"srcCode": "667", "srcName": "（製）消耗品費", "code": "4325"},
+  {"srcCode": "668", "srcName": "（製）水道光熱費", "code": "4323"},
+  {"srcCode": "694", "srcName": "期末仕掛棚卸高", "code": "4342"},
+  {"srcCode": "712", "srcName": "給料手当", "code": "4412"},
+  {"srcCode": "713", "srcName": "賞与", "code": "4413"},
+  {"srcCode": "723", "srcName": "法定福利費", "code": "4417"},
+  {"srcCode": "724", "srcName": "福利厚生費", "code": "4418"},
+  {"srcCode": "726", "srcName": "旅費交通費", "code": "4425"},
+  {"srcCode": "727", "srcName": "通信費", "code": "4430"},
+  {"srcCode": "731", "srcName": "運賃", "code": "4405"},
+  {"srcCode": "732", "srcName": "広告宣伝費", "code": "4404"},
+  {"srcCode": "733", "srcName": "交際費", "code": "4428"},
+  {"srcCode": "735", "srcName": "ガソリン代", "code": "4406"},
+  {"srcCode": "737", "srcName": "消耗品費", "code": "4423"},
+  {"srcCode": "738", "srcName": "租税公課", "code": "4427"},
+  {"srcCode": "739", "srcName": "新聞図書費", "code": "4433"},
+  {"srcCode": "741", "srcName": "支払手数料", "code": "4426"},
+  {"srcCode": "752", "srcName": "保険料", "code": "4429"},
+  {"srcCode": "753", "srcName": "修費", "code": "4421"},
+  {"srcCode": "755", "srcName": "分担金", "code": "4431"},
+  {"srcCode": "756", "srcName": "寄付金", "code": "4432"},
+  {"srcCode": "757", "srcName": "リース料", "code": "4438"},
+  {"srcCode": "758", "srcName": "損失保険料", "code": "4437"},
+  {"srcCode": "761", "srcName": "研修費", "code": "4436"},
+  {"srcCode": "762", "srcName": "地代、家賃", "code": "4420"},
+  {"srcCode": "791", "srcName": "雑費", "code": "4435"},
+  {"srcCode": "819", "srcName": "雑収入", "code": "5105"},
+  {"srcCode": "821", "srcName": "支払利息", "code": "5201"}
+];
 let masters = load(MASTERS_KEY, {});
 let mappings = load(MAPPINGS_KEY, {});
 function saveMasters() { try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masters)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {} }
@@ -1750,10 +1831,13 @@ async function importTrial(files) {
     for (const a of accounts) {
       const key = srcKeyOf(a.srcCode, a.srcName);
       const learned = map[key]?.code;
-      const code = learned || suggestCode(a.srcName);
+      // 会社の対応表 → 標準の対応（番号と科目名が一致）→ 科目名からの推測 の順に探す
+      // 番号が一致し、科目名もほぼ同じ（読み取りで1〜2文字違うことがあるため）ものを使う
+      const std = DEFAULT_MAPPING.find(d => d.srcCode === a.srcCode && nameSimilarity(normName(a.srcName), normName(d.srcName)) >= 0.6)?.code;
+      const code = learned || std || suggestCode(a.srcName);
       const base = { id: "", groupId, companyId: currentCompanyId, source: TRIAL_SOURCE, thumb: "", status: "done", review: "pending",
         date, summary: "", debitCode: "", debitSub: "", debitAmount: "", creditCode: "", creditSub: "", creditAmount: "",
-        srcKey: key, srcCode: a.srcCode, srcName: a.srcName, codeHow: learned ? "対応表" : code ? "推測" : "", note: "", _ok: a.ok };
+        srcKey: key, srcCode: a.srcCode, srcName: a.srcName, codeHow: learned ? "対応表" : std ? "標準の対応" : code ? "推測" : "", note: "", _ok: a.ok };
       if (a.debit) made.push({ ...base, id: uid(), debitCode: code, debitAmount: a.debit });
       if (a.credit) made.push({ ...base, id: uid(), creditCode: code, creditAmount: a.credit });
     }
