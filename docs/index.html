@@ -358,6 +358,7 @@
   .dropzone svg { width: 32px; height: 32px; color: #b4bcc9; }
   .dropzone b { font-size: 15px; font-weight: 600; margin: 10px 0 2px; }
   .dropzone .btn { display: flex; width: fit-content; margin: 16px auto 0; }
+  .add-more[hidden] { display: none; }
   .dropzone .btn svg { width: 16px; height: 16px; color: inherit; }
   body.web .open-camera { display: none; }
   .badge { font-weight: 600; }
@@ -478,7 +479,7 @@
     #companiesView .company-item .icon-btn { grid-column: 4; grid-row: 1; }
     #companiesView .co-main input { max-width: none; font-size: 16px; }
     .mobile-capture .btn { border-radius: 12px; }
-    .dropzone .btn { display: none; }
+    .dropzone .btn, .add-more { display: none; }
     body.web .mobile-capture { grid-template-columns: 1fr; }
     body.web .mobile-capture label.btn { background: var(--primary); border-color: var(--primary); color: #fff; }
   }
@@ -534,10 +535,6 @@
             <select id="companySelect" aria-label="会社"></select>
           </label>
         </div>
-        <div class="actions">
-          <label class="btn"><svg><use href="#i-upload"/></svg><span class="pick-label">画像をアップロード</span><input class="file-picker" type="file" accept="image/*" multiple></label>
-          <button class="btn btn-primary open-camera"><svg><use href="#i-camera"/></svg>撮影する</button>
-        </div>
       </div>
 
       <div class="methods" id="methods" role="tablist" aria-label="取り込み方法">
@@ -569,6 +566,7 @@
             <button class="btn btn-sm btn-ghost" id="trialClear">一覧を空にする</button>
           </div>
           <span class="spacer"></span>
+          <button class="btn add-more" id="addMore" hidden><svg><use href="#i-upload"/></svg>追加</button>
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
         <div id="list"></div>
@@ -1315,6 +1313,7 @@ function render() {
 
   renderTrialBar();
   const items = sortedRows();
+  document.getElementById("addMore").hidden = !items.length;
   if (!items.length) {
     list.innerHTML = currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
@@ -1925,7 +1924,7 @@ function parseTrialTable(allRows) {
       if (!nums.length) name.push(t);
     });
     const srcName = name.join("").replace(/[［\[].*$/, "").replace(/\s/g, "");
-    if (!srcName || nums.length < 4) continue;
+    if ((!srcName && !srcCode) || nums.length < 4) continue; // 科目名が読めなくても番号があれば残す
     if (needCode && !srcCode) continue;
     if (/計$|合計|^[【〔(（].*[】〕)）]$|^9\d{3}$/.test(srcName) || /^9\d{3}$/.test(srcCode)) continue;
     const [zen, debit, credit, zan] = nums.slice(-4);
@@ -2033,7 +2032,11 @@ async function importTrial(files) {
       const learned = map[key]?.code;
       // 会社の対応表 → 標準の対応（番号と科目名が一致）→ 科目名からの推測 の順に探す
       // 番号が一致し、科目名もほぼ同じ（読み取りで1〜2文字違うことがあるため）ものを使う
-      const std = systemOf().mapping.find(d => d.srcCode === a.srcCode && nameSimilarity(normName(a.srcName), normName(d.srcName)) >= 0.6)?.code;
+      // Web版の文字認識では科目名（漢字）が読めず番号だけになることがあるので、そのときは番号だけで標準の対応を使い、科目名も補う
+      const nameUnread = !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(a.srcName);
+      const stdHit = a.srcCode && systemOf().mapping.find(d => d.srcCode === a.srcCode && (nameUnread || nameSimilarity(normName(a.srcName), normName(d.srcName)) >= 0.6));
+      if (stdHit && nameUnread) a.srcName = stdHit.srcName;
+      const std = stdHit?.code;
       const code = learned || std || suggestCode(a.srcName);
       const base = { id: "", groupId, companyId: currentCompanyId, source: TRIAL_SOURCE, thumb: "", status: "done", review: "pending",
         date, summary: "", debitCode: "", debitSub: "", debitAmount: "", creditCode: "", creditSub: "", creditAmount: "",
@@ -2546,6 +2549,7 @@ document.getElementById("camClose").onclick = closeCamera;
 document.getElementById("camDone").onclick = closeCamera;
 for (const el of document.querySelectorAll(".open-camera")) el.addEventListener("click", openCamera);
 // 一覧が空のときのボタン
+document.getElementById("addMore").onclick = () => document.querySelector(".file-picker:not([capture])").click();
 list.addEventListener("click", e => {
   if (e.target.closest(".drop-pick")) document.querySelector(".file-picker:not([capture])").click();
   else if (e.target.closest(".drop-camera")) openCamera();
