@@ -7,6 +7,8 @@
 <meta name="theme-color" content="#14213d">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="仕訳の神様">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -31,7 +33,7 @@
   .app { display: grid; grid-template-columns: 224px 1fr; min-height: 100vh; }
   .sidebar { background: var(--sidebar); color: var(--sidebar-text); padding: 18px 12px; position: sticky; top: 0; height: 100vh; }
   .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 15px; padding: 0 8px 20px; }
-  .brand-mark { width: 30px; height: 30px; border-radius: 7px; background: var(--primary); display: grid; place-items: center; font-size: 15px; }
+  .brand-mark { width: 30px; height: 30px; border-radius: 7px; display: block; flex: none; }
   .nav-label { font-size: 11px; letter-spacing: .08em; padding: 14px 10px 6px; color: #7382a0; }
   .nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; color: inherit; text-decoration: none; font-size: 13.5px; }
   .nav a.active { background: var(--sidebar-active); color: #fff; }
@@ -359,7 +361,7 @@
 
 <div class="app">
   <aside class="sidebar">
-    <div class="brand"><span class="brand-mark">神</span>仕訳の神様</div>
+    <div class="brand"><img class="brand-mark" src="apple-touch-icon.png" alt="">仕訳の神様</div>
     <nav class="nav">
       <div class="nav-label">仕訳</div>
       <a href="#" class="active"><svg><use href="#i-receipt"/></svg>取り込み</a>
@@ -374,7 +376,7 @@
 
   <div class="main">
     <div class="topbar">
-      <div class="brand mobile-brand" style="padding:0"><span class="brand-mark">神</span>仕訳の神様</div>
+      <div class="brand mobile-brand" style="padding:0"><img class="brand-mark" src="apple-touch-icon.png" alt="">仕訳の神様</div>
       <div class="company-wrap">
         <button class="company-switch" id="companySwitch" aria-haspopup="true"><svg><use href="#i-building"/></svg><span id="companyName">会社を選択</span><span class="caret">▾</span></button>
         <div class="company-menu" id="companyMenu" hidden></div>
@@ -389,7 +391,7 @@
           <h1>取り込み<span class="company-chip" id="headCompany"></span></h1>
         </div>
         <div class="actions">
-          <label class="btn"><svg><use href="#i-upload"/></svg>画像をアップロード<input class="file-picker" type="file" accept="image/*" multiple></label>
+          <label class="btn"><svg><use href="#i-upload"/></svg><span class="pick-label">画像をアップロード</span><input class="file-picker" type="file" accept="image/*" multiple></label>
           <button class="btn btn-primary open-camera"><svg><use href="#i-camera"/></svg>撮影する</button>
         </div>
       </div>
@@ -432,7 +434,7 @@
 </div>
 
 <div class="mobile-capture">
-  <label class="btn"><svg><use href="#i-upload"/></svg>画像を選ぶ<input class="file-picker" type="file" accept="image/*" multiple></label>
+  <label class="btn"><svg><use href="#i-upload"/></svg><span class="pick-label">画像を選ぶ</span><input class="file-picker" type="file" accept="image/*" multiple></label>
   <button class="btn btn-primary open-camera"><svg><use href="#i-camera"/></svg>撮影する</button>
 </div>
 
@@ -1156,7 +1158,7 @@ function render() {
   if (!items.length) {
     list.innerHTML = currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
-      <b>まだ試算表がありません</b>「画像を選ぶ」から試算表のPDFか画像を選ぶか、「撮影する」で試算表を撮ってください。</div>`
+      <b>まだ試算表がありません</b>「ファイルを選ぶ」から試算表のExcel・PDF・画像を選ぶか、「撮影する」で試算表を撮ってください。</div>`
       : `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
       <b>まだレシートがありません</b>「撮影する」でレシートを撮ると、ここに読み取った内容が並びます。</div>`;
     return;
@@ -1658,22 +1660,89 @@ function parseTrialTable(allRows) {
   return { accounts, date: valid[valid.length - 1] || "" };
 }
 
+// ---- Excel・CSVの試算表 ----
+// Excelは文字認識を通さず、セルの値をそのまま使う（同梱の SheetJS を必要なときだけ読み込む）
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const el = Object.assign(document.createElement("script"), { src, onload: resolve, onerror: () => reject(new Error("部品を読み込めませんでした")) });
+    document.head.appendChild(el);
+  });
+}
+const isSheetFile = f => /\.(xlsx|xlsm|xls|csv)$/i.test(f.name) || /spreadsheet|excel|text\/csv/.test(f.type);
+async function sheetToRows(file) {
+  if (!window.XLSX) await loadScript("vendor/sheetjs/xlsx.full.min.js");
+  const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", codepage: 932 });
+  // すべてのシートを上から順に（試算表が複数シートに分かれている場合も読む）
+  return wb.SheetNames.flatMap(name => XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: "" })
+    .map(row => row.map(v => String(v ?? "").trim())));
+}
+
+// 見出しの行（「借方」「貸方」を含む行）から列の位置を決めて読む。見つからなければ表の読み取りと同じ方法で読む
+function parseTrialSheet(rows) {
+  const headerIdx = rows.findIndex((r, i) => i < 30 && r.some(c => /借方/.test(c)) && r.some(c => /貸方/.test(c)));
+  if (headerIdx < 0) return parseTrialTable(rows.map(r => r.filter(c => c !== "")));
+  // 見出しが2段になっている表にも対応するため、見出し行と次の行の文字をつなげて列ごとに見る
+  const head = rows[headerIdx].map((c, i) => c + (rows[headerIdx + 1]?.[i] && !AMOUNT_RE.test(rows[headerIdx + 1][i].replace(/[,\s]/g, "")) ? rows[headerIdx + 1][i] : ""));
+  const find = (re, not) => head.findIndex(h => re.test(h) && !(not && not.test(h)));
+  const debitCol = find(/借方/, /残高|繰越|前|期首/);
+  const creditCol = find(/貸方/, /残高|繰越|前|期首/);
+  const zenCol = find(/前月|前残|前期|期首|繰越/);
+  const zanCol = find(/残高/, /前月|前残|期首|繰越|借方残高|貸方残高/);
+  const codeCol = find(/コード|番号|^No|^ＮＯ/i);
+  let nameCol = find(/科目|勘定/);
+  if (nameCol < 0) nameCol = codeCol === 0 ? 1 : 0;
+  if (debitCol < 0 || creditCol < 0) return parseTrialTable(rows.map(r => r.filter(c => c !== "")));
+  const amount = v => {
+    const t = String(v || "").replace(/[,\s円¥￥]/g, "");
+    if (!t) return 0;
+    const neg = /^[-△▲]|^\(.*\)$/.test(t);
+    const n = Number(t.replace(/[^\d.]/g, ""));
+    return Number.isFinite(n) ? Math.round(neg ? -n : n) : 0;
+  };
+  const accounts = [];
+  for (const row of rows.slice(headerIdx + 1)) {
+    let srcName = String(row[nameCol] || "").replace(/\s/g, "");
+    let srcCode = codeCol >= 0 ? String(row[codeCol] || "").trim() : "";
+    const m = srcName.match(/^(.*?)[［\[]\s*(\d+)\s*[］\]]?$/); // 「現金［111］」のように番号が科目名に付いている形
+    if (m) { srcName = m[1]; srcCode ||= m[2]; }
+    if (!srcCode && /^\d{2,5}$/.test(String(row[0] || "")) && nameCol !== 0) srcCode = String(row[0]);
+    if (!srcName || /計$|合計|^[【〔(（].*[】〕)）]$/.test(srcName) || /^9\d{3}$/.test(srcCode)) continue;
+    const debit = amount(row[debitCol]), credit = amount(row[creditCol]);
+    const zen = zenCol >= 0 ? amount(row[zenCol]) : 0, zan = zanCol >= 0 ? amount(row[zanCol]) : 0;
+    if (!debit && !credit && !zen && !zan) continue;
+    const ok = zenCol < 0 || zanCol < 0 || zen + debit - credit === zan || zen - debit + credit === zan;
+    accounts.push({ srcCode, srcName, zen, debit, credit, zan, ok });
+  }
+  const { date } = parseTrialTable(rows.slice(0, 12).map(r => r.filter(c => c !== "")));
+  return { accounts, date };
+}
+
 async function importTrial(files) {
   if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
   const banner = document.getElementById("ocrBanner");
   const show = msg => { banner.textContent = msg; banner.hidden = false; };
   try {
-    // ファイルをページ画像にする
-    const pages = [];
-    for (const file of files) {
-      if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) { show(`PDFを開いています（${file.name}）…`); pages.push(...await pdfToImages(file)); }
-      else pages.push(await resize(file, OCR_MAX_SIDE, 0.9));
+    // Excel・CSV はセルの値をそのまま使い、PDF・画像は文字認識で表を読み取る
+    const sheets = files.filter(isSheetFile), others = files.filter(f => !isSheetFile(f));
+    let accounts = [], date = "";
+    for (const file of sheets) {
+      show(`Excelを読み込んでいます（${file.name}）…`);
+      const res = parseTrialSheet(await sheetToRows(file));
+      accounts.push(...res.accounts); date = date || res.date;
     }
-    const allRows = [];
-    for (let i = 0; i < pages.length; i++) { show(`試算表を読み取っています（${i + 1} / ${pages.length} ページ）…`); allRows.push(...await readTablePage(pages[i])); }
+    if (others.length) {
+      const pages = [];
+      for (const file of others) {
+        if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) { show(`PDFを開いています（${file.name}）…`); pages.push(...await pdfToImages(file)); }
+        else pages.push(await resize(file, OCR_MAX_SIDE, 0.9));
+      }
+      const allRows = [];
+      for (let i = 0; i < pages.length; i++) { show(`試算表を読み取っています（${i + 1} / ${pages.length} ページ）…`); allRows.push(...await readTablePage(pages[i])); }
+      const res = parseTrialTable(allRows);
+      accounts.push(...res.accounts); date = date || res.date;
+    }
     banner.hidden = true;
-    const { accounts, date } = parseTrialTable(allRows);
-    if (!accounts.length) { alert("試算表の科目を読み取れませんでした。表全体がまっすぐ写るように撮り直すか、PDFを選んでください。"); return; }
+    if (!accounts.length) { alert("試算表の科目を読み取れませんでした。Excelの場合は「借方」「貸方」の見出しがある表か確認してください。写真の場合は、表全体がまっすぐ写るように撮り直してください。"); return; }
 
     const map = mappingOf();
     const groupId = uid();
@@ -2003,7 +2072,12 @@ function renderMethod() {
   const ready = (method === "receipt" && doc === "receipt") || method === TRIAL_SOURCE;
   document.getElementById("methodSoon").hidden = ready;
   // 試算表はPDFでも読み込めるようにする
-  for (const input of document.querySelectorAll(".file-picker:not([capture])")) input.accept = method === TRIAL_SOURCE ? "image/*,application/pdf,.pdf" : "image/*";
+  for (const el of document.querySelectorAll(".pick-label")) {
+    el.dataset.orig ||= el.textContent;
+    el.textContent = method === TRIAL_SOURCE ? "ファイルを選ぶ" : el.dataset.orig;
+  }
+  for (const input of document.querySelectorAll(".file-picker:not([capture])")) input.accept = method === TRIAL_SOURCE
+    ? "image/*,application/pdf,.pdf,.xlsx,.xlsm,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" : "image/*";
   const label = el => el ? el.textContent.replace("準備中", "").trim() : "";
   const activeMethod = document.querySelector(`.method[data-method="${method}"]`);
   const activeDoc = document.querySelector(`.doc-type[data-doc="${doc}"]`);
