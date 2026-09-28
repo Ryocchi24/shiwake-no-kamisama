@@ -227,6 +227,9 @@
   #masterDlg .tabs { margin-bottom: 8px; }
   .master-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
   .master-tools input[type=search] { flex: 1; min-width: 160px; height: 30px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; }
+  .master-csv { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .master-csv summary { cursor: pointer; }
+  .master-csv-body { display: flex; gap: 8px; margin-top: 8px; }
   .master-list { overflow: auto; border: 1px solid var(--line); border-radius: 8px; min-height: 120px; }
   .master-row { display: grid; grid-template-columns: 90px 1fr 36px; gap: 6px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); }
   .master-row.mapping { grid-template-columns: 70px 1fr 110px 1fr 36px; }
@@ -447,7 +450,7 @@
           <!-- 試算表入力のときだけ表示: 借方・貸方の合計の確認、伝票日付の一括変更、マスタ -->
           <div class="trial-bar" id="trialBar" hidden>
             <span class="trial-balance" id="trialBalance"></span>
-            <label class="field">伝票日付<input type="date" id="trialDate"></label>
+            <label class="field">伝票日付（全行まとめて変更）<input type="date" id="trialDate"></label>
             <button class="btn btn-sm btn-ghost" id="trialClear">一覧を空にする</button>
           </div>
           <span class="spacer"></span>
@@ -517,17 +520,23 @@
     <h2>科目マスタ・対応表 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">ミロクの科目マスタ</button>
-      <button class="tab" data-mtab="mapping">対応表（元の科目 → ミロク）</button>
+      <button class="tab" data-mtab="mapping">対応表（別会計システム → ミロク）</button>
     </div>
     <p class="dlg-help" id="masterHelp"></p>
     <div class="master-tools">
-      <label class="btn btn-sm">CSVを読み込む<input type="file" id="masterImport" accept=".csv,text/csv,text/plain" hidden></label>
-      <button class="btn btn-sm" id="masterExport">CSVに書き出す</button>
       <button class="btn btn-sm" id="masterAdd">＋ 追加</button>
       <button class="btn btn-sm btn-ghost" id="masterReset">標準に戻す</button>
       <input type="search" id="masterSearch" placeholder="コード・科目名で絞り込み">
     </div>
     <div class="master-list" id="masterList"></div>
+    <!-- 普段は使わないので折りたたむ（別の会社のマスタをまとめて登録する・別の端末に移すとき用） -->
+    <details class="master-csv">
+      <summary>CSVでまとめて読み込む・書き出す</summary>
+      <div class="master-csv-body">
+        <label class="btn btn-sm">CSVを読み込む<input type="file" id="masterImport" accept=".csv,text/csv,text/plain" hidden></label>
+        <button class="btn btn-sm" id="masterExport">CSVに書き出す</button>
+      </div>
+    </details>
     <div class="dlg-actions" style="margin-top:14px"><span style="flex:1"></span><button class="btn btn-primary" id="masterClose">閉じる</button></div>
   </div>
 </div>
@@ -1906,9 +1915,10 @@ function applyMapping(row, code) {
 function renderTrialBar() {
   const bar = document.getElementById("trialBar");
   const isTrial = currentSource() === TRIAL_SOURCE;
-  bar.hidden = !isTrial;
-  if (!isTrial) return;
-  const items = sortedRows().filter(r => r.status === "done");
+  const items = isTrial ? sortedRows().filter(r => r.status === "done") : [];
+  // 試算表を読み込むまでは表示しない
+  bar.hidden = !isTrial || !items.length;
+  if (bar.hidden) return;
   const d = items.reduce((s, r) => s + Number(r.debitAmount || 0), 0), c = items.reduce((s, r) => s + Number(r.creditAmount || 0), 0);
   const el = document.getElementById("trialBalance");
   if (!items.length) { el.textContent = ""; el.className = "trial-balance"; }
