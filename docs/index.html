@@ -274,6 +274,10 @@
   .std-tools select, .std-tools input { height: 38px; font: inherit; font-size: 14px; border: 1px solid var(--line-strong); border-radius: 10px; padding: 0 12px; background: var(--surface); }
   .std-tools input { flex: 1; min-width: 180px; }
   .std-row { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 12px; padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  #standardsView .panel-head { flex-wrap: wrap; }
+  #standardsView label.btn input { display: none; }
+  #stdList .master-row { padding: 4px 12px; }
+  .master-row.stdmap { grid-template-columns: 80px minmax(0, 1fr) 90px minmax(0, 1fr) 36px; }
   .std-row.map { grid-template-columns: 60px minmax(0, 240px) 24px 70px minmax(0, 1fr); }
   .std-row:last-child { border-bottom: none; }
   .std-row .code { font-family: "Roboto Mono", monospace; color: var(--muted); }
@@ -564,6 +568,9 @@
     .std-tools .tabs { width: 100%; }
     .std-tools select, .std-tools input { width: 100%; font-size: 16px; }
     .std-row { padding: 9px 14px; }
+    .master-row.stdmap { grid-template-columns: 60px minmax(0, 1fr) 72px 32px; row-gap: 0; }
+    .master-row.stdmap > span { grid-column: 3 / 5; grid-row: 2; font-size: 11px; padding-left: 6px; }
+    #standardsView .panel-head .btn { flex: 1 1 auto; justify-content: center; }
     .std-row.map { grid-template-columns: 44px minmax(0, 1fr) 14px 48px minmax(0, 1fr); gap: 6px; font-size: 13px; }
     body.web .mobile-capture { grid-template-columns: 1fr; }
     body.web .mobile-capture label.btn { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -686,14 +693,21 @@
       <div class="page-head"><div><h1>標準マスタ</h1></div></div>
       <div class="std-tools">
         <div class="tabs" id="stdTabs">
-          <button class="tab active" data-stab="master">ミロクの科目マスタ</button>
+          <button class="tab active" data-stab="master">ミロク科目マスタ</button>
           <button class="tab" data-stab="mapping">別会計ソフト対応表</button>
         </div>
         <select id="stdSystem" aria-label="会計システム"></select>
         <input type="search" id="stdSearch" placeholder="コード・科目名で絞り込み">
       </div>
       <div class="panel">
-        <div class="panel-head"><span class="panel-title" id="stdTitle"></span><span class="panel-sub" id="stdCount"></span></div>
+        <div class="panel-head">
+          <span class="panel-title" id="stdTitle"></span><span class="panel-sub" id="stdCount"></span>
+          <span class="spacer"></span>
+          <button class="btn btn-sm" id="stdAdd">＋ 追加</button>
+          <label class="btn btn-sm">CSV読み込み<input type="file" id="stdImport" accept=".csv,text/csv,text/plain"></label>
+          <button class="btn btn-sm" id="stdExport">CSV書き出し</button>
+          <button class="btn btn-sm btn-ghost" id="stdReset">アプリの標準に戻す</button>
+        </div>
         <div id="stdList"></div>
       </div>
      </section>
@@ -741,9 +755,9 @@
       <label id="companySystemWrap">元の会計ソフト <select id="companySystem" aria-label="元の会計ソフト"></select></label>
     </div>
     <div class="tabs" id="masterTabs">
-      <button class="tab active" data-mtab="master">科目マスタ</button>
-      <button class="tab" data-mtab="receipt"><span class="nb">レシートの</span><span class="nb">自動入力</span></button>
-      <button class="tab" data-mtab="mapping"><span class="nb">試算表の</span><span class="nb">読み替え</span></button>
+      <button class="tab active" data-mtab="master">ミロク科目マスタ</button>
+      <button class="tab" data-mtab="receipt"><span class="nb">領収書の</span><span class="nb">自動入力</span></button>
+      <button class="tab" data-mtab="mapping"><span class="nb">別会計ソフト</span><span class="nb">対応表</span></button>
     </div>
     <p class="dlg-help" id="masterHelp"></p>
     <div class="master-tools">
@@ -764,6 +778,7 @@
   </div>
 </div>
 <datalist id="masterCodes"></datalist>
+<datalist id="stdCodes"></datalist>
 
 <!-- 仕訳を別の会社へ移動 -->
 <!-- 会社を追加 -->
@@ -1714,7 +1729,7 @@ const MASTERS_KEY = "shiwake-masters";   // { 会社ID: { adds: [{ code, name }]
 const MAPPINGS_KEY = "shiwake-mappings"; // { 会社ID: { 元の科目キー: { code, srcName, srcCode } } }
 // 標準の科目マスタ（ミロクの科目コードと科目名）。会社を追加したときは、これが最初から入る。
 // 銀行口座など会社ごとに違う科目は、各会社の「科目マスタ・対応表」で手直しする
-const DEFAULT_MASTER = [
+const BUILTIN_MASTER = [
   {"code": "1101", "name": "現金"},
   {"code": "1103", "name": "当座A銀行"},
   {"code": "1104", "name": "当座B銀行"},
@@ -1837,9 +1852,13 @@ const DEFAULT_MASTER = [
   {"code": "4341", "name": "期首仕掛棚卸高"},
   {"code": "4342", "name": "期末仕掛棚卸高"}
 ];
+// 標準は「標準マスタ」の画面で直したり、CSVで置き換えたりできる（この端末に保存）。直していなければアプリに入っている標準を使う
+const STANDARD_KEY = "shiwake-standard"; // { master: [{ code, name }], mappings: { 会計ソフトID: [{ srcCode, srcName, code }] } }
+const standard = load(STANDARD_KEY, {});
+let DEFAULT_MASTER = standard.master?.length ? standard.master : BUILTIN_MASTER.map(m => ({ ...m }));
 // 標準の対応（元の科目 → ミロクのコード）。実際にミロクへ入力した振替伝票から確定したもの。
 // 会社の対応表に登録がない科目は、まずこれを使う（元の番号が一致し、科目名もほぼ同じとき）。
-const DEFAULT_MAPPING = [
+const BUILTIN_MAPPING = [
   {"srcCode": "111", "srcName": "現金", "code": "1101"},
   {"srcCode": "121", "srcName": "当座A銀行", "code": "1103"},
   {"srcCode": "122", "srcName": "当座B銀行", "code": "1104"},
@@ -1920,13 +1939,27 @@ const DEFAULT_MAPPING = [
 ];
 // 別の会計システムの種類。会社設定で選ぶと、その標準の対応表を使う（会社ごとに違う科目は会社の対応表で上書き）
 const SOURCE_SYSTEMS = [
-  { id: "pca", name: "PCA会計", mapping: DEFAULT_MAPPING },
-  { id: "yayoi", name: "弥生会計", mapping: [] },
-  { id: "freee", name: "freee", mapping: [] },
-  { id: "mf", name: "マネーフォワード", mapping: [] },
-  { id: "bugyo", name: "勘定奉行", mapping: [] },
-  { id: "other", name: "その他", mapping: [] },
+  { id: "pca", name: "PCA会計", builtin: BUILTIN_MAPPING },
+  { id: "yayoi", name: "弥生会計", builtin: [] },
+  { id: "freee", name: "freee", builtin: [] },
+  { id: "mf", name: "マネーフォワード", builtin: [] },
+  { id: "bugyo", name: "勘定奉行", builtin: [] },
+  { id: "other", name: "その他", builtin: [] },
 ];
+for (const x of SOURCE_SYSTEMS) x.mapping = standard.mappings?.[x.id] || x.builtin.map(d => ({ ...d }));
+function saveStandard() {
+  standard.master = DEFAULT_MASTER;
+  standard.mappings = Object.fromEntries(SOURCE_SYSTEMS.map(x => [x.id, x.mapping]));
+  try { localStorage.setItem(STANDARD_KEY, JSON.stringify(standard)); } catch {}
+}
+// 標準の科目マスタを直す。各社は「標準 ＋ 違い」なので、先に違いを保存してから、新しい標準で作り直す
+function changeStandardMaster(fn) {
+  saveMasters();
+  fn();
+  saveStandard();
+  for (const k of Object.keys(masters)) delete masters[k];
+  renderMasterCodes();
+}
 const NO_SYSTEM = { id: "", name: "未設定", mapping: [] };
 const systemOf = (cid = currentCompanyId) => {
   const id = companies.find(c => c.id === cid)?.system || "";
@@ -2321,7 +2354,7 @@ function renderMaster() {
       : `<div class="master-empty">科目がありません</div>`;
   } else if (masterTab === "receipt") {
     const rc = receiptSettingsOf(masterCid);
-    document.getElementById("masterHelp").textContent = "レシートを読んだときに、自動で入れる科目";
+    document.getElementById("masterHelp").textContent = "領収書を読んだときに、自動で入れる科目";
     const rules = rc.rules.map((x, i) => ({ ...x, i })).filter(x => !q || normName(x.keyword + x.code + masterName(x.code, masterCid)).includes(q));
     listEl.innerHTML = `<div class="rc-credit">
         <b>貸方の科目</b>
@@ -2340,7 +2373,7 @@ function renderMaster() {
     const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code, masterCid)).includes(q))
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
     const sys = systemOf(masterCid);
-    document.getElementById("masterHelp").textContent = "別の会計ソフトの科目を、ミロクのどのコードにするか";
+    document.getElementById("masterHelp").textContent = "試算表を読むとき、別の会計ソフトの科目をミロクのどのコードにするか";
     listEl.innerHTML = `<div class="rc-head">${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）とちがう、この会社だけの読み替え</div>`
       + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
@@ -2489,26 +2522,104 @@ function renderStandards() {
   const listEl = document.getElementById("stdList");
   const stdName = code => DEFAULT_MASTER.find(m => m.code === code)?.name || "";
   let html = "", n = 0;
+  // 追加したばかりの空の行は先頭、ほかは番号順
+  const byCode = k => (a, b) => (a[k] === "" ? -1 : 0) - (b[k] === "" ? -1 : 0) || Number(a[k]) - Number(b[k]) || String(a[k]).localeCompare(String(b[k]));
   if (stdTab === "master") {
-    const items = DEFAULT_MASTER.filter(m => !q || normName(m.code + m.name).includes(q))
-      .sort((a, b) => Number(a.code) - Number(b.code));
-    n = items.length;
-    document.getElementById("stdTitle").textContent = "ミロクの科目マスタ";
-    html = items.map(m => `<div class="std-row"><span class="code">${escapeHtml(m.code)}</span><span>${escapeHtml(m.name)}</span></div>`).join("");
+    const items = DEFAULT_MASTER.map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q)).sort(byCode("code"));
+    n = DEFAULT_MASTER.length;
+    document.getElementById("stdTitle").textContent = "ミロク科目マスタ";
+    html = items.map(m => `<div class="master-row">
+        <input value="${escapeHtml(m.code)}" data-si="${m.i}" data-sk="code" inputmode="numeric" aria-label="コード">
+        <input value="${escapeHtml(m.name)}" data-si="${m.i}" data-sk="name" aria-label="科目名">
+        <button class="icon-btn" data-sdel="${m.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("");
   } else {
-    const sys = SOURCE_SYSTEMS.find(x => x.id === stdSystemSel.value) || SOURCE_SYSTEMS[0];
-    const items = sys.mapping.filter(d => !q || normName(d.srcCode + d.srcName + d.code + stdName(d.code)).includes(q))
-      .sort((a, b) => Number(a.srcCode) - Number(b.srcCode));
-    n = items.length;
+    const sys = stdSystem();
+    const items = sys.mapping.map((d, i) => ({ ...d, i })).filter(d => !q || normName(d.srcCode + d.srcName + d.code + stdName(d.code)).includes(q)).sort(byCode("srcCode"));
+    n = sys.mapping.length;
     document.getElementById("stdTitle").textContent = `${sys.name} → ミロク`;
-    html = items.map(d => `<div class="std-row map"><span class="code">${escapeHtml(d.srcCode)}</span><span>${escapeHtml(d.srcName)}</span><span class="arrow">→</span><span class="code miroku">${escapeHtml(d.code)}</span><span>${escapeHtml(stdName(d.code))}</span></div>`).join("");
+    html = items.map(d => `<div class="master-row stdmap">
+        <input value="${escapeHtml(d.srcCode)}" data-si="${d.i}" data-sk="srcCode" inputmode="numeric" placeholder="番号" aria-label="元の番号">
+        <input value="${escapeHtml(d.srcName)}" data-si="${d.i}" data-sk="srcName" placeholder="元の科目名" aria-label="元の科目名">
+        <input value="${escapeHtml(d.code)}" data-si="${d.i}" data-sk="code" list="stdCodes" inputmode="numeric" placeholder="ミロク" aria-label="ミロクのコード">
+        <span class="muted">${escapeHtml(d.code ? (stdName(d.code) || "（マスタにない）") : "")}</span>
+        <button class="icon-btn" data-sdel="${d.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("");
   }
+  document.getElementById("stdCodes").innerHTML = DEFAULT_MASTER.map(m => `<option value="${escapeHtml(m.code)}">${escapeHtml(m.name)}</option>`).join("");
   document.getElementById("stdCount").textContent = `${n}件`;
   listEl.innerHTML = html || `<div class="std-empty">まだありません</div>`;
 }
 document.getElementById("stdTabs").onclick = e => { const b = e.target.closest("[data-stab]"); if (b) { stdTab = b.dataset.stab; renderStandards(); } };
 stdSystemSel.onchange = renderStandards;
 document.getElementById("stdSearch").oninput = renderStandards;
+const stdSystem = () => SOURCE_SYSTEMS.find(x => x.id === stdSystemSel.value) || SOURCE_SYSTEMS[0];
+const digits = v => (String(v).match(/^\s*(\d+)/) || [])[1] || "";
+document.getElementById("stdList").addEventListener("change", e => {
+  const t = e.target; if (t.dataset.si === undefined) return;
+  const i = Number(t.dataset.si), k = t.dataset.sk;
+  const v = k === "code" || k === "srcCode" ? digits(t.value) : t.value.trim();
+  if (stdTab === "master") changeStandardMaster(() => { if (DEFAULT_MASTER[i]) DEFAULT_MASTER[i][k] = v; });
+  else { const d = stdSystem().mapping[i]; if (d) d[k] = v; saveStandard(); }
+  renderStandards();
+});
+document.getElementById("stdList").addEventListener("click", e => {
+  const b = e.target.closest("[data-sdel]"); if (!b) return;
+  const i = Number(b.dataset.sdel);
+  if (stdTab === "master") {
+    const m = DEFAULT_MASTER[i];
+    if (m?.code && !confirm(`標準の科目マスタから「${m.code} ${m.name}」を消しますか？`)) return;
+    changeStandardMaster(() => DEFAULT_MASTER.splice(i, 1));
+  } else { stdSystem().mapping.splice(i, 1); saveStandard(); }
+  renderStandards();
+});
+document.getElementById("stdAdd").onclick = () => {
+  document.getElementById("stdSearch").value = "";
+  if (stdTab === "master") changeStandardMaster(() => DEFAULT_MASTER.push({ code: "", name: "" }));
+  else { stdSystem().mapping.push({ srcCode: "", srcName: "", code: "" }); saveStandard(); }
+  renderStandards();
+  document.querySelector('#stdList [data-sk]')?.focus();
+};
+document.getElementById("stdImport").addEventListener("change", async e => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  const table = await readCsvFile(file);
+  if (stdTab === "master") {
+    const items = table.filter(c => /^\d+$/.test(c[0]) && c[1]).map(c => ({ code: c[0], name: c[1] }));
+    if (!items.length) { alert("「コード,科目名」の行が見つかりませんでした。"); return; }
+    if (!confirm(`標準の科目マスタを、読み込んだ ${items.length}科目 に置き換えますか？\n各会社で直した部分はそのまま残ります。`)) return;
+    changeStandardMaster(() => { DEFAULT_MASTER = items; });
+    showToast(`${items.length}科目を読み込みました`);
+  } else {
+    // 「元の番号,元の科目名,ミロクコード」
+    const items = table.filter(c => c[1] && /^\d+$/.test(c[2] || "")).map(c => ({ srcCode: /^\d+$/.test(c[0]) ? c[0] : "", srcName: c[1], code: c[2] }));
+    if (!items.length) { alert("「元の番号,元の科目名,ミロクコード」の行が見つかりませんでした。"); return; }
+    const sys = stdSystem();
+    if (!confirm(`${sys.name}の標準の対応表を、読み込んだ ${items.length}件 に置き換えますか？`)) return;
+    sys.mapping = items; saveStandard();
+    showToast(`${items.length}件の対応を読み込みました`);
+  }
+  renderStandards();
+});
+document.getElementById("stdExport").onclick = async () => {
+  const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const sys = stdSystem();
+  const lines = stdTab === "master"
+    ? [["コード", "科目名"], ...DEFAULT_MASTER.map(m => [m.code, m.name])]
+    : [["元の番号", "元の科目名", "ミロクコード", "ミロク科目名"], ...sys.mapping.map(d => [d.srcCode, d.srcName, d.code, DEFAULT_MASTER.find(m => m.code === d.code)?.name || ""])];
+  const csv = lines.map(l => l.map(cell).join(",")).join("\r\n") + "\r\n";
+  const bytes = new Uint8Array(Encoding.convert(Encoding.stringToCode(csv), { to: "SJIS", from: "UNICODE" }));
+  await saveFile(new Blob([bytes], { type: "text/csv" }), stdTab === "master" ? "標準_科目マスタ.csv" : `標準_対応表_${sys.name}.csv`);
+};
+document.getElementById("stdReset").onclick = () => {
+  if (stdTab === "master") {
+    if (!confirm("標準の科目マスタを、アプリに入っている標準に戻しますか？\n各会社で直した部分はそのまま残ります。")) return;
+    changeStandardMaster(() => { DEFAULT_MASTER = BUILTIN_MASTER.map(m => ({ ...m })); });
+  } else {
+    const sys = stdSystem();
+    if (!confirm(`${sys.name}の標準の対応表を、アプリに入っている標準に戻しますか？`)) return;
+    sys.mapping = sys.builtin.map(d => ({ ...d })); saveStandard();
+  }
+  renderStandards();
+};
 
 function showView(view) {
   currentView = view;
