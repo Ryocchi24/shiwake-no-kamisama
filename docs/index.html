@@ -507,7 +507,7 @@
       <div class="nav-label">仕訳</div>
       <a href="#" data-view="import"><svg><use href="#i-receipt"/></svg>取り込み</a>
       <div class="nav-label">マスタ</div>
-      <a href="#" data-view="companies"><svg><use href="#i-building"/></svg>会社</a>
+      <a href="#" data-view="companies"><svg><use href="#i-building"/></svg>会社設定</a>
       <div class="nav-label">保管</div>
       <a class="disabled"><svg><use href="#i-folder"/></svg>格納済み<span class="soon">準備中</span></a>
       <div class="nav-label">システム</div>
@@ -520,7 +520,7 @@
       <div class="brand mobile-brand" style="padding:0"><img class="brand-mark" src="apple-touch-icon.png" alt="">仕訳の神様</div>
       <nav class="mobile-nav" aria-label="画面の切り替え">
         <button data-view="import">取り込み</button>
-        <button data-view="companies">会社</button>
+        <button data-view="companies">会社設定</button>
       </nav>
       <div class="crumb" id="crumb">仕訳 / <b>取り込み</b></div>
       <button class="icon-btn topbar-gear open-settings" title="設定"><svg><use href="#i-gear"/></svg></button>
@@ -577,7 +577,7 @@
      <section id="companiesView" hidden>
       <div class="page-head">
         <div>
-          <h1>会社</h1>
+          <h1>会社設定</h1>
         </div>
       </div>
       <div class="panel company-add">
@@ -2124,7 +2124,8 @@ function renderMaster() {
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
     document.getElementById("masterHelp").textContent = `${masterOf(masterCid).length}科目`;
-    const items = masterOf(masterCid).map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q));
+    const items = masterOf(masterCid).map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q))
+      .sort((a, b) => (a.code === "" ? -1 : 0) - (b.code === "" ? -1 : 0) || Number(a.code) - Number(b.code) || a.code.localeCompare(b.code)); // コード順（追加したばかりの空の行は先頭）
     listEl.innerHTML = items.length ? items.map(m => `<div class="master-row">
         <input value="${escapeHtml(m.code)}" data-mi="${m.i}" data-mk="code" inputmode="numeric" aria-label="コード">
         <input value="${escapeHtml(m.name)}" data-mi="${m.i}" data-mk="name" aria-label="科目名">
@@ -2305,7 +2306,7 @@ function showView(view) {
   document.getElementById("companiesView").hidden = view !== "companies";
   document.body.classList.toggle("view-companies", view === "companies");
   for (const el of document.querySelectorAll("[data-view]")) el.classList.toggle("active", el.dataset.view === view);
-  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : "マスタ / <b>会社</b>";
+  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : "マスタ / <b>会社設定</b>";
   if (view === "companies") renderCompanyList(); else render();
   scrollTo(0, 0);
 }
