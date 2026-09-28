@@ -17,8 +17,8 @@
     /* アイコンに合わせた「紺 × 金」 */
     --navy: #14213d; --navy-deep: #0d1629; --gold: #d9b45f; --gold-light: #ecd08c; --gold-deep: #8c6a22;
     --sidebar: var(--navy-deep); --sidebar-text: #a3abbd; --sidebar-active: rgba(217,180,95,.12);
-    --bg: #f5f3ee; --surface: #fff; --surface-2: #faf8f4;
-    --text: #1a2233; --muted: #6f7482; --line: #e8e4db; --line-strong: #d6d0c3;
+    --bg: #f5f6f8; --surface: #fff; --surface-2: #f8f9fb;
+    --text: #111827; --muted: #5b6272; --line: #e5e7eb; --line-strong: #d1d5db;
     --primary: var(--navy); --primary-hover: #1f3159; --primary-soft: #f4ecd8;
     --debit: #f1f3f8; --debit-text: #26375e; --credit: #faf3e6; --credit-text: #8c6a22;
     --ok: #127a4a; --ok-soft: #e4f5ec; --warn: #9a6200; --warn-soft: #fff4d9;
@@ -349,7 +349,7 @@
   .nav a { padding: 9px 10px; border-radius: 8px; transition: background .15s, color .15s; }
   .nav a:not(.disabled):hover { background: rgba(255,255,255,.05); color: #fff; }
   .nav .soon { border-color: #2c3650; color: #6b7690; }
-  .topbar { height: 56px; background: rgba(245,243,238,.88); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid transparent; }
+  .topbar { height: 56px; background: rgba(245,246,248,.88); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid transparent; }
   .crumb { font-size: 12.5px; }
   .content { padding: 8px 32px 56px; max-width: 1280px; }
   .page-head { margin-bottom: 22px; }
@@ -428,10 +428,10 @@
   .toast { border-radius: 12px; background: var(--navy-deep); color: var(--gold-light); }
 
   /* ---- 紺 × 金の仕上げ（アイコンに合わせた重厚感） ---- */
-  .brand, .page-head h1, .dialog h2 { font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif; letter-spacing: .06em; }
+  .brand, .page-head h1 { font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif; letter-spacing: .06em; }
   .brand { color: var(--gold-light); }
   .page-head h1 { font-weight: 700; color: var(--navy); }
-  .nav-label { color: #6b6450; }
+  .nav-label { color: #6e7891; }
   .nav a.active, .nav a[data-view].active { background: var(--sidebar-active); color: var(--gold-light); box-shadow: inset 2px 0 0 var(--gold); }
   .nav a:not(.disabled):hover { color: var(--gold-light); }
   .btn-primary { background: var(--navy); border-color: var(--navy); color: var(--gold-light); box-shadow: 0 1px 2px rgba(13,22,41,.3); }
@@ -440,8 +440,7 @@
   .panel { border-color: var(--line); }
   .panel-head { border-bottom-color: var(--line); }
   .panel-title { color: var(--navy); }
-  .tabs, .type-pick, .methods { background: #ece8df; }
-  .tab.active, .type-pick button.active, .method.active { color: var(--navy); box-shadow: 0 1px 3px rgba(13,22,41,.12), inset 0 -2px 0 var(--gold); }
+  .tab.active, .type-pick button.active, .method.active { color: var(--navy); }
   .doc-type.active { background: var(--navy); color: var(--gold-light); }
   .doc-type.active .soon-tag { color: var(--gold-light); background: rgba(236,208,140,.15); }
   thead th.debit { background: var(--debit); color: var(--debit-text); }
