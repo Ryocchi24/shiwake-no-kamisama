@@ -617,7 +617,6 @@
       <a href="#" data-view="import"><svg><use href="#i-receipt"/></svg>取り込み</a>
       <div class="nav-label">マスタ</div>
       <a href="#" data-view="companies"><svg><use href="#i-building"/></svg>会社マスタ</a>
-      <a href="#" data-view="standards"><svg><use href="#i-list"/></svg>標準マスタ</a>
     </nav>
   </aside>
 
@@ -627,7 +626,6 @@
       <nav class="mobile-nav" aria-label="画面の切り替え">
         <button data-view="import">取り込み</button>
         <button data-view="companies">会社マスタ</button>
-        <button data-view="standards">標準マスタ</button>
       </nav>
       <div class="crumb" id="crumb">仕訳 / <b>取り込み</b></div>
     </div>
@@ -705,29 +703,6 @@
       </div>
      </section>
 
-     <!-- 標準マスタの画面（見るだけ。会社ごとの手直しは会社マスタで） -->
-     <section id="standardsView" hidden>
-      <div class="page-head"><div><h1>標準マスタ</h1></div></div>
-      <div class="std-tools">
-        <div class="tabs" id="stdTabs">
-          <button class="tab active" data-stab="master">ミロク科目マスタ</button>
-          <button class="tab" data-stab="mapping">別会計ソフト対応表</button>
-        </div>
-        <select id="stdSystem" aria-label="会計システム"></select>
-        <input type="search" id="stdSearch" placeholder="コード・科目名で絞り込み">
-      </div>
-      <div class="panel">
-        <div class="panel-head">
-          <span class="panel-title" id="stdTitle"></span><span class="panel-sub" id="stdCount"></span>
-          <span class="spacer"></span>
-          <button class="btn btn-sm" id="stdAdd">＋ 追加</button>
-          <label class="btn btn-sm">CSV読み込み<input type="file" id="stdImport" accept=".csv,text/csv,text/plain"></label>
-          <button class="btn btn-sm" id="stdExport">CSV書き出し</button>
-          <button class="btn btn-sm btn-ghost" id="stdReset">アプリの標準に戻す</button>
-        </div>
-        <div id="stdList"></div>
-      </div>
-     </section>
     </div>
   </div>
 </div>
@@ -787,7 +762,7 @@
     <details class="master-csv" id="masterCsv">
       <summary>その他</summary>
       <div class="master-csv-body">
-        <button class="btn btn-sm" id="masterReset">標準に戻す</button>
+        <button class="btn btn-sm" id="masterReset">すべて消す</button>
         <button class="btn btn-sm" id="masterExport">CSVに書き出す</button>
       </div>
     </details>
@@ -795,7 +770,6 @@
   </div>
 </div>
 <datalist id="masterCodes"></datalist>
-<datalist id="stdCodes"></datalist>
 
 <!-- 仕訳を別の会社へ移動 -->
 <!-- 会社を追加 -->
@@ -1751,237 +1725,18 @@ const MASTERS_KEY = "shiwake-masters";   // { 会社ID: { adds: [{ code, name }]
 const MAPPINGS_KEY = "shiwake-mappings"; // { 会社ID: { 元の科目キー: { code, srcName, srcCode } } }
 // 標準の科目マスタ（ミロクの科目コードと科目名）。会社を追加したときは、これが最初から入る。
 // 銀行口座など会社ごとに違う科目は、各会社の「科目マスタ・対応表」で手直しする
-const BUILTIN_MASTER = [
-  {"code": "1101", "name": "現金"},
-  {"code": "1103", "name": "当座A銀行"},
-  {"code": "1104", "name": "当座B銀行"},
-  {"code": "1106", "name": "当座C銀行"},
-  {"code": "51", "name": "当座D銀行"},
-  {"code": "52", "name": "当座E銀行"},
-  {"code": "53", "name": "当座F信金"},
-  {"code": "1107", "name": "普通G農協"},
-  {"code": "1110", "name": "普通H銀行"},
-  {"code": "1111", "name": "普通I銀行"},
-  {"code": "1121", "name": "定期預金"},
-  {"code": "1122", "name": "銀行積立"},
-  {"code": "1131", "name": "受取手形"},
-  {"code": "1142", "name": "売掛金"},
-  {"code": "1151", "name": "電子記録債権"},
-  {"code": "1143", "name": "有価証券"},
-  {"code": "1172", "name": "製品"},
-  {"code": "1173", "name": "原材料"},
-  {"code": "1174", "name": "仕掛品"},
-  {"code": "1155", "name": "仮払金"},
-  {"code": "1154", "name": "立替金"},
-  {"code": "1158", "name": "預け金"},
-  {"code": "1159", "name": "仮払税金"},
-  {"code": "8001", "name": "仮払消費税"},
-  {"code": "1162", "name": "貸倒引当金"},
-  {"code": "1201", "name": "建物"},
-  {"code": "1209", "name": "建物付属設備"},
-  {"code": "1202", "name": "構築物"},
-  {"code": "1203", "name": "機械装置"},
-  {"code": "1204", "name": "車輌運搬具"},
-  {"code": "1205", "name": "工具器具備品"},
-  {"code": "1207", "name": "リース資産"},
-  {"code": "1208", "name": "一括償却資産"},
-  {"code": "1206", "name": "土地"},
-  {"code": "1222", "name": "電話加入権"},
-  {"code": "1223", "name": "ソフトウェア"},
-  {"code": "1235", "name": "保険積立金"},
-  {"code": "1231", "name": "関係会社株式"},
-  {"code": "1232", "name": "投資有価証券"},
-  {"code": "1236", "name": "長期前払費用"},
-  {"code": "2102", "name": "電子記録債務"},
-  {"code": "2103", "name": "買掛金"},
-  {"code": "2105", "name": "短期借入金"},
-  {"code": "2106", "name": "未払金"},
-  {"code": "2107", "name": "未払費用"},
-  {"code": "2109", "name": "預り金"},
-  {"code": "2110", "name": "仮受金"},
-  {"code": "2111", "name": "未払法人税等"},
-  {"code": "2114", "name": "賞与引当金"},
-  {"code": "2117", "name": "未払消費税"},
-  {"code": "8000", "name": "仮受消費税"},
-  {"code": "2201", "name": "長期借入金"},
-  {"code": "2203", "name": "償却引当金"},
-  {"code": "2204", "name": "長期未払金"},
-  {"code": "2205", "name": "リース債務"},
-  {"code": "2301", "name": "消費税引当金"},
-  {"code": "3101", "name": "資本金"},
-  {"code": "3202", "name": "利益準備金"},
-  {"code": "3301", "name": "別途積立金"},
-  {"code": "4101", "name": "売上高"},
-  {"code": "4201", "name": "期首製品棚卸高"},
-  {"code": "4206", "name": "期末製品棚卸高"},
-  {"code": "4412", "name": "給料手当"},
-  {"code": "4413", "name": "賞与"},
-  {"code": "4442", "name": "賞与Ⅱ"},
-  {"code": "4414", "name": "退職金"},
-  {"code": "4417", "name": "法定福利費"},
-  {"code": "4418", "name": "福利厚生費"},
-  {"code": "4425", "name": "旅費交通費"},
-  {"code": "4430", "name": "通信費"},
-  {"code": "4405", "name": "運賃"},
-  {"code": "4404", "name": "広告宣伝費"},
-  {"code": "4428", "name": "交際費"},
-  {"code": "4422", "name": "会議費"},
-  {"code": "4406", "name": "ガソリン代"},
-  {"code": "4423", "name": "消耗品費"},
-  {"code": "4427", "name": "租税公課"},
-  {"code": "4433", "name": "新聞図書費"},
-  {"code": "4426", "name": "支払手数料"},
-  {"code": "4429", "name": "保険料"},
-  {"code": "4421", "name": "修繕費"},
-  {"code": "4431", "name": "分担金"},
-  {"code": "4432", "name": "寄付金"},
-  {"code": "4438", "name": "リース料"},
-  {"code": "4437", "name": "損失保険料"},
-  {"code": "4436", "name": "研修費"},
-  {"code": "4420", "name": "地代家賃"},
-  {"code": "4439", "name": "貸倒損失"},
-  {"code": "4441", "name": "貸倒引当金繰入額"},
-  {"code": "4419", "name": "減価償却費"},
-  {"code": "4435", "name": "雑費"},
-  {"code": "5101", "name": "受取利息"},
-  {"code": "5102", "name": "受取配当金"},
-  {"code": "5105", "name": "雑収入"},
-  {"code": "5104", "name": "貸倒引当金戻入益"},
-  {"code": "5201", "name": "支払利息"},
-  {"code": "5205", "name": "雑損失"},
-  {"code": "6101", "name": "固定資産売却益"},
-  {"code": "6205", "name": "役員退職金"},
-  {"code": "6301", "name": "法人税住民税及び事業税"},
-  {"code": "4301", "name": "期首材料棚卸高"},
-  {"code": "4302", "name": "原材料仕入高"},
-  {"code": "4303", "name": "補助材料仕入高"},
-  {"code": "4305", "name": "期末材料棚卸高"},
-  {"code": "4311", "name": "賃金給料"},
-  {"code": "4312", "name": "退職金"},
-  {"code": "4313", "name": "賞与"},
-  {"code": "4316", "name": "法定福利費"},
-  {"code": "4317", "name": "福利厚生費"},
-  {"code": "4326", "name": "外注印刷費"},
-  {"code": "4330", "name": "写真製版費"},
-  {"code": "4336", "name": "写植費"},
-  {"code": "4327", "name": "減価償却費"},
-  {"code": "4334", "name": "図案版下費"},
-  {"code": "4328", "name": "修繕費"},
-  {"code": "4323", "name": "水道光熱費"},
-  {"code": "4322", "name": "電力費"},
-  {"code": "4325", "name": "消耗品費"},
-  {"code": "4335", "name": "雑費"},
-  {"code": "4341", "name": "期首仕掛棚卸高"},
-  {"code": "4342", "name": "期末仕掛棚卸高"}
-];
-// 標準は「標準マスタ」の画面で直したり、CSVで置き換えたりできる（この端末に保存）。直していなければアプリに入っている標準を使う
-const STANDARD_KEY = "shiwake-standard"; // { master: [{ code, name }], mappings: { 会計ソフトID: [{ srcCode, srcName, code }] } }
-const standard = load(STANDARD_KEY, {});
-let DEFAULT_MASTER = standard.master?.length ? standard.master : BUILTIN_MASTER.map(m => ({ ...m }));
-// 標準の対応（元の科目 → ミロクのコード）。実際にミロクへ入力した振替伝票から確定したもの。
-// 会社の対応表に登録がない科目は、まずこれを使う（元の番号が一致し、科目名もほぼ同じとき）。
-const BUILTIN_MAPPING = [
-  {"srcCode": "111", "srcName": "現金", "code": "1101"},
-  {"srcCode": "121", "srcName": "当座A銀行", "code": "1103"},
-  {"srcCode": "122", "srcName": "当座B銀行", "code": "1104"},
-  {"srcCode": "125", "srcName": "当座D銀行", "code": "51"},
-  {"srcCode": "126", "srcName": "当座E銀行", "code": "52"},
-  {"srcCode": "131", "srcName": "普通G農協", "code": "1107"},
-  {"srcCode": "144", "srcName": "定期積金G農協", "code": "1122"},
-  {"srcCode": "151", "srcName": "受取手形", "code": "1131"},
-  {"srcCode": "152", "srcName": "売掛金", "code": "1142"},
-  {"srcCode": "160", "srcName": "電子記録債権", "code": "1151"},
-  {"srcCode": "175", "srcName": "製品", "code": "1172"},
-  {"srcCode": "176", "srcName": "原材料", "code": "1173"},
-  {"srcCode": "177", "srcName": "仕掛品", "code": "1174"},
-  {"srcCode": "186", "srcName": "仮払金", "code": "1155"},
-  {"srcCode": "187", "srcName": "預け金", "code": "1158"},
-  {"srcCode": "193", "srcName": "仮払消費税（5%）", "code": "8001"},
-  {"srcCode": "214", "srcName": "機械装置", "code": "1203"},
-  {"srcCode": "246", "srcName": "保険積立金", "code": "1235"},
-  {"srcCode": "302", "srcName": "電子記録債務", "code": "2102"},
-  {"srcCode": "312", "srcName": "買掛金", "code": "2103"},
-  {"srcCode": "321", "srcName": "短期借入金", "code": "2105"},
-  {"srcCode": "322", "srcName": "未払金", "code": "2106"},
-  {"srcCode": "323", "srcName": "未払費用", "code": "2107"},
-  {"srcCode": "324", "srcName": "未払金1", "code": "2115"},
-  {"srcCode": "326", "srcName": "預り金", "code": "2109"},
-  {"srcCode": "329", "srcName": "仮受金", "code": "2110"},
-  {"srcCode": "335", "srcName": "仮受消費税（5%）", "code": "8000"},
-  {"srcCode": "337", "srcName": "賞与引当金", "code": "2114"},
-  {"srcCode": "341", "srcName": "長期借入金", "code": "2201"},
-  {"srcCode": "352", "srcName": "償却引当金", "code": "2203"},
-  {"srcCode": "358", "srcName": "長期未払金", "code": "2204"},
-  {"srcCode": "360", "srcName": "リース債務", "code": "2205"},
-  {"srcCode": "511", "srcName": "売上高", "code": "4101"},
-  {"srcCode": "591", "srcName": "期末製品棚卸高", "code": "4206"},
-  {"srcCode": "611", "srcName": "原材料仕入高", "code": "4302"},
-  {"srcCode": "612", "srcName": "補助材料仕入高", "code": "4303"},
-  {"srcCode": "631", "srcName": "期末材料棚卸高", "code": "4305"},
-  {"srcCode": "641", "srcName": "（製）労務費", "code": "4311"},
-  {"srcCode": "642", "srcName": "（労務費賞与", "code": "4313"},
-  {"srcCode": "645", "srcName": "（製）法定福利費", "code": "4316"},
-  {"srcCode": "651", "srcName": "（製）外注加工費", "code": "4321"},
-  {"srcCode": "652", "srcName": "（製）外注印刷費", "code": "4326"},
-  {"srcCode": "653", "srcName": "（写真製版費", "code": "4330"},
-  {"srcCode": "656", "srcName": "（製）修繕費", "code": "4328"},
-  {"srcCode": "657", "srcName": "（製）図案版下費", "code": "4334"},
-  {"srcCode": "659", "srcName": "（裏）雑費", "code": "4335"},
-  {"srcCode": "661", "srcName": "（製）減価償却費", "code": "4327"},
-  {"srcCode": "663", "srcName": "（製）写植費", "code": "4336"},
-  {"srcCode": "665", "srcName": "（製）電力費", "code": "4322"},
-  {"srcCode": "667", "srcName": "（製）消耗品費", "code": "4325"},
-  {"srcCode": "668", "srcName": "（製）水道光熱費", "code": "4323"},
-  {"srcCode": "694", "srcName": "期末仕掛棚卸高", "code": "4342"},
-  {"srcCode": "712", "srcName": "給料手当", "code": "4412"},
-  {"srcCode": "713", "srcName": "賞与", "code": "4413"},
-  {"srcCode": "723", "srcName": "法定福利費", "code": "4417"},
-  {"srcCode": "724", "srcName": "福利厚生費", "code": "4418"},
-  {"srcCode": "726", "srcName": "旅費交通費", "code": "4425"},
-  {"srcCode": "727", "srcName": "通信費", "code": "4430"},
-  {"srcCode": "731", "srcName": "運賃", "code": "4405"},
-  {"srcCode": "732", "srcName": "広告宣伝費", "code": "4404"},
-  {"srcCode": "733", "srcName": "交際費", "code": "4428"},
-  {"srcCode": "735", "srcName": "ガソリン代", "code": "4406"},
-  {"srcCode": "737", "srcName": "消耗品費", "code": "4423"},
-  {"srcCode": "738", "srcName": "租税公課", "code": "4427"},
-  {"srcCode": "739", "srcName": "新聞図書費", "code": "4433"},
-  {"srcCode": "741", "srcName": "支払手数料", "code": "4426"},
-  {"srcCode": "752", "srcName": "保険料", "code": "4429"},
-  {"srcCode": "753", "srcName": "修費", "code": "4421"},
-  {"srcCode": "755", "srcName": "分担金", "code": "4431"},
-  {"srcCode": "756", "srcName": "寄付金", "code": "4432"},
-  {"srcCode": "757", "srcName": "リース料", "code": "4438"},
-  {"srcCode": "758", "srcName": "損失保険料", "code": "4437"},
-  {"srcCode": "761", "srcName": "研修費", "code": "4436"},
-  {"srcCode": "762", "srcName": "地代、家賃", "code": "4420"},
-  {"srcCode": "791", "srcName": "雑費", "code": "4435"},
-  {"srcCode": "819", "srcName": "雑収入", "code": "5105"},
-  {"srcCode": "821", "srcName": "支払利息", "code": "5201"}
-];
+// ミロクの科目マスタは会社ごとに違うので、アプリには標準のマスタを入れない（会社ごとにファイルから読み込む）
+let DEFAULT_MASTER = [];
+try { localStorage.removeItem("shiwake-standard"); } catch {}
 // 別の会計システムの種類。会社設定で選ぶと、その標準の対応表を使う（会社ごとに違う科目は会社の対応表で上書き）
 const SOURCE_SYSTEMS = [
-  { id: "pca", name: "PCA会計", builtin: BUILTIN_MAPPING },
-  { id: "yayoi", name: "弥生会計", builtin: [] },
-  { id: "freee", name: "freee", builtin: [] },
-  { id: "mf", name: "マネーフォワード", builtin: [] },
-  { id: "bugyo", name: "勘定奉行", builtin: [] },
-  { id: "other", name: "その他", builtin: [] },
+  { id: "pca", name: "PCA会計", mapping: [] },
+  { id: "yayoi", name: "弥生会計", mapping: [] },
+  { id: "freee", name: "freee", mapping: [] },
+  { id: "mf", name: "マネーフォワード", mapping: [] },
+  { id: "bugyo", name: "勘定奉行", mapping: [] },
+  { id: "other", name: "その他", mapping: [] },
 ];
-for (const x of SOURCE_SYSTEMS) x.mapping = standard.mappings?.[x.id] || x.builtin.map(d => ({ ...d }));
-function saveStandard() {
-  standard.master = DEFAULT_MASTER;
-  standard.mappings = Object.fromEntries(SOURCE_SYSTEMS.map(x => [x.id, x.mapping]));
-  try { localStorage.setItem(STANDARD_KEY, JSON.stringify(standard)); } catch {}
-}
-// 標準の科目マスタを直す。各社は「標準 ＋ 違い」なので、先に違いを保存してから、新しい標準で作り直す
-function changeStandardMaster(fn) {
-  saveMasters();
-  fn();
-  saveStandard();
-  for (const k of Object.keys(masters)) delete masters[k];
-  renderMasterCodes();
-}
 const NO_SYSTEM = { id: "", name: "未設定", mapping: [] };
 const systemOf = (cid = currentCompanyId) => {
   const id = companies.find(c => c.id === cid)?.system || "";
@@ -2427,7 +2182,7 @@ function renderMaster() {
   for (const b of document.querySelectorAll("[data-mtab]")) b.hidden = !tabs.includes(b.dataset.mtab);
   document.getElementById("masterTabs").hidden = tabs.length < 2;
   for (const b of document.querySelectorAll("[data-mtab]")) b.classList.toggle("active", b.dataset.mtab === masterTab);
-  document.getElementById("masterReset").textContent = masterTab === "master" ? "標準に戻す" : "すべて消す";
+  document.getElementById("masterReset").textContent = "すべて消す";
   document.getElementById("masterExport").hidden = masterTab === "receipt";
   document.getElementById("masterImportBtn").hidden = masterTab === "receipt";
   const q = normName(document.getElementById("masterSearch").value);
@@ -2440,7 +2195,7 @@ function renderMaster() {
         <input value="${escapeHtml(m.code)}" data-mi="${m.i}" data-mk="code" inputmode="numeric" aria-label="コード">
         <input value="${escapeHtml(m.name)}" data-mi="${m.i}" data-mk="name" aria-label="科目名">
         <button class="icon-btn" data-mdel="${m.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
-      : `<div class="master-empty">科目がありません</div>`;
+      : `<div class="master-empty">「ファイルから読み込む」でミロクの科目マスタを入れてください</div>`;
   } else if (masterTab === "receipt") {
     const rc = receiptSettingsOf(masterCid);
     document.getElementById("masterHelp").textContent = "領収書を読んだときに、自動で入れる科目";
@@ -2517,8 +2272,8 @@ document.getElementById("masterReset").onclick = () => {
     return;
   }
   if (masterTab === "master") {
-    if (!confirm("この会社の科目マスタを、標準のマスタに戻しますか？（この会社で直した内容は消えます）")) return;
-    masters[masterCid] = DEFAULT_MASTER.map(m => ({ ...m }));
+    if (!confirm("この会社のミロク科目マスタをすべて消しますか？")) return;
+    masters[masterCid] = [];
   } else {
     if (!confirm("この会社の対応表をすべて消しますか？（次に試算表を読み込むと、科目名から推測し直します）")) return;
     mappings[masterCid] = {};
@@ -2605,126 +2360,14 @@ document.getElementById("masterExport").onclick = async () => {
 
 // ---- 画面の切り替え（取り込み／会社） ----
 let currentView = "import";
-// ---- 標準マスタ（アプリに入っている標準。会社を作ると、ここから会社ごとのマスタが始まる） ----
-let stdTab = "master";
-const stdSystemSel = document.getElementById("stdSystem");
-stdSystemSel.innerHTML = SOURCE_SYSTEMS.map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join("");
-function renderStandards() {
-  for (const b of document.querySelectorAll("[data-stab]")) b.classList.toggle("active", b.dataset.stab === stdTab);
-  stdSystemSel.hidden = stdTab !== "mapping";
-  const q = normName(document.getElementById("stdSearch").value);
-  const listEl = document.getElementById("stdList");
-  const stdName = code => DEFAULT_MASTER.find(m => m.code === code)?.name || "";
-  let html = "", n = 0;
-  // 追加したばかりの空の行は先頭、ほかは番号順
-  const byCode = k => (a, b) => (a[k] === "" ? -1 : 0) - (b[k] === "" ? -1 : 0) || Number(a[k]) - Number(b[k]) || String(a[k]).localeCompare(String(b[k]));
-  if (stdTab === "master") {
-    const items = DEFAULT_MASTER.map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q)).sort(byCode("code"));
-    n = DEFAULT_MASTER.length;
-    document.getElementById("stdTitle").textContent = "ミロク科目マスタ";
-    html = items.map(m => `<div class="master-row">
-        <input value="${escapeHtml(m.code)}" data-si="${m.i}" data-sk="code" inputmode="numeric" aria-label="コード">
-        <input value="${escapeHtml(m.name)}" data-si="${m.i}" data-sk="name" aria-label="科目名">
-        <button class="icon-btn" data-sdel="${m.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("");
-  } else {
-    const sys = stdSystem();
-    const items = sys.mapping.map((d, i) => ({ ...d, i })).filter(d => !q || normName(d.srcCode + d.srcName + d.code + stdName(d.code)).includes(q)).sort(byCode("srcCode"));
-    n = sys.mapping.length;
-    document.getElementById("stdTitle").textContent = `${sys.name} → ミロク`;
-    html = items.map(d => `<div class="master-row stdmap">
-        <input value="${escapeHtml(d.srcCode)}" data-si="${d.i}" data-sk="srcCode" inputmode="numeric" placeholder="番号" aria-label="元の番号">
-        <input value="${escapeHtml(d.srcName)}" data-si="${d.i}" data-sk="srcName" placeholder="元の科目名" aria-label="元の科目名">
-        <input value="${escapeHtml(d.code)}" data-si="${d.i}" data-sk="code" list="stdCodes" inputmode="numeric" placeholder="ミロク" aria-label="ミロクのコード">
-        <span class="muted">${escapeHtml(d.code ? (stdName(d.code) || "（マスタにない）") : "")}</span>
-        <button class="icon-btn" data-sdel="${d.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("");
-  }
-  document.getElementById("stdCodes").innerHTML = DEFAULT_MASTER.map(m => `<option value="${escapeHtml(m.code)}">${escapeHtml(m.name)}</option>`).join("");
-  document.getElementById("stdCount").textContent = `${n}件`;
-  listEl.innerHTML = html || `<div class="std-empty">まだありません</div>`;
-}
-document.getElementById("stdTabs").onclick = e => { const b = e.target.closest("[data-stab]"); if (b) { stdTab = b.dataset.stab; renderStandards(); } };
-stdSystemSel.onchange = renderStandards;
-document.getElementById("stdSearch").oninput = renderStandards;
-const stdSystem = () => SOURCE_SYSTEMS.find(x => x.id === stdSystemSel.value) || SOURCE_SYSTEMS[0];
-const digits = v => (String(v).match(/^\s*(\d+)/) || [])[1] || "";
-document.getElementById("stdList").addEventListener("change", e => {
-  const t = e.target; if (t.dataset.si === undefined) return;
-  const i = Number(t.dataset.si), k = t.dataset.sk;
-  const v = k === "code" || k === "srcCode" ? digits(t.value) : t.value.trim();
-  if (stdTab === "master") changeStandardMaster(() => { if (DEFAULT_MASTER[i]) DEFAULT_MASTER[i][k] = v; });
-  else { const d = stdSystem().mapping[i]; if (d) d[k] = v; saveStandard(); }
-  renderStandards();
-});
-document.getElementById("stdList").addEventListener("click", e => {
-  const b = e.target.closest("[data-sdel]"); if (!b) return;
-  const i = Number(b.dataset.sdel);
-  if (stdTab === "master") {
-    const m = DEFAULT_MASTER[i];
-    if (m?.code && !confirm(`標準の科目マスタから「${m.code} ${m.name}」を消しますか？`)) return;
-    changeStandardMaster(() => DEFAULT_MASTER.splice(i, 1));
-  } else { stdSystem().mapping.splice(i, 1); saveStandard(); }
-  renderStandards();
-});
-document.getElementById("stdAdd").onclick = () => {
-  document.getElementById("stdSearch").value = "";
-  if (stdTab === "master") changeStandardMaster(() => DEFAULT_MASTER.push({ code: "", name: "" }));
-  else { stdSystem().mapping.push({ srcCode: "", srcName: "", code: "" }); saveStandard(); }
-  renderStandards();
-  document.querySelector('#stdList [data-sk]')?.focus();
-};
-document.getElementById("stdImport").addEventListener("change", async e => {
-  const file = e.target.files[0]; e.target.value = "";
-  if (!file) return;
-  const table = await readCsvFile(file);
-  if (stdTab === "master") {
-    const items = table.filter(c => /^\d+$/.test(c[0]) && c[1]).map(c => ({ code: c[0], name: c[1] }));
-    if (!items.length) { alert("「コード,科目名」の行が見つかりませんでした。"); return; }
-    if (!confirm(`標準の科目マスタを、読み込んだ ${items.length}科目 に置き換えますか？\n各会社で直した部分はそのまま残ります。`)) return;
-    changeStandardMaster(() => { DEFAULT_MASTER = items; });
-    showToast(`${items.length}科目を読み込みました`);
-  } else {
-    // 「元の番号,元の科目名,ミロクコード」
-    const items = table.filter(c => c[1] && /^\d+$/.test(c[2] || "")).map(c => ({ srcCode: /^\d+$/.test(c[0]) ? c[0] : "", srcName: c[1], code: c[2] }));
-    if (!items.length) { alert("「元の番号,元の科目名,ミロクコード」の行が見つかりませんでした。"); return; }
-    const sys = stdSystem();
-    if (!confirm(`${sys.name}の標準の対応表を、読み込んだ ${items.length}件 に置き換えますか？`)) return;
-    sys.mapping = items; saveStandard();
-    showToast(`${items.length}件の対応を読み込みました`);
-  }
-  renderStandards();
-});
-document.getElementById("stdExport").onclick = async () => {
-  const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  const sys = stdSystem();
-  const lines = stdTab === "master"
-    ? [["コード", "科目名"], ...DEFAULT_MASTER.map(m => [m.code, m.name])]
-    : [["元の番号", "元の科目名", "ミロクコード", "ミロク科目名"], ...sys.mapping.map(d => [d.srcCode, d.srcName, d.code, DEFAULT_MASTER.find(m => m.code === d.code)?.name || ""])];
-  const csv = lines.map(l => l.map(cell).join(",")).join("\r\n") + "\r\n";
-  const bytes = new Uint8Array(Encoding.convert(Encoding.stringToCode(csv), { to: "SJIS", from: "UNICODE" }));
-  await saveFile(new Blob([bytes], { type: "text/csv" }), stdTab === "master" ? "標準_科目マスタ.csv" : `標準_対応表_${sys.name}.csv`);
-};
-document.getElementById("stdReset").onclick = () => {
-  if (stdTab === "master") {
-    if (!confirm("標準の科目マスタを、アプリに入っている標準に戻しますか？\n各会社で直した部分はそのまま残ります。")) return;
-    changeStandardMaster(() => { DEFAULT_MASTER = BUILTIN_MASTER.map(m => ({ ...m })); });
-  } else {
-    const sys = stdSystem();
-    if (!confirm(`${sys.name}の標準の対応表を、アプリに入っている標準に戻しますか？`)) return;
-    sys.mapping = sys.builtin.map(d => ({ ...d })); saveStandard();
-  }
-  renderStandards();
-};
-
 function showView(view) {
   currentView = view;
   document.getElementById("importView").hidden = view !== "import";
   document.getElementById("companiesView").hidden = view !== "companies";
-  document.getElementById("standardsView").hidden = view !== "standards";
   document.body.classList.toggle("view-companies", view === "companies");
-  document.body.classList.toggle("view-standards", view === "standards");
   for (const el of document.querySelectorAll("[data-view]")) el.classList.toggle("active", el.dataset.view === view);
-  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : view === "standards" ? "マスタ / <b>標準マスタ</b>" : "マスタ / <b>会社マスタ</b>";
-  if (view === "companies") renderCompanyList(); else if (view === "standards") renderStandards(); else render();
+  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : "マスタ / <b>会社マスタ</b>";
+  if (view === "companies") renderCompanyList(); else render();
   scrollTo(0, 0);
 }
 document.addEventListener("click", e => {
