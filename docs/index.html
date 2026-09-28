@@ -303,6 +303,7 @@
   .mode-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 13px; }
   .mode-box p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
   .dlg-help { font-size: 12.5px; color: var(--muted); margin: 8px 0 18px; }
+  .dlg-help:empty { margin: 0 0 10px; }
   .dlg-actions { display: flex; gap: 8px; align-items: center; }
 
   /* スマホ */
@@ -449,7 +450,7 @@
       </div>
       <section class="method-soon" id="methodSoon" hidden>
         <h2 id="methodSoonTitle"></h2>
-        この取り込み方法は準備中です。フォーマットが決まり次第、ここから読み込めるようになります。
+        準備中
       </section>
 
       <div class="banner" id="ocrBanner" hidden></div>
@@ -461,7 +462,7 @@
           <!-- 試算表入力のときだけ表示: 借方・貸方の合計の確認、伝票日付の一括変更、マスタ -->
           <div class="trial-bar" id="trialBar" hidden>
             <span class="trial-balance" id="trialBalance"></span>
-            <label class="field">伝票日付（全行まとめて変更）<input type="date" id="trialDate"></label>
+            <label class="field">伝票日付<input type="date" id="trialDate"></label>
             <button class="btn btn-sm btn-ghost" id="trialClear">一覧を空にする</button>
           </div>
           <span class="spacer"></span>
@@ -476,7 +477,6 @@
       <div class="page-head">
         <div>
           <h1>会社</h1>
-          <p>会社ごとに、仕訳と「会社の設定」（科目マスタ・レシート・試算表）を分けて管理します。</p>
         </div>
       </div>
       <div class="panel company-add">
@@ -517,7 +517,7 @@
     <p id="camMsgText">カメラを起動できませんでした。</p>
     <label class="btn btn-primary">標準カメラで撮影<input class="file-picker" type="file" accept="image/*" capture="environment"></label>
   </div>
-  <div class="cam-hint">レシート全体が枠に入るように撮影してください</div>
+  <div class="cam-hint">枠に合わせて撮影</div>
   <div class="cam-bottom">
     <div class="cam-last-wrap"><img id="camLast" alt="" hidden></div>
     <button class="shutter" id="shutter" aria-label="撮影"></button>
@@ -530,7 +530,7 @@
   <div class="dialog dialog-wide">
     <h2>会社の設定 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="tabs" id="masterTabs">
-      <button class="tab active" data-mtab="master">科目マスタ（共通）</button>
+      <button class="tab active" data-mtab="master">科目マスタ</button>
       <button class="tab" data-mtab="receipt">レシート</button>
       <button class="tab" data-mtab="mapping">試算表</button>
     </div>
@@ -543,7 +543,7 @@
     <div class="master-list" id="masterList"></div>
     <!-- 普段は使わないので折りたたむ（別の会社のマスタをまとめて登録する・別の端末に移すとき用） -->
     <details class="master-csv" id="masterCsv">
-      <summary>CSVでまとめて読み込む・書き出す</summary>
+      <summary>CSV</summary>
       <div class="master-csv-body">
         <label class="btn btn-sm">CSVを読み込む<input type="file" id="masterImport" accept=".csv,text/csv,text/plain" hidden></label>
         <button class="btn btn-sm" id="masterExport">CSVに書き出す</button>
@@ -558,7 +558,6 @@
 <div class="dialog-back" id="moveDlg" hidden>
   <div class="dialog">
     <h2>別の会社へ移動</h2>
-    <p class="dlg-help" style="margin-top:0">この仕訳の移動先を選んでください。</p>
     <div class="move-list" id="moveList"></div>
     <div class="dlg-actions" style="margin-top:14px"><span style="flex:1"></span><button class="btn" id="moveClose">キャンセル</button></div>
   </div>
@@ -570,7 +569,6 @@
     <h2>設定</h2>
     <div class="mode-box">
       <b>現在の読み取り方式：<span id="modeName"></span></b>
-      <p>標準は <b>無料モード</b>（スマホの中で文字を読み取る方式）です。画像は端末の外に出ません。精度は控えめなので、一覧で確認・修正してください。</p>
     </div>
     <div class="dlg-label">CSVの形式</div>
     <div class="csv-opts">
@@ -584,7 +582,7 @@
     </div>
     <label class="dlg-label" for="apiKey">高精度モード用 APIキー（任意・有料）</label>
     <input id="apiKey" type="password" autocomplete="off" placeholder="空欄のままなら無料モード">
-    <p class="dlg-help">Anthropic のAPIキーを入れると、AI（Claude）で高精度に読み取ります（1枚あたり数円）。キーはこの端末のブラウザ内にだけ保存されます。</p>
+    <p class="dlg-help">1枚あたり数円。キーはこの端末にだけ保存されます。</p>
     <div class="dlg-actions">
       <button class="btn btn-ghost" id="keyDelete">キーを削除</button>
       <span style="flex:1"></span>
@@ -1205,7 +1203,7 @@ function render() {
 
   if (!currentCompany()) {
     list.innerHTML = `<div class="dropzone"><svg><use href="#i-building"/></svg>
-      <b>まず会社を登録してください</b>仕訳は会社ごとに分けて管理します。<br><br>
+      <b>会社を登録してください</b>
       <button class="btn btn-primary open-companies">会社を登録する</button></div>`;
     return;
   }
@@ -1215,9 +1213,9 @@ function render() {
   if (!items.length) {
     list.innerHTML = currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
-      <b>まだ試算表がありません</b>「ファイルを選ぶ」から試算表のExcel・PDF・画像を選ぶか、「撮影する」で試算表を撮ってください。</div>`
+      <b>試算表を選んでください</b>Excel・PDF・画像</div>`
       : `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
-      <b>まだレシートがありません</b>「撮影する」でレシートを撮ると、ここに読み取った内容が並びます。</div>`;
+      <b>レシートを撮影してください</b></div>`;
     return;
   }
 
@@ -1925,7 +1923,7 @@ async function importTrial(files) {
     rows.push(...made);
     save(); render();
     const unset = made.filter(r => !(r.debitCode || r.creditCode)).length;
-    showToast(`${accounts.length}科目から${made.length}行を作りました。` + (d === c ? "借方と貸方の合計は一致しています。" : `借方と貸方の合計が ${Math.abs(d - c).toLocaleString()}円 違います。`) + (unset ? ` コード未設定: ${unset}行` : ""));
+    showToast(`${made.length}行` + (d === c ? "" : `／貸借差額 ${Math.abs(d - c).toLocaleString()}円`) + (unset ? `／コード未設定 ${unset}行` : ""));
   } catch (err) {
     banner.hidden = true;
     alert(`試算表を読み取れませんでした: ${err.message || err}`);
@@ -1997,41 +1995,41 @@ function renderMaster() {
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
-    document.getElementById("masterHelp").textContent = `この会社のミロクの科目コードと科目名です（${masterOf(masterCid).length}科目）。標準のマスタが最初から入っています。銀行口座など、この会社だけ違う科目はここで直してください。`;
+    document.getElementById("masterHelp").textContent = `${masterOf(masterCid).length}科目`;
     const items = masterOf(masterCid).map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q));
     listEl.innerHTML = items.length ? items.map(m => `<div class="master-row">
         <input value="${escapeHtml(m.code)}" data-mi="${m.i}" data-mk="code" inputmode="numeric" aria-label="コード">
         <input value="${escapeHtml(m.name)}" data-mi="${m.i}" data-mk="name" aria-label="科目名">
         <button class="icon-btn" data-mdel="${m.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
-      : `<div class="master-empty">科目が登録されていません。「CSVを読み込む」でまとめて登録できます。</div>`;
+      : `<div class="master-empty">科目がありません</div>`;
   } else if (masterTab === "receipt") {
     const rc = receiptSettingsOf(masterCid);
-    document.getElementById("masterHelp").textContent = `レシートを読み取ったときに、自動で入れる科目です。確認画面で借方のコードを直すと、そのお店のルールとしてここに覚えます（${rc.rules.length}件）。`;
+    document.getElementById("masterHelp").textContent = "";
     const rules = rc.rules.map((x, i) => ({ ...x, i })).filter(x => !q || normName(x.keyword + x.code + masterName(x.code, masterCid)).includes(q));
     listEl.innerHTML = `<div class="rc-credit">
-        <b>貸方の科目（いつもの支払い方法）</b>
+        <b>貸方の科目</b>
         <input value="${escapeHtml(rc.creditCode)}" data-rck="credit" list="masterCodes" inputmode="numeric" placeholder="例: 1101" aria-label="貸方の科目コード">
-        <span class="muted">${escapeHtml(rc.creditCode ? (masterName(rc.creditCode, masterCid) || "（マスタにない）") : "未設定（例: 1101 現金）")}</span>
+        <span class="muted">${escapeHtml(rc.creditCode ? (masterName(rc.creditCode, masterCid) || "（マスタにない）") : "")}</span>
       </div>
-      <div class="rc-head">店名・品目に含まれる言葉 → 借方の科目</div>`
+      <div class="rc-head">店名 → 借方の科目</div>`
       + (rules.length ? rules.map(x => `<div class="master-row rule">
         <input value="${escapeHtml(x.keyword)}" data-rri="${x.i}" data-rrk="keyword" placeholder="例: セブンイレブン" aria-label="店名・品目に含まれる言葉">
         <input value="${escapeHtml(x.code)}" data-rri="${x.i}" data-rrk="code" list="masterCodes" inputmode="numeric" placeholder="コード" aria-label="借方の科目コード">
         <span class="muted">${escapeHtml(x.code ? (masterName(x.code, masterCid) || "（マスタにない）") : "")}</span>
         <button class="icon-btn" data-rrdel="${x.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
-      : `<div class="master-empty">まだルールがありません。「＋ 追加」で登録するか、確認画面で借方のコードを入れると自動で覚えます。</div>`);
+      : `<div class="master-empty">ルールはまだありません</div>`);
   } else {
     const map = mappingOf(masterCid);
     const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code, masterCid)).includes(q))
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
-    document.getElementById("masterHelp").textContent = `対応表（別会計システム → ミロク）: この会社の試算表の科目を、どのミロクのコードに変換するかの一覧です（${Object.keys(map).length}件）。登録がない科目は科目名から自動で推測し、試算表の画面でコードを直すと、ここに覚えます。`;
+    document.getElementById("masterHelp").textContent = "別会計システムの科目 → ミロクのコード";
     listEl.innerHTML = entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
         <input value="${escapeHtml(v.code)}" data-mapkey="${escapeHtml(k)}" list="masterCodes" inputmode="numeric" aria-label="ミロクのコード">
         <span class="muted">${escapeHtml(masterName(v.code, masterCid) || "（マスタにない）")}</span>
         <button class="icon-btn" data-mapdel="${escapeHtml(k)}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
-      : `<div class="master-empty">まだ対応が登録されていません。試算表を読み込んでコードを選ぶか、CSV（元の番号,元の科目名,ミロクコード）を読み込んでください。</div>`;
+      : `<div class="master-empty">対応はまだありません</div>`;
   }
   renderMasterCodes();
 }
@@ -2208,7 +2206,7 @@ function renderCompanyList() {
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社の設定</button>
       <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
       <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
-    </div>`).join("") : `<div class="company-empty">まだ会社が登録されていません。上の「会社を追加」から登録してください。</div>`;
+    </div>`).join("") : `<div class="company-empty">会社はまだありません</div>`;
 }
 document.addEventListener("click", e => {
   const t = e.target.closest(".open-companies");
