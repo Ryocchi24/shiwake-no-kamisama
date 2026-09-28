@@ -4,21 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>仕訳の神様</title>
-<meta name="theme-color" content="#0e1424">
+<meta name="theme-color" content="#0d1629">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="仕訳の神様">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --sidebar: #0e1424; --sidebar-text: #97a1b6; --sidebar-active: rgba(255,255,255,.08);
-    --bg: #f5f6f8; --surface: #fff; --surface-2: #f7f8fa;
-    --text: #111827; --muted: #6b7280; --line: #e7e9ee; --line-strong: #d5d9e0;
-    --primary: #2f5bea; --primary-hover: #2449c7; --primary-soft: #eef2fe;
-    --debit: #f2f5fe; --debit-text: #2f4fb8; --credit: #fdf5ef; --credit-text: #a8521f;
+    /* アイコンに合わせた「紺 × 金」 */
+    --navy: #14213d; --navy-deep: #0d1629; --gold: #d9b45f; --gold-light: #ecd08c; --gold-deep: #8c6a22;
+    --sidebar: var(--navy-deep); --sidebar-text: #a3abbd; --sidebar-active: rgba(217,180,95,.12);
+    --bg: #f5f3ee; --surface: #fff; --surface-2: #faf8f4;
+    --text: #1a2233; --muted: #6f7482; --line: #e8e4db; --line-strong: #d6d0c3;
+    --primary: var(--navy); --primary-hover: #1f3159; --primary-soft: #f4ecd8;
+    --debit: #f1f3f8; --debit-text: #26375e; --credit: #faf3e6; --credit-text: #8c6a22;
     --ok: #127a4a; --ok-soft: #e4f5ec; --warn: #9a6200; --warn-soft: #fff4d9;
     --err: #c62a2a; --err-soft: #fdeaea; --info: #4a5568; --info-soft: #edf0f4;
     --radius: 12px;
@@ -347,7 +349,7 @@
   .nav a { padding: 9px 10px; border-radius: 8px; transition: background .15s, color .15s; }
   .nav a:not(.disabled):hover { background: rgba(255,255,255,.05); color: #fff; }
   .nav .soon { border-color: #2c3650; color: #6b7690; }
-  .topbar { height: 56px; background: rgba(245,246,248,.85); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid transparent; }
+  .topbar { height: 56px; background: rgba(245,243,238,.88); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid transparent; }
   .crumb { font-size: 12.5px; }
   .content { padding: 8px 32px 56px; max-width: 1280px; }
   .page-head { margin-bottom: 22px; }
@@ -423,7 +425,34 @@
   .tab { border-radius: 7px; font-weight: 600; padding: 6px 14px; }
   .master-list { border-radius: 10px; }
   .rc-credit { background: var(--surface-2); }
-  .toast { border-radius: 12px; background: #111827; }
+  .toast { border-radius: 12px; background: var(--navy-deep); color: var(--gold-light); }
+
+  /* ---- 紺 × 金の仕上げ（アイコンに合わせた重厚感） ---- */
+  .brand, .page-head h1, .dialog h2 { font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif; letter-spacing: .06em; }
+  .brand { color: var(--gold-light); }
+  .page-head h1 { font-weight: 700; color: var(--navy); }
+  .nav-label { color: #6b6450; }
+  .nav a.active, .nav a[data-view].active { background: var(--sidebar-active); color: var(--gold-light); box-shadow: inset 2px 0 0 var(--gold); }
+  .nav a:not(.disabled):hover { color: var(--gold-light); }
+  .btn-primary { background: var(--navy); border-color: var(--navy); color: var(--gold-light); box-shadow: 0 1px 2px rgba(13,22,41,.3); }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-primary:disabled { background: #a9afbd; border-color: #a9afbd; color: #fff; }
+  .panel { border-color: var(--line); }
+  .panel-head { border-bottom-color: var(--line); }
+  .panel-title { color: var(--navy); }
+  .tabs, .type-pick, .methods { background: #ece8df; }
+  .tab.active, .type-pick button.active, .method.active { color: var(--navy); box-shadow: 0 1px 3px rgba(13,22,41,.12), inset 0 -2px 0 var(--gold); }
+  .doc-type.active { background: var(--navy); color: var(--gold-light); }
+  .doc-type.active .soon-tag { color: var(--gold-light); background: rgba(236,208,140,.15); }
+  thead th.debit { background: var(--debit); color: var(--debit-text); }
+  thead th.credit { background: var(--credit); color: var(--credit-text); }
+  .method-tag.t-format3 { color: var(--navy); background: #e6e9f1; }
+  .method-tag.t-receipt { color: #5c6b2e; background: #eef0dc; }
+  .method-tag.t-format2 { color: var(--gold-deep); background: var(--primary-soft); }
+  .co-picker-item.active { background: var(--primary-soft); }
+  .co-picker-add, .std-row .code.miroku { color: var(--gold-deep); }
+  input:focus, select:focus { outline: none; border-color: var(--gold) !important; box-shadow: 0 0 0 3px rgba(217,180,95,.25) !important; }
+  .dialog { border-top: 3px solid var(--gold); }
 
   /* スマホ */
   @media (max-width: 860px) {
@@ -435,7 +464,7 @@
     .topbar-gear { color: #fff; }
     .mobile-nav { display: flex; order: 3; width: 100%; background: rgba(255,255,255,.1); border-radius: 8px; padding: 3px; gap: 3px; }
     .mobile-nav button { flex: 1; font: inherit; font-size: 14px; color: #cfd5de; background: none; border: none; border-radius: 6px; height: 34px; cursor: pointer; }
-    .mobile-nav button.active { background: #fff; color: var(--text); font-weight: 600; }
+    .mobile-nav button.active { background: var(--gold); color: var(--navy-deep); font-weight: 700; }
     #importView .page-head > div { width: 100%; }
     .co-picker, .co-picker-btn { display: flex; width: 100%; }
     .co-picker-btn { font-size: 16px; }
