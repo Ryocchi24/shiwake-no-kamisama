@@ -167,6 +167,8 @@
   .tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
   .tab { font: inherit; font-size: 13px; font-weight: 500; border: none; background: none; color: var(--muted); padding: 5px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
   .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(15,23,42,.1); }
+  .tab .nb { display: inline-block; }
+  #masterTabs .tab { flex-wrap: wrap; justify-content: center; gap: 0; line-height: 1.3; }
   .tab-cnt { font-size: 11.5px; background: var(--info-soft); color: var(--info); border-radius: 999px; padding: 0 7px; min-width: 20px; text-align: center; }
   .tab.active .tab-cnt { background: var(--primary-soft); color: var(--primary); }
   .no-img { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; border: 1px dashed var(--line-strong); color: var(--muted); font-size: 10px; }
@@ -660,8 +662,8 @@
     <h2>会社の設定 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">科目マスタ</button>
-      <button class="tab" data-mtab="receipt">レシート</button>
-      <button class="tab" data-mtab="mapping">試算表</button>
+      <button class="tab" data-mtab="receipt"><span class="nb">レシートの</span><span class="nb">自動入力</span></button>
+      <button class="tab" data-mtab="mapping"><span class="nb">試算表の</span><span class="nb">読み替え</span></button>
     </div>
     <p class="dlg-help" id="masterHelp"></p>
     <div class="master-tools">
@@ -2174,7 +2176,7 @@ function renderMaster() {
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
-    document.getElementById("masterHelp").textContent = `${masterOf(masterCid).length}科目`;
+    document.getElementById("masterHelp").textContent = `ミロクの科目コードの一覧（${masterOf(masterCid).length}科目）。レシートと試算表の両方で使います`;
     const items = masterOf(masterCid).map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q))
       .sort((a, b) => (a.code === "" ? -1 : 0) - (b.code === "" ? -1 : 0) || Number(a.code) - Number(b.code) || a.code.localeCompare(b.code)); // コード順（追加したばかりの空の行は先頭）
     listEl.innerHTML = items.length ? items.map(m => `<div class="master-row">
@@ -2184,7 +2186,7 @@ function renderMaster() {
       : `<div class="master-empty">科目がありません</div>`;
   } else if (masterTab === "receipt") {
     const rc = receiptSettingsOf(masterCid);
-    document.getElementById("masterHelp").textContent = "";
+    document.getElementById("masterHelp").textContent = "レシートを読んだときに、自動で入れる科目";
     const rules = rc.rules.map((x, i) => ({ ...x, i })).filter(x => !q || normName(x.keyword + x.code + masterName(x.code, masterCid)).includes(q));
     listEl.innerHTML = `<div class="rc-credit">
         <b>貸方の科目</b>
@@ -2203,7 +2205,7 @@ function renderMaster() {
     const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code, masterCid)).includes(q))
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
     const sys = systemOf(masterCid);
-    document.getElementById("masterHelp").textContent = "";
+    document.getElementById("masterHelp").textContent = "別の会計ソフトの科目を、ミロクのどのコードにするか";
     listEl.innerHTML = `<div class="rc-credit">
         <b>会計システム</b>
         <select data-system aria-label="会計システム">${SOURCE_SYSTEMS.map(x => `<option value="${x.id}" ${x.id === sys.id ? "selected" : ""}>${escapeHtml(x.name)}</option>`).join("")}</select>
