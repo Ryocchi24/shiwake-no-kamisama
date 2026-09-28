@@ -245,6 +245,23 @@
   body.method-off #panel, body.method-off .page-head .actions, body.method-off .mobile-capture, body.method-off #ocrBanner { display: none !important; }
   .method-soon h2 { font-size: 16px; margin: 0 0 6px; color: var(--text); }
   .method-soon { padding: 40px 20px; text-align: center; }
+  #importView[hidden], #companiesView[hidden] { display: none; }
+  .nav a[data-view].active { background: var(--sidebar-active); color: #fff; }
+  .mobile-nav { display: none; }
+  .company-select { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .company-select svg { width: 16px; height: 16px; color: var(--primary); }
+  .company-select select { font: inherit; font-size: 14px; font-weight: 500; color: var(--text); height: 36px; min-width: 220px; max-width: 100%;
+    border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; background: var(--surface); }
+  .company-add { margin-bottom: 16px; }
+  .company-add .add-row { padding: 14px 16px; }
+  .company-add .add-row input { height: 40px; font: inherit; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 12px; }
+  .panel-sub { color: var(--muted); font-size: 12.5px; }
+  #companiesView .company-list { padding: 6px 16px 12px; max-height: none; margin: 0; }
+  #companiesView .company-item { padding: 10px 0; border-bottom: 1px solid var(--line); gap: 10px; }
+  #companiesView .company-item:last-child { border-bottom: none; }
+  #companiesView .company-item input { height: 36px; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; }
+  .company-item .current-tag { font-size: 11px; color: var(--primary); background: var(--primary-soft); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  body.view-companies .mobile-capture { display: none !important; }
   .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
   .banner .btn { margin-left: auto; height: 32px; }
 
@@ -287,6 +304,11 @@
     .topbar .crumb { display: none; }
     .topbar .mobile-brand { display: flex; }
     .topbar-gear { color: #fff; }
+    .mobile-nav { display: flex; order: 3; width: 100%; background: rgba(255,255,255,.1); border-radius: 8px; padding: 3px; gap: 3px; }
+    .mobile-nav button { flex: 1; font: inherit; font-size: 14px; color: #cfd5de; background: none; border: none; border-radius: 6px; height: 34px; cursor: pointer; }
+    .mobile-nav button.active { background: #fff; color: var(--text); font-weight: 600; }
+    .company-select { display: flex; width: 100%; }
+    .company-select select { flex: 1; min-width: 0; font-size: 16px; }
     /* iPhoneは16px未満の入力欄をタップすると画面を拡大するため、スマホでは16pxにする */
     .dialog input, .dialog select, .field select { font-size: 16px; }
     /* iPhoneの時計・電池表示と重ならないよう、上に余白をとる（アプリ・ホーム画面から開いたとき） */
@@ -302,7 +324,7 @@
     .methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; overflow: visible; }
     .trial-bar { width: 100%; }
     .company-item { flex-wrap: wrap; row-gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-    .company-item .btn-sm { order: 3; flex-basis: 100%; justify-content: center; }
+    .company-item .btn-sm { order: 3; flex: 1 1 40%; justify-content: center; }
     .master-row.mapping { grid-template-columns: 1fr 88px 32px; row-gap: 0; }
     .master-row.mapping .muted.src-no { display: none; }
     .master-row.mapping > span:nth-of-type(3) { grid-column: 2 / 4; grid-row: 2; font-size: 11px; padding-left: 6px; }
@@ -364,9 +386,9 @@
     <div class="brand"><img class="brand-mark" src="apple-touch-icon.png" alt="">仕訳の神様</div>
     <nav class="nav">
       <div class="nav-label">仕訳</div>
-      <a href="#" class="active"><svg><use href="#i-receipt"/></svg>取り込み</a>
+      <a href="#" data-view="import"><svg><use href="#i-receipt"/></svg>取り込み</a>
       <div class="nav-label">マスタ</div>
-      <a href="#" class="open-companies"><svg><use href="#i-building"/></svg>会社</a>
+      <a href="#" data-view="companies"><svg><use href="#i-building"/></svg>会社</a>
       <div class="nav-label">保管</div>
       <a class="disabled"><svg><use href="#i-folder"/></svg>格納済み<span class="soon">準備中</span></a>
       <div class="nav-label">システム</div>
@@ -377,18 +399,22 @@
   <div class="main">
     <div class="topbar">
       <div class="brand mobile-brand" style="padding:0"><img class="brand-mark" src="apple-touch-icon.png" alt="">仕訳の神様</div>
-      <div class="company-wrap">
-        <button class="company-switch" id="companySwitch" aria-haspopup="true"><svg><use href="#i-building"/></svg><span id="companyName">会社を選択</span><span class="caret">▾</span></button>
-        <div class="company-menu" id="companyMenu" hidden></div>
-      </div>
-      <div class="crumb">仕訳 / <b>取り込み</b></div>
+      <nav class="mobile-nav" aria-label="画面の切り替え">
+        <button data-view="import">取り込み</button>
+        <button data-view="companies">会社</button>
+      </nav>
+      <div class="crumb" id="crumb">仕訳 / <b>取り込み</b></div>
       <button class="icon-btn topbar-gear open-settings" title="設定"><svg><use href="#i-gear"/></svg></button>
     </div>
 
     <div class="content">
+     <section id="importView">
       <div class="page-head">
         <div>
-          <h1>取り込み<span class="company-chip" id="headCompany"></span></h1>
+          <h1>取り込み</h1>
+          <label class="company-select"><svg><use href="#i-building"/></svg><span>会社</span>
+            <select id="companySelect" aria-label="会社"></select>
+          </label>
         </div>
         <div class="actions">
           <label class="btn"><svg><use href="#i-upload"/></svg><span class="pick-label">画像をアップロード</span><input class="file-picker" type="file" accept="image/*" multiple></label>
@@ -429,6 +455,28 @@
         </div>
         <div id="list"></div>
       </div>
+     </section>
+
+     <!-- 会社の画面 -->
+     <section id="companiesView" hidden>
+      <div class="page-head">
+        <div>
+          <h1>会社</h1>
+          <p>会社ごとに、仕訳と「科目マスタ・対応表」を分けて管理します。</p>
+        </div>
+      </div>
+      <div class="panel company-add">
+        <div class="panel-head"><span class="panel-title">会社を追加</span></div>
+        <div class="add-row">
+          <input id="newCompany" type="text" placeholder="例: 株式会社サンプル" autocomplete="off">
+          <button class="btn btn-primary" id="addCompany">追加</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">会社一覧</span><span class="panel-sub" id="companyCount"></span></div>
+        <div class="company-list" id="companyList"></div>
+      </div>
+     </section>
     </div>
   </div>
 </div>
@@ -484,20 +532,6 @@
   </div>
 </div>
 <datalist id="masterCodes"></datalist>
-
-<!-- 会社の管理 -->
-<div class="dialog-back" id="companies" hidden>
-  <div class="dialog">
-    <h2>会社</h2>
-    <div class="company-list" id="companyList"></div>
-    <label class="dlg-label" for="newCompany">会社を追加</label>
-    <div class="add-row">
-      <input id="newCompany" type="text" placeholder="例: 株式会社サンプル" autocomplete="off">
-      <button class="btn btn-primary" id="addCompany">追加</button>
-    </div>
-    <div class="dlg-actions" style="margin-top:18px"><span style="flex:1"></span><button class="btn" id="companiesClose">閉じる</button></div>
-  </div>
-</div>
 
 <!-- 仕訳を別の会社へ移動 -->
 <div class="dialog-back" id="moveDlg" hidden>
@@ -1899,14 +1933,10 @@ document.getElementById("trialClear").onclick = () => {
 const masterDlg = document.getElementById("masterDlg");
 let masterTab = "master";
 let masterCid = null; // 科目マスタ・対応表を開いている会社
-let backToCompanies = false; // 会社の画面から開いたときは、閉じたら会社の画面に戻る
 function openMaster(cid = currentCompanyId) {
   const company = companies.find(c => c.id === cid);
   if (!company) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
   masterCid = cid;
-  const companiesEl = document.getElementById("companies");
-  backToCompanies = !companiesEl.hidden;
-  companiesEl.hidden = true;
   document.getElementById("masterCompany").textContent = company.name;
   document.getElementById("masterSearch").value = "";
   renderMaster();
@@ -1953,8 +1983,8 @@ document.getElementById("masterTabs").onclick = e => {
 };
 document.getElementById("masterSearch").oninput = renderMaster;
 document.getElementById("masterClose").onclick = () => {
-  masterDlg.hidden = true; renderMasterCodes(); render();
-  if (backToCompanies) openCompanies();
+  masterDlg.hidden = true; renderMasterCodes();
+  if (currentView === "companies") renderCompanyList(); else render();
 };
 document.getElementById("masterAdd").onclick = () => {
   if (masterTab === "master") { masterOf(masterCid).unshift({ code: "", name: "" }); document.getElementById("masterSearch").value = ""; }
@@ -2045,52 +2075,61 @@ document.getElementById("masterExport").onclick = async () => {
   await saveFile(new Blob([bytes], { type: "text/csv" }), `${company}_${masterTab === "master" ? "科目マスタ" : "対応表"}.csv`);
 };
 
-// ---- 会社の切り替え・管理 ----
-const companyMenu = document.getElementById("companyMenu");
+// ---- 画面の切り替え（取り込み／会社） ----
+let currentView = "import";
+function showView(view) {
+  currentView = view;
+  document.getElementById("importView").hidden = view !== "import";
+  document.getElementById("companiesView").hidden = view !== "companies";
+  document.body.classList.toggle("view-companies", view === "companies");
+  for (const el of document.querySelectorAll("[data-view]")) el.classList.toggle("active", el.dataset.view === view);
+  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : "マスタ / <b>会社</b>";
+  if (view === "companies") renderCompanyList(); else render();
+  scrollTo(0, 0);
+}
+document.addEventListener("click", e => {
+  const v = e.target.closest("[data-view]");
+  if (v) { e.preventDefault(); showView(v.dataset.view); }
+});
+
+// ---- 会社の選択（取り込みの画面） ----
 function renderCompany() {
-  const c = currentCompany();
-  document.getElementById("companyName").textContent = c ? c.name : "会社を選択";
-  document.getElementById("headCompany").textContent = c ? c.name : "";
+  const sel = document.getElementById("companySelect");
+  sel.innerHTML = (companies.length ? "" : `<option value="">会社が登録されていません</option>`)
+    + companies.map(c => `<option value="${c.id}" ${c.id === currentCompanyId ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")
+    + `<option value="__add">＋ 会社を追加…</option>`;
 }
 function switchCompany(id) {
   currentCompanyId = id;
   saveCompanies();
   render();
 }
-document.getElementById("companySwitch").onclick = e => {
-  e.stopPropagation();
-  if (!companyMenu.hidden) { companyMenu.hidden = true; return; }
-  companyMenu.innerHTML = companies.map(c => `<button class="menu-item" data-company="${c.id}">
-      <span class="check">${c.id === currentCompanyId ? "✓" : ""}</span>${escapeHtml(c.name)}<span class="cnt">${countFor(c.id)}件</span></button>`).join("")
-    + (companies.length ? `<div class="menu-sep"></div>` : "")
-    + `<button class="menu-item sub" data-manage="1"><span class="check">＋</span>会社を追加・編集</button>`;
-  companyMenu.hidden = false;
-};
-companyMenu.onclick = e => {
-  const t = e.target.closest("[data-company], [data-manage]");
-  if (!t) return;
-  companyMenu.hidden = true;
-  if (t.dataset.company) switchCompany(t.dataset.company);
-  else openCompanies();
-};
-document.addEventListener("click", e => { if (!e.target.closest(".company-wrap")) companyMenu.hidden = true; });
+document.getElementById("companySelect").addEventListener("change", e => {
+  if (e.target.value === "__add") { openCompanies(); return; }
+  if (e.target.value) switchCompany(e.target.value);
+});
 
-const companiesDlg = document.getElementById("companies");
-function openCompanies() { renderCompanyList(); companiesDlg.hidden = false; }
+// ---- 会社の画面 ----
+function openCompanies() {
+  showView("companies");
+  setTimeout(() => document.getElementById("newCompany").focus(), 50);
+}
 function renderCompanyList() {
   const listEl = document.getElementById("companyList");
+  document.getElementById("companyCount").textContent = companies.length ? `${companies.length}社` : "";
   listEl.innerHTML = companies.length ? companies.map(c => `<div class="company-item">
       <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
+      ${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}
       <span class="cnt">${countFor(c.id)}件</span>
       <button class="btn btn-sm open-master" data-cid="${c.id}">科目マスタ・対応表</button>
+      <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
       <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
-    </div>`).join("") : `<div class="company-empty">まだ会社が登録されていません。</div>`;
+    </div>`).join("") : `<div class="company-empty">まだ会社が登録されていません。上の「会社を追加」から登録してください。</div>`;
 }
 document.addEventListener("click", e => {
   const t = e.target.closest(".open-companies");
   if (t) { e.preventDefault(); openCompanies(); }
 });
-document.getElementById("companiesClose").onclick = () => { companiesDlg.hidden = true; render(); };
 document.getElementById("addCompany").onclick = () => {
   const input = document.getElementById("newCompany");
   const name = input.value.trim();
@@ -2102,6 +2141,7 @@ document.getElementById("addCompany").onclick = () => {
   input.value = "";
   renderCompanyList();
   render();
+  showToast(`「${name}」を追加しました`);
 };
 // 日本語入力の変換確定の Enter では追加しない
 document.getElementById("newCompany").addEventListener("keydown", e => {
@@ -2115,6 +2155,8 @@ document.getElementById("companyList").addEventListener("change", e => {
   if (name) { c.name = name; saveCompanies(); render(); } else e.target.value = c.name;
 });
 document.getElementById("companyList").addEventListener("click", e => {
+  const use = e.target.closest("[data-use]");
+  if (use) { switchCompany(use.dataset.use); showView("import"); return; }
   const t = e.target.closest("[data-remove]");
   if (!t) return;
   const c = companies.find(x => x.id === t.dataset.remove);
@@ -2124,7 +2166,7 @@ document.getElementById("companyList").addEventListener("click", e => {
   companies = companies.filter(x => x !== c);
   if (currentCompanyId === c.id) currentCompanyId = companies[0]?.id || null;
   saveCompanies(); save();
-  renderCompanyList(); render(); pruneImages();
+  renderCompanyList(); renderCompany(); pruneImages();
 });
 
 const moveDlg = document.getElementById("moveDlg");
@@ -2306,6 +2348,7 @@ pruneImages();
 render();
 updateMode();
 renderMasterCodes();
+showView("import");
 </script>
 </body>
 </html>
