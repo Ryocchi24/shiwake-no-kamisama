@@ -152,6 +152,7 @@
   .company-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; max-height: 50vh; overflow: auto; }
   .company-item { display: flex; align-items: center; gap: 8px; }
   .company-item input { flex: 1; }
+  .company-item .btn-sm { white-space: nowrap; }
   .company-item .cnt { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .company-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
   .add-row { display: flex; gap: 8px; }
@@ -298,6 +299,8 @@
     .page-head .actions { display: none; }
     .methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; overflow: visible; }
     .trial-bar { width: 100%; }
+    .company-item { flex-wrap: wrap; row-gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+    .company-item .btn-sm { order: 3; flex-basis: 100%; justify-content: center; }
     .master-row.mapping { grid-template-columns: 1fr 88px 32px; row-gap: 0; }
     .master-row.mapping .muted.src-no { display: none; }
     .master-row.mapping > span:nth-of-type(3) { grid-column: 2 / 4; grid-row: 2; font-size: 11px; padding-left: 6px; }
@@ -362,7 +365,6 @@
       <a href="#" class="active"><svg><use href="#i-receipt"/></svg>取り込み</a>
       <div class="nav-label">マスタ</div>
       <a href="#" class="open-companies"><svg><use href="#i-building"/></svg>会社</a>
-      <a href="#" class="open-master"><svg><use href="#i-list"/></svg>勘定科目</a>
       <div class="nav-label">保管</div>
       <a class="disabled"><svg><use href="#i-folder"/></svg>格納済み<span class="soon">準備中</span></a>
       <div class="nav-label">システム</div>
@@ -418,7 +420,6 @@
           <div class="trial-bar" id="trialBar" hidden>
             <span class="trial-balance" id="trialBalance"></span>
             <label class="field">伝票日付<input type="date" id="trialDate"></label>
-            <button class="btn btn-sm open-master">科目マスタ・対応表</button>
             <button class="btn btn-sm btn-ghost" id="trialClear">一覧を空にする</button>
           </div>
           <span class="spacer"></span>
@@ -1155,8 +1156,7 @@ function render() {
   if (!items.length) {
     list.innerHTML = currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
-      <b>まだ試算表がありません</b>「画像を選ぶ」から試算表のPDFか画像を選ぶか、「撮影する」で試算表を撮ってください。<br>
-      科目マスタ: ${masterOf().length}科目 ／ 対応表: ${Object.keys(mappingOf()).length}件 <button class="btn btn-sm open-master">確認・登録する</button></div>`
+      <b>まだ試算表がありません</b>「画像を選ぶ」から試算表のPDFか画像を選ぶか、「撮影する」で試算表を撮ってください。</div>`
       : `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
       <b>まだレシートがありません</b>「撮影する」でレシートを撮ると、ここに読み取った内容が並びます。</div>`;
     return;
@@ -1537,7 +1537,7 @@ const masterOf = (cid = currentCompanyId) => {
   return masters[cid];
 };
 const mappingOf = (cid = currentCompanyId) => (mappings[cid] ||= {});
-const masterName = code => masterOf().find(m => m.code === String(code))?.name || "";
+const masterName = (code, cid = currentCompanyId) => masterOf(cid).find(m => m.code === String(code))?.name || "";
 const normName = s => String(s || "").normalize("NFKC").replace(/[\s・（）()【】［］\[\]〔〕%％]/g, "").replace(/銀行/g, "銀");
 // 元の科目を識別するキー（番号があれば番号、なければ科目名）
 const srcKeyOf = (srcCode, srcName) => srcCode ? `no:${srcCode}` : `name:${normName(srcName)}`;
@@ -1704,7 +1704,7 @@ async function importTrial(files) {
 // 試算表の行: 元の科目の対応を決めたら、同じ科目の行すべてに反映し、対応表に覚える
 function applyMapping(row, code) {
   if (!row.srcKey) return;
-  const map = mappingOf();
+  const map = mappingOf(row.companyId);
   if (code) map[row.srcKey] = { code, srcName: row.srcName, srcCode: row.srcCode };
   else delete map[row.srcKey];
   for (const r of rows) {
@@ -1745,9 +1745,16 @@ document.getElementById("trialClear").onclick = () => {
 // ---- 科目マスタ・対応表の画面 ----
 const masterDlg = document.getElementById("masterDlg");
 let masterTab = "master";
-function openMaster() {
-  if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
-  document.getElementById("masterCompany").textContent = currentCompany().name;
+let masterCid = null; // 科目マスタ・対応表を開いている会社
+let backToCompanies = false; // 会社の画面から開いたときは、閉じたら会社の画面に戻る
+function openMaster(cid = currentCompanyId) {
+  const company = companies.find(c => c.id === cid);
+  if (!company) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
+  masterCid = cid;
+  const companiesEl = document.getElementById("companies");
+  backToCompanies = !companiesEl.hidden;
+  companiesEl.hidden = true;
+  document.getElementById("masterCompany").textContent = company.name;
   document.getElementById("masterSearch").value = "";
   renderMaster();
   masterDlg.hidden = false;
@@ -1761,23 +1768,23 @@ function renderMaster() {
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
-    document.getElementById("masterHelp").textContent = `この会社のミロクの科目コードと科目名です（${masterOf().length}科目）。標準のマスタが最初から入っています。銀行口座など、この会社だけ違う科目はここで直してください。`;
-    const items = masterOf().map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q));
+    document.getElementById("masterHelp").textContent = `この会社のミロクの科目コードと科目名です（${masterOf(masterCid).length}科目）。標準のマスタが最初から入っています。銀行口座など、この会社だけ違う科目はここで直してください。`;
+    const items = masterOf(masterCid).map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q));
     listEl.innerHTML = items.length ? items.map(m => `<div class="master-row">
         <input value="${escapeHtml(m.code)}" data-mi="${m.i}" data-mk="code" inputmode="numeric" aria-label="コード">
         <input value="${escapeHtml(m.name)}" data-mi="${m.i}" data-mk="name" aria-label="科目名">
         <button class="icon-btn" data-mdel="${m.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
       : `<div class="master-empty">科目が登録されていません。「CSVを読み込む」でまとめて登録できます。</div>`;
   } else {
-    const map = mappingOf();
-    const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code)).includes(q))
+    const map = mappingOf(masterCid);
+    const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code, masterCid)).includes(q))
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
     document.getElementById("masterHelp").textContent = `この会社の試算表の科目を、どのミロクのコードに変換するかの一覧です（${Object.keys(map).length}件）。登録がない科目は科目名から自動で推測し、試算表の画面でコードを直すと、ここに覚えます。`;
     listEl.innerHTML = entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
         <input value="${escapeHtml(v.code)}" data-mapkey="${escapeHtml(k)}" list="masterCodes" inputmode="numeric" aria-label="ミロクのコード">
-        <span class="muted">${escapeHtml(masterName(v.code) || "（マスタにない）")}</span>
+        <span class="muted">${escapeHtml(masterName(v.code, masterCid) || "（マスタにない）")}</span>
         <button class="icon-btn" data-mapdel="${escapeHtml(k)}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
       : `<div class="master-empty">まだ対応が登録されていません。試算表を読み込んでコードを選ぶか、CSV（元の番号,元の科目名,ミロクコード）を読み込んでください。</div>`;
   }
@@ -1785,20 +1792,23 @@ function renderMaster() {
 }
 document.addEventListener("click", e => {
   const t = e.target.closest(".open-master");
-  if (t) { e.preventDefault(); openMaster(); }
+  if (t) { e.preventDefault(); openMaster(t.dataset.cid || currentCompanyId); }
 });
 document.getElementById("masterTabs").onclick = e => {
   const b = e.target.closest("[data-mtab]"); if (!b) return;
   masterTab = b.dataset.mtab; renderMaster();
 };
 document.getElementById("masterSearch").oninput = renderMaster;
-document.getElementById("masterClose").onclick = () => { masterDlg.hidden = true; render(); };
+document.getElementById("masterClose").onclick = () => {
+  masterDlg.hidden = true; renderMasterCodes(); render();
+  if (backToCompanies) openCompanies();
+};
 document.getElementById("masterAdd").onclick = () => {
-  if (masterTab === "master") { masterOf().unshift({ code: "", name: "" }); document.getElementById("masterSearch").value = ""; }
+  if (masterTab === "master") { masterOf(masterCid).unshift({ code: "", name: "" }); document.getElementById("masterSearch").value = ""; }
   else {
     const name = prompt("元の科目名（試算表に書かれている名前）"); if (!name) return;
     const no = prompt("元の科目番号（なければ空欄）") || "";
-    mappingOf()[srcKeyOf(no.trim(), name.trim())] = { code: "", srcName: name.trim(), srcCode: no.trim() };
+    mappingOf(masterCid)[srcKeyOf(no.trim(), name.trim())] = { code: "", srcName: name.trim(), srcCode: no.trim() };
   }
   saveMasters(); renderMaster();
   masterDlg.querySelector(".master-list input")?.focus();
@@ -1806,31 +1816,31 @@ document.getElementById("masterAdd").onclick = () => {
 document.getElementById("masterReset").onclick = () => {
   if (masterTab === "master") {
     if (!confirm("この会社の科目マスタを、標準のマスタに戻しますか？（この会社で直した内容は消えます）")) return;
-    masters[currentCompanyId] = DEFAULT_MASTER.map(m => ({ ...m }));
+    masters[masterCid] = DEFAULT_MASTER.map(m => ({ ...m }));
   } else {
     if (!confirm("この会社の対応表をすべて消しますか？（次に試算表を読み込むと、科目名から推測し直します）")) return;
-    mappings[currentCompanyId] = {};
+    mappings[masterCid] = {};
   }
   saveMasters(); renderMaster();
 };
 document.getElementById("masterList").addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.mi !== undefined) {
-    const m = masterOf()[Number(t.dataset.mi)];
+    const m = masterOf(masterCid)[Number(t.dataset.mi)];
     if (m) m[t.dataset.mk] = t.value.trim();
     saveMasters(); renderMasterCodes();
   } else if (t.dataset.mapkey) {
-    const v = mappingOf()[t.dataset.mapkey];
+    const v = mappingOf(masterCid)[t.dataset.mapkey];
     if (!v) return;
     const code = (t.value.match(/^\s*(\d+)/) || [])[1] || "";
-    applyMapping({ srcKey: t.dataset.mapkey, srcName: v.srcName, srcCode: v.srcCode, companyId: currentCompanyId }, code);
+    applyMapping({ srcKey: t.dataset.mapkey, srcName: v.srcName, srcCode: v.srcCode, companyId: masterCid }, code);
     renderMaster();
   }
 });
 document.getElementById("masterList").addEventListener("click", e => {
   const del = e.target.closest("[data-mdel], [data-mapdel]"); if (!del) return;
-  if (del.dataset.mdel !== undefined) { masterOf().splice(Number(del.dataset.mdel), 1); }
-  else { delete mappingOf()[del.dataset.mapdel]; }
+  if (del.dataset.mdel !== undefined) { masterOf(masterCid).splice(Number(del.dataset.mdel), 1); }
+  else { delete mappingOf(masterCid)[del.dataset.mapdel]; }
   saveMasters(); renderMaster();
 });
 
@@ -1858,15 +1868,15 @@ document.getElementById("masterImport").addEventListener("change", async e => {
   if (masterTab === "master") {
     const items = table.filter(c => /^\d+$/.test(c[0]) && c[1]).map(c => ({ code: c[0], name: c[1] }));
     if (!items.length) { alert("「コード,科目名」の行が見つかりませんでした。"); return; }
-    const replace = masterOf().length && confirm(`${items.length}科目を読み込みます。\n今のマスタ（${masterOf().length}科目）を置き換えますか？\n［キャンセル］を押すと、今のマスタに追加・上書きします。`);
-    if (replace) masters[currentCompanyId] = items;
-    else for (const it of items) { const ex = masterOf().find(m => m.code === it.code); if (ex) ex.name = it.name; else masterOf().push(it); }
+    const replace = masterOf(masterCid).length && confirm(`${items.length}科目を読み込みます。\n今のマスタ（${masterOf(masterCid).length}科目）を置き換えますか？\n［キャンセル］を押すと、今のマスタに追加・上書きします。`);
+    if (replace) masters[masterCid] = items;
+    else for (const it of items) { const ex = masterOf(masterCid).find(m => m.code === it.code); if (ex) ex.name = it.name; else masterOf(masterCid).push(it); }
     showToast(`${items.length}科目を読み込みました`);
   } else {
     // 「元の番号,元の科目名,ミロクコード」
     const items = table.filter(c => c[1] && /^\d+$/.test(c[2] || "")).map(c => ({ srcCode: /^\d+$/.test(c[0]) ? c[0] : "", srcName: c[1], code: c[2] }));
     if (!items.length) { alert("「元の番号,元の科目名,ミロクコード」の行が見つかりませんでした。"); return; }
-    for (const it of items) mappingOf()[srcKeyOf(it.srcCode, it.srcName)] = it;
+    for (const it of items) mappingOf(masterCid)[srcKeyOf(it.srcCode, it.srcName)] = it;
     showToast(`${items.length}件の対応を読み込みました`);
   }
   saveMasters(); renderMaster();
@@ -1874,11 +1884,11 @@ document.getElementById("masterImport").addEventListener("change", async e => {
 document.getElementById("masterExport").onclick = async () => {
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   const lines = masterTab === "master"
-    ? [["コード", "科目名"], ...masterOf().map(m => [m.code, m.name])]
-    : [["元の番号", "元の科目名", "ミロクコード", "ミロク科目名"], ...Object.values(mappingOf()).map(v => [v.srcCode, v.srcName, v.code, masterName(v.code)])];
+    ? [["コード", "科目名"], ...masterOf(masterCid).map(m => [m.code, m.name])]
+    : [["元の番号", "元の科目名", "ミロクコード", "ミロク科目名"], ...Object.values(mappingOf(masterCid)).map(v => [v.srcCode, v.srcName, v.code, masterName(v.code, masterCid)])];
   const csv = lines.map(l => l.map(cell).join(",")).join("\r\n") + "\r\n";
   const bytes = new Uint8Array(Encoding.convert(Encoding.stringToCode(csv), { to: "SJIS", from: "UNICODE" }));
-  const company = (currentCompany()?.name || "会社").replace(/[\\/:*?"<>|]/g, "_");
+  const company = (companies.find(c => c.id === masterCid)?.name || "会社").replace(/[\\/:*?"<>|]/g, "_");
   await saveFile(new Blob([bytes], { type: "text/csv" }), `${company}_${masterTab === "master" ? "科目マスタ" : "対応表"}.csv`);
 };
 
@@ -1919,6 +1929,7 @@ function renderCompanyList() {
   listEl.innerHTML = companies.length ? companies.map(c => `<div class="company-item">
       <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
       <span class="cnt">${countFor(c.id)}件</span>
+      <button class="btn btn-sm open-master" data-cid="${c.id}">科目マスタ・対応表</button>
       <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
     </div>`).join("") : `<div class="company-empty">まだ会社が登録されていません。</div>`;
 }
