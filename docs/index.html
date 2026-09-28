@@ -418,6 +418,15 @@
   .method-tag.t-format2 { color: #9a6200; background: #fff4d9; }
   .method-tag.t-format3 { color: var(--primary); background: var(--primary-soft); }
   #addDlg[hidden] { display: none; }
+  .dlg-note { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .file-rows { display: flex; flex-direction: column; gap: 8px; }
+  .file-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 14px; cursor: pointer; }
+  .file-row[hidden], #masterImportBtn[hidden] { display: none; }
+  .file-row-name { font-size: 14px; font-weight: 600; }
+  .file-row-status { margin-left: auto; font-size: 13px; color: var(--muted); }
+  .file-row-status.ok { color: var(--ok); font-weight: 600; }
+  .file-row-status.ng { color: var(--err); }
+  .file-row .btn { pointer-events: none; }
   #addDlg .type-pick { display: flex; }
   #addDlg .type-pick button { flex: 1; }
   #addDlg select { width: 100%; height: 40px; font: inherit; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; background: var(--surface); }
@@ -767,15 +776,15 @@
     <p class="dlg-help" id="masterHelp"></p>
     <div class="master-tools">
       <button class="btn btn-sm" id="masterAdd">＋ 追加</button>
+      <label class="btn btn-sm" id="masterImportBtn">ファイルから読み込む<input type="file" id="masterImport" accept=".csv,.xlsx,.xlsm,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
       <button class="btn btn-sm btn-ghost" id="masterReset">標準に戻す</button>
       <input type="search" id="masterSearch" placeholder="コード・科目名で絞り込み">
     </div>
     <div class="master-list" id="masterList"></div>
     <!-- 普段は使わないので折りたたむ（別の会社のマスタをまとめて登録する・別の端末に移すとき用） -->
     <details class="master-csv" id="masterCsv">
-      <summary>CSV</summary>
+      <summary>書き出し</summary>
       <div class="master-csv-body">
-        <label class="btn btn-sm">CSVを読み込む<input type="file" id="masterImport" accept=".csv,text/csv,text/plain" hidden></label>
         <button class="btn btn-sm" id="masterExport">CSVに書き出す</button>
       </div>
     </details>
@@ -799,6 +808,11 @@
     <div id="newSystemWrap" hidden>
       <label class="dlg-label" for="newCompanySystem" style="margin-top:16px">元の会計ソフト</label>
       <select id="newCompanySystem"></select>
+    </div>
+    <div class="dlg-label" style="margin-top:16px">マスタのファイル <span class="dlg-note">CSV・Excel（あとからでも読み込めます）</span></div>
+    <div class="file-rows">
+      <label class="file-row"><span class="file-row-name">ミロク科目マスタ</span><span class="file-row-status" id="newMasterStatus">未選択</span><span class="btn btn-sm">選ぶ</span><input type="file" id="newMasterFile" accept=".csv,.xlsx,.xlsm,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
+      <label class="file-row" id="newSourceRow" hidden><span class="file-row-name">別会計ソフトの科目</span><span class="file-row-status" id="newSourceStatus">未選択</span><span class="btn btn-sm">選ぶ</span><input type="file" id="newSourceFile" accept=".csv,.xlsx,.xlsm,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
     </div>
     <div class="dlg-actions" style="margin-top:22px"><span style="flex:1"></span>
       <button class="btn" id="addClose">キャンセル</button>
@@ -2024,9 +2038,9 @@ function nameSimilarity(a, b) {
   for (const ch of a) { const i = B.findIndex((c, k) => !used[k] && c === ch); if (i >= 0) { used[i] = true; hit++; } }
   return (2 * hit) / (a.length + B.length || 1);
 }
-function suggestCode(srcName) {
+function suggestCode(srcName, cid = currentCompanyId) {
   const n = normName(srcName);
-  const list = masterOf().map(m => ({ ...m, n: normName(m.name) }));
+  const list = masterOf(cid).map(m => ({ ...m, n: normName(m.name) }));
   const exact = list.filter(m => m.n === n);
   if (exact.length === 1) return exact[0].code;          // 同じ名前が2つある科目（製造原価と販管費など）は推測しない
   if (exact.length > 1) return "";
@@ -2149,6 +2163,72 @@ async function sheetToRows(file) {
   // すべてのシートを上から順に（試算表が複数シートに分かれている場合も読む）
   return wb.SheetNames.flatMap(name => XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: "" })
     .map(row => row.map(v => String(v ?? "").trim())));
+}
+
+// ---- 会社ごとのマスタのファイル（CSV・Excel）を読む ----
+async function readTableFile(file) {
+  return /\.(xlsx|xlsm|xls)$/i.test(file.name) ? sheetToRows(file) : readCsvFile(file);
+}
+const isCodeCell = v => /^\d{1,8}$/.test(String(v).trim());
+// 見出しの行から列を探す（例:「コード」「科目名」）。見つからなければ -1
+function findHeader(rows, tests) {
+  for (let i = 0; i < Math.min(rows.length, 30); i++) {
+    // 同じ列を2回使わない（「科目コード」は「コード」にも「科目」にも当てはまるため）
+    const cols = [];
+    for (const re of tests) cols.push(rows[i].findIndex((c, k) => !cols.includes(k) && re.test(String(c))));
+    if (cols.every(c => c >= 0)) return { row: i, cols };
+  }
+  return null;
+}
+// 見出しがないとき: 「数字の列」と「その右の文字の列」が一番多く並んでいる位置を使う
+function guessCodeName(rows) {
+  const count = {};
+  for (const r of rows) for (let i = 0; i + 1 < r.length; i++) if (isCodeCell(r[i]) && r[i + 1] && !isCodeCell(r[i + 1])) count[i] = (count[i] || 0) + 1;
+  const best = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
+  return best ? Number(best[0]) : -1;
+}
+// ミロク科目マスタ: [{ code, name }]
+function parseMasterRows(rows) {
+  const h = findHeader(rows, [/コード|ｺｰﾄﾞ|code/i, /科目名|名称|name/i]) || findHeader(rows, [/コード|ｺｰﾄﾞ|code/i, /科目/]);
+  let at, from = 0, cc, nc;
+  if (h) { [cc, nc] = h.cols; from = h.row + 1; }
+  else { at = guessCodeName(rows); if (at < 0) return []; cc = at; nc = at + 1; }
+  const seen = new Set(), out = [];
+  for (const r of rows.slice(from)) {
+    const code = String(r[cc] ?? "").trim(), name = String(r[nc] ?? "").trim();
+    if (!isCodeCell(code) || !name || seen.has(code)) continue;
+    seen.add(code); out.push({ code, name });
+  }
+  return out;
+}
+// 別会計ソフトの科目: [{ srcCode, srcName, code }]。ミロクのコードの列がなければ code は空（あとで科目名から推測する）
+function parseSourceRows(rows) {
+  const h3 = findHeader(rows, [/(元|別|旧).*(コード|番号)|^(コード|番号|科目コード)$/, /(元|別|旧)?.*科目名?$|名称/, /ミロク/]);
+  if (h3) {
+    const [sc, nc, mc] = h3.cols;
+    return rows.slice(h3.row + 1).map(r => ({ srcCode: isCodeCell(r[sc]) ? String(r[sc]).trim() : "", srcName: String(r[nc] ?? "").trim(), code: isCodeCell(r[mc]) ? String(r[mc]).trim() : "" }))
+      .filter(x => x.srcName);
+  }
+  // 見出しなし: 「番号, 科目名, ミロクコード」または「番号, 科目名」
+  const at = guessCodeName(rows);
+  if (at < 0) return [];
+  return rows.filter(r => isCodeCell(r[at]) && r[at + 1] && !isCodeCell(r[at + 1]))
+    .map(r => ({ srcCode: String(r[at]).trim(), srcName: String(r[at + 1]).trim(), code: isCodeCell(r[at + 2] ?? "") ? String(r[at + 2]).trim() : "" }));
+}
+// 会社にマスタを入れる（置き換え）
+function setCompanyMaster(cid, items) { masters[cid] = items.map(m => ({ ...m })); saveMasters(); }
+// 会社に別会計ソフトの対応を入れる。ミロクのコードがない科目は、その会社の科目マスタの科目名から推測する
+function setCompanySource(cid, items, replace) {
+  if (replace) mappings[cid] = {};
+  const map = mappingOf(cid);
+  let guessed = 0;
+  for (const it of items) {
+    const code = it.code || suggestCode(it.srcName, cid);
+    if (!it.code && code) guessed++;
+    map[srcKeyOf(it.srcCode, it.srcName)] = { code, srcName: it.srcName, srcCode: it.srcCode };
+  }
+  saveMasters();
+  return { total: items.length, guessed, unset: items.filter(it => !map[srcKeyOf(it.srcCode, it.srcName)].code).length };
 }
 
 // 見出しの行（「借方」「貸方」を含む行）から列の位置を決めて読む。見つからなければ表の読み取りと同じ方法で読む
@@ -2346,6 +2426,7 @@ function renderMaster() {
   for (const b of document.querySelectorAll("[data-mtab]")) b.classList.toggle("active", b.dataset.mtab === masterTab);
   document.getElementById("masterReset").textContent = masterTab === "master" ? "標準に戻す" : "すべて消す";
   document.getElementById("masterCsv").hidden = masterTab === "receipt";
+  document.getElementById("masterImportBtn").hidden = masterTab === "receipt";
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
@@ -2379,7 +2460,7 @@ function renderMaster() {
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
     const sys = systemOf(masterCid);
     document.getElementById("masterHelp").textContent = "試算表を読むとき、別の会計ソフトの科目をミロクのどのコードにするか";
-    listEl.innerHTML = `<div class="rc-head">${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）とちがう、この会社だけの読み替え</div>`
+    listEl.innerHTML = `<div class="rc-head">この会社の対応（${Object.keys(map).length}件）${sys.mapping.length ? `。ここにない科目は${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）を使います` : ""}</div>`
       + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
@@ -2486,22 +2567,22 @@ async function readCsvFile(file) {
 document.getElementById("masterImport").addEventListener("change", async e => {
   const file = e.target.files[0]; e.target.value = "";
   if (!file) return;
-  const table = await readCsvFile(file);
+  const table = await readTableFile(file);
   if (masterTab === "master") {
-    const items = table.filter(c => /^\d+$/.test(c[0]) && c[1]).map(c => ({ code: c[0], name: c[1] }));
-    if (!items.length) { alert("「コード,科目名」の行が見つかりませんでした。"); return; }
-    const replace = masterOf(masterCid).length && confirm(`${items.length}科目を読み込みます。\n今のマスタ（${masterOf(masterCid).length}科目）を置き換えますか？\n［キャンセル］を押すと、今のマスタに追加・上書きします。`);
-    if (replace) masters[masterCid] = items;
-    else for (const it of items) { const ex = masterOf(masterCid).find(m => m.code === it.code); if (ex) ex.name = it.name; else masterOf(masterCid).push(it); }
+    const items = parseMasterRows(table);
+    if (!items.length) { alert("コードと科目名の列が見つかりませんでした。"); return; }
+    const replace = confirm(`${items.length}科目を読み込みます。\n今のマスタ（${masterOf(masterCid).length}科目）を置き換えますか？\n［キャンセル］を押すと、今のマスタに追加・上書きします。`);
+    if (replace) setCompanyMaster(masterCid, items);
+    else { for (const it of items) { const ex = masterOf(masterCid).find(m => m.code === it.code); if (ex) ex.name = it.name; else masterOf(masterCid).push(it); } saveMasters(); }
     showToast(`${items.length}科目を読み込みました`);
   } else {
-    // 「元の番号,元の科目名,ミロクコード」
-    const items = table.filter(c => c[1] && /^\d+$/.test(c[2] || "")).map(c => ({ srcCode: /^\d+$/.test(c[0]) ? c[0] : "", srcName: c[1], code: c[2] }));
-    if (!items.length) { alert("「元の番号,元の科目名,ミロクコード」の行が見つかりませんでした。"); return; }
-    for (const it of items) mappingOf(masterCid)[srcKeyOf(it.srcCode, it.srcName)] = it;
-    showToast(`${items.length}件の対応を読み込みました`);
+    const items = parseSourceRows(table);
+    if (!items.length) { alert("別会計ソフトのコードと科目名の列が見つかりませんでした。"); return; }
+    const replace = Object.keys(mappingOf(masterCid)).length ? confirm(`${items.length}科目を読み込みます。\n今の対応表を置き換えますか？\n［キャンセル］を押すと、今の対応表に追加・上書きします。`) : true;
+    const res = setCompanySource(masterCid, items, replace);
+    showToast(`${res.total}科目を読み込みました` + (res.unset ? `（ミロクのコード未設定 ${res.unset}件）` : ""));
   }
-  saveMasters(); renderMaster();
+  renderMaster(); renderMasterCodes();
 });
 document.getElementById("masterExport").onclick = async () => {
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
@@ -2724,14 +2805,31 @@ const addDlg = document.getElementById("addDlg");
 const newSystemSel = document.getElementById("newCompanySystem");
 newSystemSel.innerHTML = `<option value="">選んでください</option>` + SOURCE_SYSTEMS.map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join("");
 const newType = () => document.querySelector("#newCompanyType .active")?.dataset.type || "";
+let newMasterItems = null, newSourceItems = null;
+function setFileStatus(id, text, ok) { const el = document.getElementById(id); el.textContent = text; el.classList.toggle("ok", !!ok); el.classList.toggle("ng", ok === false); }
+document.getElementById("newMasterFile").addEventListener("change", async e => {
+  const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+  newMasterItems = parseMasterRows(await readTableFile(file));
+  if (!newMasterItems.length) { newMasterItems = null; setFileStatus("newMasterStatus", "読み取れませんでした", false); }
+  else setFileStatus("newMasterStatus", `${newMasterItems.length}科目`, true);
+});
+document.getElementById("newSourceFile").addEventListener("change", async e => {
+  const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+  newSourceItems = parseSourceRows(await readTableFile(file));
+  if (!newSourceItems.length) { newSourceItems = null; setFileStatus("newSourceStatus", "読み取れませんでした", false); }
+  else setFileStatus("newSourceStatus", `${newSourceItems.length}科目`, true);
+});
 function updateAddDlg() {
   document.getElementById("newSystemWrap").hidden = newType() !== TRIAL_SOURCE;
+  document.getElementById("newSourceRow").hidden = newType() !== TRIAL_SOURCE;
   document.getElementById("addCompany").disabled = !document.getElementById("newCompany").value.trim() || !newType() || (newType() === TRIAL_SOURCE && !newSystemSel.value);
 }
 function openAddCompany() {
   document.getElementById("newCompany").value = "";
   for (const x of document.querySelectorAll("#newCompanyType [data-type]")) x.classList.remove("active");
   newSystemSel.value = "";
+  newMasterItems = newSourceItems = null;
+  setFileStatus("newMasterStatus", "未選択"); setFileStatus("newSourceStatus", "未選択");
   updateAddDlg();
   addDlg.hidden = false;
   setTimeout(() => document.getElementById("newCompany").focus(), 50);
@@ -2752,10 +2850,17 @@ document.getElementById("addCompany").onclick = () => {
   const c = { id: uid(), name, method: newType() };
   if (c.method === TRIAL_SOURCE) c.system = newSystemSel.value;
   companies.push(c);
+  // 読み込んだマスタを入れる（先にミロク科目マスタ、次に別会計ソフトの科目 → 科目名からミロクのコードを推測）
+  let note = "";
+  if (newMasterItems) setCompanyMaster(c.id, newMasterItems);
+  if (newSourceItems && c.method === TRIAL_SOURCE) {
+    const res = setCompanySource(c.id, newSourceItems, true);
+    if (res.unset) note = `（ミロクのコード未設定 ${res.unset}件は、会社設定で選んでください）`;
+  }
   addDlg.hidden = true;
   switchCompany(c.id); // 追加した会社にそのまま切り替える
   renderCompanyList();
-  showToast(`「${name}」を追加しました`);
+  showToast(`「${name}」を追加しました${note}`);
 };
 // 日本語入力の変換確定の Enter では追加しない
 document.getElementById("newCompany").addEventListener("keydown", e => {
