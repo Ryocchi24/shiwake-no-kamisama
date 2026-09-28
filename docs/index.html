@@ -275,6 +275,23 @@
   .std-empty { padding: 32px; text-align: center; color: var(--muted); }
   .nav a[data-view].active { background: var(--sidebar-active); color: #fff; }
   .mobile-nav { display: none; }
+  .co-picker { position: relative; margin-top: 12px; display: inline-block; max-width: 100%; }
+  .co-picker-btn { display: inline-flex; align-items: center; gap: 10px; height: 38px; min-width: 240px; max-width: 100%; padding: 0 14px 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text);
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px; box-shadow: var(--shadow); cursor: pointer; }
+  .co-picker-btn span { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .co-picker-btn svg { width: 14px; height: 14px; color: var(--muted); flex: none; }
+  .co-picker-menu { position: absolute; top: calc(100% + 6px); left: 0; width: 340px; max-width: calc(100vw - 32px); background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(17,24,39,.16); padding: 8px; z-index: 40; }
+  .co-picker-menu[hidden] { display: none; }
+  .co-picker-menu input { width: 100%; height: 36px; font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: var(--surface-2); margin-bottom: 6px; }
+  .co-picker-menu input:focus { outline: none; background: #fff; border-color: var(--primary); }
+  .co-picker-list { max-height: 300px; overflow: auto; }
+  .co-picker-item { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; font-size: 14px; text-align: left; border: none; background: none; color: var(--text); padding: 9px 10px; border-radius: 8px; cursor: pointer; }
+  .co-picker-item > span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .co-picker-item:hover { background: var(--surface-2); }
+  .co-picker-item.active { background: var(--primary-soft); font-weight: 600; }
+  .co-picker-empty { color: var(--muted); font-size: 13px; padding: 12px 10px; }
+  .co-picker-add { display: block; width: 100%; font: inherit; font-size: 13.5px; font-weight: 600; text-align: left; color: var(--primary); background: none; border: none; border-top: 1px solid var(--line); margin-top: 6px; padding: 10px 10px 4px; cursor: pointer; }
   .company-select { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); }
   .company-select svg { width: 16px; height: 16px; color: var(--primary); }
   .company-select select { font: inherit; font-size: 14px; font-weight: 500; color: var(--text); height: 36px; min-width: 220px; max-width: 100%;
@@ -419,6 +436,12 @@
     .mobile-nav { display: flex; order: 3; width: 100%; background: rgba(255,255,255,.1); border-radius: 8px; padding: 3px; gap: 3px; }
     .mobile-nav button { flex: 1; font: inherit; font-size: 14px; color: #cfd5de; background: none; border: none; border-radius: 6px; height: 34px; cursor: pointer; }
     .mobile-nav button.active { background: #fff; color: var(--text); font-weight: 600; }
+    #importView .page-head > div { width: 100%; }
+    .co-picker, .co-picker-btn { display: flex; width: 100%; }
+    .co-picker-btn { font-size: 16px; }
+    .co-picker-menu { width: 100%; max-width: none; }
+    .co-picker-menu input { font-size: 16px; height: 40px; }
+    .co-picker-item { padding: 12px 10px; font-size: 15px; }
     .company-select { display: flex; width: 100%; }
     .company-select select { flex: 1; min-width: 0; font-size: 16px; }
     /* iPhoneは16px未満の入力欄をタップすると画面を拡大するため、スマホでは16pxにする */
@@ -555,9 +578,15 @@
       <div class="page-head">
         <div>
           <h1>取り込み</h1>
-          <label class="company-select"><svg><use href="#i-building"/></svg><span>会社</span>
-            <select id="companySelect" aria-label="会社"></select>
-          </label>
+          <!-- 会社の選択（名前で検索できる） -->
+          <div class="co-picker" id="coPicker">
+            <button class="co-picker-btn" id="coPickerBtn" aria-haspopup="listbox"><span id="coPickerName"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="co-picker-menu" id="coPickerMenu" hidden>
+              <input type="search" id="coPickerSearch" placeholder="会社名で検索" autocomplete="off">
+              <div class="co-picker-list" id="coPickerList" role="listbox"></div>
+              <button class="co-picker-add" id="coPickerAdd">＋ 会社を追加</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2452,12 +2481,38 @@ document.addEventListener("click", e => {
 });
 
 // ---- 会社の選択（取り込みの画面） ----
+const coPickerMenu = document.getElementById("coPickerMenu");
+const coPickerSearch = document.getElementById("coPickerSearch");
 function renderCompany() {
-  const sel = document.getElementById("companySelect");
-  sel.innerHTML = (companies.length ? "" : `<option value="">会社が登録されていません</option>`)
-    + companies.map(c => `<option value="${c.id}" ${c.id === currentCompanyId ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")
-    + `<option value="__add">＋ 会社を追加…</option>`;
+  document.getElementById("coPickerName").textContent = currentCompany()?.name || "会社を選んでください";
+  const q = normName(coPickerSearch.value);
+  const shown = companies.filter(c => !q || normName(c.name).includes(q));
+  document.getElementById("coPickerList").innerHTML = shown.length
+    ? shown.map(c => `<button class="co-picker-item ${c.id === currentCompanyId ? "active" : ""}" data-pick="${c.id}" role="option">
+        <span>${escapeHtml(c.name)}</span><span class="method-tag t-${c.method || "receipt"}">${escapeHtml(methodLabel(c))}</span></button>`).join("")
+    : `<div class="co-picker-empty">${companies.length ? "見つかりません" : "会社はまだありません"}</div>`;
 }
+function closeCoPicker() { coPickerMenu.hidden = true; }
+document.getElementById("coPickerBtn").onclick = () => {
+  if (!coPickerMenu.hidden) return closeCoPicker();
+  coPickerSearch.value = "";
+  renderCompany();
+  coPickerMenu.hidden = false;
+  if (!matchMedia("(max-width: 860px)").matches) coPickerSearch.focus(); // スマホはキーボードが急に出ないように
+};
+coPickerSearch.addEventListener("input", renderCompany);
+coPickerSearch.addEventListener("keydown", e => {
+  // Enter で一番上の会社を選ぶ（日本語入力の変換確定は除く）
+  if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) document.querySelector("#coPickerList [data-pick]")?.click();
+  if (e.key === "Escape") closeCoPicker();
+});
+document.getElementById("coPickerList").addEventListener("click", e => {
+  const b = e.target.closest("[data-pick]"); if (!b) return;
+  closeCoPicker();
+  switchCompany(b.dataset.pick);
+});
+document.getElementById("coPickerAdd").onclick = () => { closeCoPicker(); openCompanies(); };
+document.addEventListener("click", e => { if (!e.target.closest("#coPicker")) closeCoPicker(); });
 function switchCompany(id) {
   currentCompanyId = id;
   const c = currentCompany();
@@ -2466,10 +2521,7 @@ function switchCompany(id) {
   saveCompanies();
   render();
 }
-document.getElementById("companySelect").addEventListener("change", e => {
-  if (e.target.value === "__add") { openCompanies(); return; }
-  if (e.target.value) switchCompany(e.target.value);
-});
+
 
 // ---- 会社の画面 ----
 function openCompanies() {
@@ -2625,8 +2677,6 @@ document.getElementById("methods").addEventListener("click", e => {
   renderMethod();
   render(); // 取り込み方法ごとに一覧が分かれているため
 });
-// 開いたときも、選んでいる会社の種類に合わせる
-if (currentCompany()) settings.method = currentCompany().method || "receipt";
 renderMethod();
 
 // ---- 設定（APIキー） ----
@@ -2754,6 +2804,8 @@ rows.forEach(r => {
 });
 save();
 pruneImages();
+// 開いたときも、選んでいる会社の種類の取り込み画面にする
+if (currentCompany()) { settings.method = currentCompany().method || "receipt"; renderMethod(); }
 render();
 updateMode();
 renderMasterCodes();
