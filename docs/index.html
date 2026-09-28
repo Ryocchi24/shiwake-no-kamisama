@@ -473,6 +473,7 @@
       <label class="btn btn-sm">CSVを読み込む<input type="file" id="masterImport" accept=".csv,text/csv,text/plain" hidden></label>
       <button class="btn btn-sm" id="masterExport">CSVに書き出す</button>
       <button class="btn btn-sm" id="masterAdd">＋ 追加</button>
+      <button class="btn btn-sm btn-ghost" id="masterReset">標準に戻す</button>
       <input type="search" id="masterSearch" placeholder="コード・科目名で絞り込み">
     </div>
     <div class="master-list" id="masterList"></div>
@@ -1403,10 +1404,138 @@ function tapToShare(file) {
 const TRIAL_SOURCE = "format3";
 const MASTERS_KEY = "shiwake-masters";   // { 会社ID: [{ code, name }] }  ミロクの科目マスタ
 const MAPPINGS_KEY = "shiwake-mappings"; // { 会社ID: { 元の科目キー: { code, srcName, srcCode } } }
+// 標準の科目マスタ（ミロクの科目コードと科目名）。会社を追加したときは、これが最初から入る。
+// 銀行口座など会社ごとに違う科目は、各会社の「科目マスタ・対応表」で手直しする
+const DEFAULT_MASTER = [
+  {"code": "1101", "name": "現金"},
+  {"code": "1103", "name": "当座A銀行"},
+  {"code": "1104", "name": "当座B銀行"},
+  {"code": "1106", "name": "当座C銀行"},
+  {"code": "51", "name": "当座D銀行"},
+  {"code": "52", "name": "当座E銀行"},
+  {"code": "53", "name": "当座F信金"},
+  {"code": "1107", "name": "普通G農協"},
+  {"code": "1110", "name": "普通H銀行"},
+  {"code": "1111", "name": "普通I銀行"},
+  {"code": "1121", "name": "定期預金"},
+  {"code": "1122", "name": "銀行積立"},
+  {"code": "1131", "name": "受取手形"},
+  {"code": "1142", "name": "売掛金"},
+  {"code": "1151", "name": "電子記録債権"},
+  {"code": "1143", "name": "有価証券"},
+  {"code": "1172", "name": "製品"},
+  {"code": "1173", "name": "原材料"},
+  {"code": "1174", "name": "仕掛品"},
+  {"code": "1155", "name": "仮払金"},
+  {"code": "1154", "name": "立替金"},
+  {"code": "1158", "name": "預け金"},
+  {"code": "1159", "name": "仮払税金"},
+  {"code": "8001", "name": "仮払消費税"},
+  {"code": "1162", "name": "貸倒引当金"},
+  {"code": "1201", "name": "建物"},
+  {"code": "1209", "name": "建物付属設備"},
+  {"code": "1202", "name": "構築物"},
+  {"code": "1203", "name": "機械装置"},
+  {"code": "1204", "name": "車輌運搬具"},
+  {"code": "1205", "name": "工具器具備品"},
+  {"code": "1207", "name": "リース資産"},
+  {"code": "1208", "name": "一括償却資産"},
+  {"code": "1206", "name": "土地"},
+  {"code": "1222", "name": "電話加入権"},
+  {"code": "1223", "name": "ソフトウェア"},
+  {"code": "1235", "name": "保険積立金"},
+  {"code": "1231", "name": "関係会社株式"},
+  {"code": "1232", "name": "投資有価証券"},
+  {"code": "1236", "name": "長期前払費用"},
+  {"code": "2102", "name": "電子記録債務"},
+  {"code": "2103", "name": "買掛金"},
+  {"code": "2105", "name": "短期借入金"},
+  {"code": "2106", "name": "未払金"},
+  {"code": "2107", "name": "未払費用"},
+  {"code": "2109", "name": "預り金"},
+  {"code": "2110", "name": "仮受金"},
+  {"code": "2111", "name": "未払法人税等"},
+  {"code": "2114", "name": "賞与引当金"},
+  {"code": "2117", "name": "未払消費税"},
+  {"code": "8000", "name": "仮受消費税"},
+  {"code": "2201", "name": "長期借入金"},
+  {"code": "2203", "name": "償却引当金"},
+  {"code": "2204", "name": "長期未払金"},
+  {"code": "2205", "name": "リース債務"},
+  {"code": "2301", "name": "消費税引当金"},
+  {"code": "3101", "name": "資本金"},
+  {"code": "3202", "name": "利益準備金"},
+  {"code": "3301", "name": "別途積立金"},
+  {"code": "4101", "name": "売上高"},
+  {"code": "4201", "name": "期首製品棚卸高"},
+  {"code": "4206", "name": "期末製品棚卸高"},
+  {"code": "4412", "name": "給料手当"},
+  {"code": "4413", "name": "賞与"},
+  {"code": "4442", "name": "賞与Ⅱ"},
+  {"code": "4414", "name": "退職金"},
+  {"code": "4417", "name": "法定福利費"},
+  {"code": "4418", "name": "福利厚生費"},
+  {"code": "4425", "name": "旅費交通費"},
+  {"code": "4430", "name": "通信費"},
+  {"code": "4405", "name": "運賃"},
+  {"code": "4404", "name": "広告宣伝費"},
+  {"code": "4428", "name": "交際費"},
+  {"code": "4422", "name": "会議費"},
+  {"code": "4406", "name": "ガソリン代"},
+  {"code": "4423", "name": "消耗品費"},
+  {"code": "4427", "name": "租税公課"},
+  {"code": "4433", "name": "新聞図書費"},
+  {"code": "4426", "name": "支払手数料"},
+  {"code": "4429", "name": "保険料"},
+  {"code": "4421", "name": "修繕費"},
+  {"code": "4431", "name": "分担金"},
+  {"code": "4432", "name": "寄付金"},
+  {"code": "4438", "name": "リース料"},
+  {"code": "4437", "name": "損失保険料"},
+  {"code": "4436", "name": "研修費"},
+  {"code": "4420", "name": "地代家賃"},
+  {"code": "4439", "name": "貸倒損失"},
+  {"code": "4441", "name": "貸倒引当金繰入額"},
+  {"code": "4419", "name": "減価償却費"},
+  {"code": "4435", "name": "雑費"},
+  {"code": "5101", "name": "受取利息"},
+  {"code": "5102", "name": "受取配当金"},
+  {"code": "5105", "name": "雑収入"},
+  {"code": "5104", "name": "貸倒引当金戻入益"},
+  {"code": "5201", "name": "支払利息"},
+  {"code": "5205", "name": "雑損失"},
+  {"code": "6101", "name": "固定資産売却益"},
+  {"code": "6205", "name": "役員退職金"},
+  {"code": "6301", "name": "法人税住民税及び事業税"},
+  {"code": "4301", "name": "期首材料棚卸高"},
+  {"code": "4302", "name": "原材料仕入高"},
+  {"code": "4303", "name": "補助材料仕入高"},
+  {"code": "4305", "name": "期末材料棚卸高"},
+  {"code": "4311", "name": "賃金給料"},
+  {"code": "4312", "name": "退職金"},
+  {"code": "4313", "name": "賞与"},
+  {"code": "4316", "name": "法定福利費"},
+  {"code": "4317", "name": "福利厚生費"},
+  {"code": "4326", "name": "外注印刷費"},
+  {"code": "4330", "name": "写真製版費"},
+  {"code": "4336", "name": "写植費"},
+  {"code": "4327", "name": "減価償却費"},
+  {"code": "4334", "name": "図案版下費"},
+  {"code": "4328", "name": "修繕費"},
+  {"code": "4323", "name": "水道光熱費"},
+  {"code": "4322", "name": "電力費"},
+  {"code": "4325", "name": "消耗品費"},
+  {"code": "4335", "name": "雑費"},
+  {"code": "4341", "name": "期首仕掛棚卸高"},
+  {"code": "4342", "name": "期末仕掛棚卸高"}
+];
 let masters = load(MASTERS_KEY, {});
 let mappings = load(MAPPINGS_KEY, {});
 function saveMasters() { try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masters)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {} }
-const masterOf = (cid = currentCompanyId) => (masters[cid] ||= []);
+const masterOf = (cid = currentCompanyId) => {
+  if (!masters[cid] || !masters[cid].length) masters[cid] = DEFAULT_MASTER.map(m => ({ ...m }));
+  return masters[cid];
+};
 const mappingOf = (cid = currentCompanyId) => (mappings[cid] ||= {});
 const masterName = code => masterOf().find(m => m.code === String(code))?.name || "";
 const normName = s => String(s || "").normalize("NFKC").replace(/[\s・（）()【】［］\[\]〔〕%％]/g, "").replace(/銀行/g, "銀");
@@ -1628,10 +1757,11 @@ function renderMasterCodes() {
 }
 function renderMaster() {
   for (const b of document.querySelectorAll("[data-mtab]")) b.classList.toggle("active", b.dataset.mtab === masterTab);
+  document.getElementById("masterReset").textContent = masterTab === "master" ? "標準に戻す" : "すべて消す";
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
-    document.getElementById("masterHelp").textContent = `ミロクの科目コードと科目名です（${masterOf().length}科目）。CSVは「コード,科目名」の形で読み込めます。`;
+    document.getElementById("masterHelp").textContent = `この会社のミロクの科目コードと科目名です（${masterOf().length}科目）。標準のマスタが最初から入っています。銀行口座など、この会社だけ違う科目はここで直してください。`;
     const items = masterOf().map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q));
     listEl.innerHTML = items.length ? items.map(m => `<div class="master-row">
         <input value="${escapeHtml(m.code)}" data-mi="${m.i}" data-mk="code" inputmode="numeric" aria-label="コード">
@@ -1642,7 +1772,7 @@ function renderMaster() {
     const map = mappingOf();
     const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code)).includes(q))
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
-    document.getElementById("masterHelp").textContent = `試算表の元の科目を、どのミロクのコードに変換するかの一覧です（${Object.keys(map).length}件）。試算表の画面でコードを直すと、ここに覚えます。`;
+    document.getElementById("masterHelp").textContent = `この会社の試算表の科目を、どのミロクのコードに変換するかの一覧です（${Object.keys(map).length}件）。登録がない科目は科目名から自動で推測し、試算表の画面でコードを直すと、ここに覚えます。`;
     listEl.innerHTML = entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
@@ -1672,6 +1802,16 @@ document.getElementById("masterAdd").onclick = () => {
   }
   saveMasters(); renderMaster();
   masterDlg.querySelector(".master-list input")?.focus();
+};
+document.getElementById("masterReset").onclick = () => {
+  if (masterTab === "master") {
+    if (!confirm("この会社の科目マスタを、標準のマスタに戻しますか？（この会社で直した内容は消えます）")) return;
+    masters[currentCompanyId] = DEFAULT_MASTER.map(m => ({ ...m }));
+  } else {
+    if (!confirm("この会社の対応表をすべて消しますか？（次に試算表を読み込むと、科目名から推測し直します）")) return;
+    mappings[currentCompanyId] = {};
+  }
+  saveMasters(); renderMaster();
 };
 document.getElementById("masterList").addEventListener("change", e => {
   const t = e.target;
