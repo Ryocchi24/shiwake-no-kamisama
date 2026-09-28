@@ -225,6 +225,8 @@
   .code-name.unknown { color: var(--err); }
   .trial-tag { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; background: var(--info-soft); color: var(--info); font-size: 10px; }
   .dialog-wide { max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; }
+  .dlg-system { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
+  .dlg-system select { height: 32px; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; background: var(--surface); }
   .dlg-sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6px; }
   #masterDlg[hidden] { display: none; }
   #masterDlg .tabs { margin-bottom: 8px; }
@@ -662,6 +664,9 @@
 <div class="dialog-back" id="masterDlg" hidden>
   <div class="dialog dialog-wide">
     <h2>会社の設定 <span class="dlg-sub" id="masterCompany"></span></h2>
+    <label class="dlg-system">この会社の元の会計ソフト
+      <select id="companySystem" aria-label="この会社の元の会計ソフト"></select>
+    </label>
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">科目マスタ</button>
       <button class="tab" data-mtab="receipt"><span class="nb">レシートの</span><span class="nb">自動入力</span></button>
@@ -2172,7 +2177,15 @@ function openMaster(cid = currentCompanyId) {
 function renderMasterCodes() {
   document.getElementById("masterCodes").innerHTML = masterOf().map(m => `<option value="${escapeHtml(m.code)}">${escapeHtml(m.name)}</option>`).join("");
 }
+const companySystemSel = document.getElementById("companySystem");
+companySystemSel.innerHTML = SOURCE_SYSTEMS.map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join("");
+companySystemSel.onchange = () => {
+  const c = companies.find(x => x.id === masterCid);
+  if (c) { c.system = companySystemSel.value; saveCompanies(); }
+  renderMaster(); render();
+};
 function renderMaster() {
+  companySystemSel.value = systemOf(masterCid).id;
   for (const b of document.querySelectorAll("[data-mtab]")) b.classList.toggle("active", b.dataset.mtab === masterTab);
   document.getElementById("masterReset").textContent = masterTab === "master" ? "標準に戻す" : "すべて消す";
   document.getElementById("masterCsv").hidden = masterTab === "receipt";
@@ -2209,12 +2222,7 @@ function renderMaster() {
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
     const sys = systemOf(masterCid);
     document.getElementById("masterHelp").textContent = "別の会計ソフトの科目を、ミロクのどのコードにするか";
-    listEl.innerHTML = `<div class="rc-credit">
-        <b>会計システム</b>
-        <select data-system aria-label="会計システム">${SOURCE_SYSTEMS.map(x => `<option value="${x.id}" ${x.id === sys.id ? "selected" : ""}>${escapeHtml(x.name)}</option>`).join("")}</select>
-        <span class="muted">標準 ${sys.mapping.length}件</span>
-      </div>
-      <div class="rc-head">この会社だけの対応</div>`
+    listEl.innerHTML = `<div class="rc-head">${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）とちがう、この会社だけの読み替え</div>`
       + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
@@ -2273,11 +2281,6 @@ document.getElementById("masterReset").onclick = () => {
 };
 document.getElementById("masterList").addEventListener("change", e => {
   const t = e.target;
-  if (t.dataset.system !== undefined) {
-    const c = companies.find(x => x.id === masterCid);
-    if (c) { c.system = t.value; saveCompanies(); }
-    renderMaster(); return;
-  }
   const rc = receiptSettingsOf(masterCid);
   if (t.dataset.rck === "credit") { rc.creditCode = (t.value.match(/^\s*(\d+)/) || [])[1] || ""; saveReceiptSettings(); renderMaster(); return; }
   if (t.dataset.rri !== undefined) {
