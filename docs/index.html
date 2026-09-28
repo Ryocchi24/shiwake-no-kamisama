@@ -227,6 +227,12 @@
   #masterDlg .tabs { margin-bottom: 8px; }
   .master-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
   .master-tools input[type=search] { flex: 1; min-width: 160px; height: 30px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; }
+  .master-csv[hidden] { display: none; }
+  .rc-credit { display: grid; grid-template-columns: auto 110px 1fr; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .rc-credit b { font-size: 13px; }
+  .rc-credit input { height: 32px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; }
+  .rc-head { font-size: 12px; color: var(--muted); padding: 8px 12px 4px; }
+  .master-row.rule { grid-template-columns: 1fr 100px 1fr 36px; }
   .master-csv { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
   .master-csv summary { cursor: pointer; }
   .master-csv-body { display: flex; gap: 8px; margin-top: 8px; }
@@ -329,6 +335,11 @@
     .company-item { flex-wrap: wrap; row-gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
     .company-item .btn-sm { order: 3; flex: 1 1 40%; justify-content: center; }
     .master-row.mapping { grid-template-columns: 1fr 88px 32px; row-gap: 0; }
+    .master-row.rule { grid-template-columns: 1fr 88px 32px; row-gap: 0; }
+    .master-row.rule > span { grid-column: 2 / 4; grid-row: 2; font-size: 11px; padding-left: 6px; }
+    .master-row.rule > button { grid-column: 3; grid-row: 1; }
+    .rc-credit { grid-template-columns: 1fr 100px; }
+    .rc-credit span { grid-column: 1 / 3; }
     .master-row.mapping .muted.src-no { display: none; }
     .master-row.mapping > span:nth-of-type(3) { grid-column: 2 / 4; grid-row: 2; font-size: 11px; padding-left: 6px; }
     .master-row.mapping > button { grid-column: 3; grid-row: 1; }
@@ -465,7 +476,7 @@
       <div class="page-head">
         <div>
           <h1>会社</h1>
-          <p>会社ごとに、仕訳と「科目マスタ・対応表」を分けて管理します。</p>
+          <p>会社ごとに、仕訳と「会社の設定」（科目マスタ・レシート・試算表）を分けて管理します。</p>
         </div>
       </div>
       <div class="panel company-add">
@@ -517,10 +528,11 @@
 <!-- 科目マスタ・対応表（会社ごと） -->
 <div class="dialog-back" id="masterDlg" hidden>
   <div class="dialog dialog-wide">
-    <h2>科目マスタ・対応表 <span class="dlg-sub" id="masterCompany"></span></h2>
+    <h2>会社の設定 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="tabs" id="masterTabs">
-      <button class="tab active" data-mtab="master">ミロクの科目マスタ</button>
-      <button class="tab" data-mtab="mapping">対応表（別会計システム → ミロク）</button>
+      <button class="tab active" data-mtab="master">科目マスタ（共通）</button>
+      <button class="tab" data-mtab="receipt">レシート</button>
+      <button class="tab" data-mtab="mapping">試算表</button>
     </div>
     <p class="dlg-help" id="masterHelp"></p>
     <div class="master-tools">
@@ -530,7 +542,7 @@
     </div>
     <div class="master-list" id="masterList"></div>
     <!-- 普段は使わないので折りたたむ（別の会社のマスタをまとめて登録する・別の端末に移すとき用） -->
-    <details class="master-csv">
+    <details class="master-csv" id="masterCsv">
       <summary>CSVでまとめて読み込む・書き出す</summary>
       <div class="master-csv-body">
         <label class="btn btn-sm">CSVを読み込む<input type="file" id="masterImport" accept=".csv,text/csv,text/plain" hidden></label>
@@ -770,12 +782,14 @@ async function readGroup(groupId) {
     if (idx < 0) return; // 読み取り中に削除された
     const receipts = data.receipts.length ? data.receipts
       : [{ date: "", amount: 0, summary: "", note: "レシートを検出できませんでした" }];
+    const rc = receiptSettingsOf(placeholder.companyId);
     const newRows = receipts.map(r => ({
       id: uid(), groupId, companyId: placeholder.companyId, source: placeholder.source || "receipt", thumb: placeholder.thumb, status: "done", review: "pending",
+      store: r.store || "",
       date: r.date || "",
-      debitCode: "", debitSub: "", debitAmount: r.amount || "",
+      debitCode: receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
-      creditCode: "", creditSub: "", creditAmount: r.amount || "",
+      creditCode: rc.creditCode || "", creditSub: "", creditAmount: r.amount || "",
       note: r.note || "",
       ocrText: r.ocrText || "",
     }));
@@ -1180,7 +1194,7 @@ function inputHtml(row, f) {
   const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
   const attrs = f.type === "date" ? 'type="date"' : f.num ? 'inputmode="numeric"' : "";
   const cls = [f.num ? "num" : "", f.code ? "code" : "", fieldMissing(row, f.key, v) ? "missing" : ""].join(" ");
-  const list = row.source === TRIAL_SOURCE && (f.key === "debitCode" || f.key === "creditCode") ? 'list="masterCodes"' : "";
+  const list = f.key === "debitCode" || f.key === "creditCode" ? 'list="masterCodes"' : "";
   return `<input ${attrs} ${list} class="${cls}" ${f.code ? 'placeholder="—"' : ""} data-id="${row.id}" data-key="${f.key}" value="${escapeHtml(shown)}">`;
 }
 
@@ -1227,9 +1241,9 @@ function render() {
       return;
     }
     const isTrial = row.source === TRIAL_SOURCE;
-    const codeName = key => isTrial && (key === "debitCode" || key === "creditCode") && row[key]
+    const codeName = key => (key === "debitCode" || key === "creditCode") && row[key]
       ? `<div class="code-name ${masterName(row[key]) ? "" : "unknown"}" data-code-name-for="${row.id}-${key}">${escapeHtml(masterName(row[key]) || "マスタにない")}</div>`
-      : isTrial && (key === "debitCode" || key === "creditCode") ? `<div class="code-name" data-code-name-for="${row.id}-${key}"></div>` : "";
+      : (key === "debitCode" || key === "creditCode") ? `<div class="code-name" data-code-name-for="${row.id}-${key}"></div>` : "";
     body += `<tr data-row="${row.id}">${head}` + FIELDS.map(f => `<td class="${f.cls}" data-label="${f.label}">
         ${inputHtml(row, f)}${codeName(f.key)}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の科目: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
@@ -1291,8 +1305,8 @@ list.addEventListener("input", e => {
   const field = FIELDS.find(f => f.key === key);
   let value = e.target.value;
   if (field.num) value = value.replace(/[^\d]/g, "");
-  const trialCode = row.source === TRIAL_SOURCE && (key === "debitCode" || key === "creditCode");
-  if (trialCode) {
+  const codeKey = key === "debitCode" || key === "creditCode";
+  if (codeKey) {
     value = (value.match(/^\s*(\d+)/) || [])[1] || "";
     const label = list.querySelector(`[data-code-name-for="${row.id}-${key}"]`);
     if (label) { label.textContent = value ? (masterName(value) || "マスタにない") : ""; label.classList.toggle("unknown", !!value && !masterName(value)); }
@@ -1326,6 +1340,15 @@ list.addEventListener("change", e => {
     // 選んだコードを対応表に覚え、同じ元の科目の行すべてに反映する
     applyMapping(row, row[key]);
     render();
+  }
+  else if (row.source !== TRIAL_SOURCE && key === "debitCode" && row.store) {
+    // レシート: 借方のコードを、そのお店のルールとして覚え、同じお店でコードが空の行にも入れる
+    const rc = receiptSettingsOf(row.companyId);
+    const ex = rc.rules.find(x => normName(x.keyword) === normName(row.store));
+    if (row.debitCode) { if (ex) ex.code = row.debitCode; else rc.rules.push({ keyword: row.store, code: row.debitCode }); }
+    else if (ex) rc.rules = rc.rules.filter(x => x !== ex);
+    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.source !== TRIAL_SOURCE && o.review !== "exported" && !o.debitCode && normName(o.store) === normName(row.store)) o.debitCode = row.debitCode;
+    saveReceiptSettings(); save(); render();
   }
   else if (FIELDS.find(f => f.key === key)?.num && row[key] !== "") e.target.value = Number(row[key]).toLocaleString();
 });
@@ -1658,6 +1681,18 @@ const DEFAULT_MAPPING = [
 let masters = load(MASTERS_KEY, {});
 let mappings = load(MAPPINGS_KEY, {});
 function saveMasters() { try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masters)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {} }
+// レシートの設定（会社ごと）: 貸方のいつもの科目と、「店名・品目 → 借方の科目」のルール
+const RECEIPT_SETTINGS_KEY = "shiwake-receipt-settings"; // { 会社ID: { creditCode, rules: [{ keyword, code }] } }
+let receiptSettings = load(RECEIPT_SETTINGS_KEY, {});
+const receiptSettingsOf = (cid = currentCompanyId) => (receiptSettings[cid] ||= { creditCode: "", rules: [] });
+function saveReceiptSettings() { try { localStorage.setItem(RECEIPT_SETTINGS_KEY, JSON.stringify(receiptSettings)); } catch {} }
+// 店名・摘要にキーワードを含むルールのうち、一番長いキーワードのものを使う
+function receiptDebitCode(cid, store, summary) {
+  const text = normName(`${store || ""} ${summary || ""}`);
+  const hit = receiptSettingsOf(cid).rules.filter(r => r.keyword && r.code && text.includes(normName(r.keyword)))
+    .sort((a, b) => normName(b.keyword).length - normName(a.keyword).length)[0];
+  return hit ? hit.code : "";
+}
 const masterOf = (cid = currentCompanyId) => {
   if (!masters[cid] || !masters[cid].length) masters[cid] = DEFAULT_MASTER.map(m => ({ ...m }));
   return masters[cid];
@@ -1958,6 +1993,7 @@ function renderMasterCodes() {
 function renderMaster() {
   for (const b of document.querySelectorAll("[data-mtab]")) b.classList.toggle("active", b.dataset.mtab === masterTab);
   document.getElementById("masterReset").textContent = masterTab === "master" ? "標準に戻す" : "すべて消す";
+  document.getElementById("masterCsv").hidden = masterTab === "receipt";
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
@@ -1968,11 +2004,27 @@ function renderMaster() {
         <input value="${escapeHtml(m.name)}" data-mi="${m.i}" data-mk="name" aria-label="科目名">
         <button class="icon-btn" data-mdel="${m.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
       : `<div class="master-empty">科目が登録されていません。「CSVを読み込む」でまとめて登録できます。</div>`;
+  } else if (masterTab === "receipt") {
+    const rc = receiptSettingsOf(masterCid);
+    document.getElementById("masterHelp").textContent = `レシートを読み取ったときに、自動で入れる科目です。確認画面で借方のコードを直すと、そのお店のルールとしてここに覚えます（${rc.rules.length}件）。`;
+    const rules = rc.rules.map((x, i) => ({ ...x, i })).filter(x => !q || normName(x.keyword + x.code + masterName(x.code, masterCid)).includes(q));
+    listEl.innerHTML = `<div class="rc-credit">
+        <b>貸方の科目（いつもの支払い方法）</b>
+        <input value="${escapeHtml(rc.creditCode)}" data-rck="credit" list="masterCodes" inputmode="numeric" placeholder="例: 1101" aria-label="貸方の科目コード">
+        <span class="muted">${escapeHtml(rc.creditCode ? (masterName(rc.creditCode, masterCid) || "（マスタにない）") : "未設定（例: 1101 現金）")}</span>
+      </div>
+      <div class="rc-head">店名・品目に含まれる言葉 → 借方の科目</div>`
+      + (rules.length ? rules.map(x => `<div class="master-row rule">
+        <input value="${escapeHtml(x.keyword)}" data-rri="${x.i}" data-rrk="keyword" placeholder="例: セブンイレブン" aria-label="店名・品目に含まれる言葉">
+        <input value="${escapeHtml(x.code)}" data-rri="${x.i}" data-rrk="code" list="masterCodes" inputmode="numeric" placeholder="コード" aria-label="借方の科目コード">
+        <span class="muted">${escapeHtml(x.code ? (masterName(x.code, masterCid) || "（マスタにない）") : "")}</span>
+        <button class="icon-btn" data-rrdel="${x.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
+      : `<div class="master-empty">まだルールがありません。「＋ 追加」で登録するか、確認画面で借方のコードを入れると自動で覚えます。</div>`);
   } else {
     const map = mappingOf(masterCid);
     const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code, masterCid)).includes(q))
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
-    document.getElementById("masterHelp").textContent = `この会社の試算表の科目を、どのミロクのコードに変換するかの一覧です（${Object.keys(map).length}件）。登録がない科目は科目名から自動で推測し、試算表の画面でコードを直すと、ここに覚えます。`;
+    document.getElementById("masterHelp").textContent = `対応表（別会計システム → ミロク）: この会社の試算表の科目を、どのミロクのコードに変換するかの一覧です（${Object.keys(map).length}件）。登録がない科目は科目名から自動で推測し、試算表の画面でコードを直すと、ここに覚えます。`;
     listEl.innerHTML = entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
@@ -1997,6 +2049,13 @@ document.getElementById("masterClose").onclick = () => {
   if (currentView === "companies") renderCompanyList(); else render();
 };
 document.getElementById("masterAdd").onclick = () => {
+  if (masterTab === "receipt") {
+    receiptSettingsOf(masterCid).rules.unshift({ keyword: "", code: "" });
+    document.getElementById("masterSearch").value = "";
+    saveReceiptSettings(); renderMaster();
+    masterDlg.querySelector('[data-rrk="keyword"]')?.focus();
+    return;
+  }
   if (masterTab === "master") { masterOf(masterCid).unshift({ code: "", name: "" }); document.getElementById("masterSearch").value = ""; }
   else {
     const name = prompt("元の科目名（試算表に書かれている名前）"); if (!name) return;
@@ -2007,6 +2066,12 @@ document.getElementById("masterAdd").onclick = () => {
   masterDlg.querySelector(".master-list input")?.focus();
 };
 document.getElementById("masterReset").onclick = () => {
+  if (masterTab === "receipt") {
+    if (!confirm("この会社のレシートのルールをすべて消しますか？（貸方の科目の設定は残ります）")) return;
+    receiptSettingsOf(masterCid).rules = [];
+    saveReceiptSettings(); renderMaster();
+    return;
+  }
   if (masterTab === "master") {
     if (!confirm("この会社の科目マスタを、標準のマスタに戻しますか？（この会社で直した内容は消えます）")) return;
     masters[masterCid] = DEFAULT_MASTER.map(m => ({ ...m }));
@@ -2018,6 +2083,13 @@ document.getElementById("masterReset").onclick = () => {
 };
 document.getElementById("masterList").addEventListener("change", e => {
   const t = e.target;
+  const rc = receiptSettingsOf(masterCid);
+  if (t.dataset.rck === "credit") { rc.creditCode = (t.value.match(/^\s*(\d+)/) || [])[1] || ""; saveReceiptSettings(); renderMaster(); return; }
+  if (t.dataset.rri !== undefined) {
+    const x = rc.rules[Number(t.dataset.rri)];
+    if (x) x[t.dataset.rrk] = t.dataset.rrk === "code" ? ((t.value.match(/^\s*(\d+)/) || [])[1] || "") : t.value.trim();
+    saveReceiptSettings(); renderMaster(); return;
+  }
   if (t.dataset.mi !== undefined) {
     const m = masterOf(masterCid)[Number(t.dataset.mi)];
     if (m) m[t.dataset.mk] = t.value.trim();
@@ -2031,6 +2103,8 @@ document.getElementById("masterList").addEventListener("change", e => {
   }
 });
 document.getElementById("masterList").addEventListener("click", e => {
+  const rdel = e.target.closest("[data-rrdel]");
+  if (rdel) { receiptSettingsOf(masterCid).rules.splice(Number(rdel.dataset.rrdel), 1); saveReceiptSettings(); renderMaster(); return; }
   const del = e.target.closest("[data-mdel], [data-mapdel]"); if (!del) return;
   if (del.dataset.mdel !== undefined) { masterOf(masterCid).splice(Number(del.dataset.mdel), 1); }
   else { delete mappingOf(masterCid)[del.dataset.mapdel]; }
@@ -2131,7 +2205,7 @@ function renderCompanyList() {
       <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
       ${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}
       <span class="cnt">${countFor(c.id)}件</span>
-      <button class="btn btn-sm open-master" data-cid="${c.id}">科目マスタ・対応表</button>
+      <button class="btn btn-sm open-master" data-cid="${c.id}">会社の設定</button>
       <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
       <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
     </div>`).join("") : `<div class="company-empty">まだ会社が登録されていません。上の「会社を追加」から登録してください。</div>`;
