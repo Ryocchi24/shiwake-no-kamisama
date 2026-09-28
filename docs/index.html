@@ -528,6 +528,9 @@
     td.c-thumb { position: absolute; left: 14px; top: 14px; }
     td.c-status { grid-column: 1 / 3; padding-right: 30px; }
     td.c-summary, td.c-msg { grid-column: 1 / 3; }
+    /* 領収書は ①〜⑧ を1項目ずつ縦に並べる */
+    tbody tr.row-receipt { grid-template-columns: minmax(0, 1fr); }
+    tbody tr.row-receipt td:not(.c-thumb):not(.c-del) { grid-column: 1 !important; }
     td.c-del { position: absolute; right: 8px; top: 8px; }
     td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
     td input { border-color: var(--line); height: 40px; font-size: 16px; }
@@ -1501,7 +1504,7 @@ function render() {
     const codeName = key => (key === "debitCode" || key === "creditCode") && row[key]
       ? `<div class="code-name ${masterName(row[key]) ? "" : "unknown"}" data-code-name-for="${row.id}-${key}">${escapeHtml(masterName(row[key]) || "マスタにない")}</div>`
       : (key === "debitCode" || key === "creditCode") ? `<div class="code-name" data-code-name-for="${row.id}-${key}"></div>` : "";
-    body += `<tr data-row="${row.id}">${head}` + FIELDS.map(f => `<td class="${f.cls}" data-label="${f.label}">
+    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + FIELDS.map(f => `<td class="${f.cls}" data-label="${f.label}">
         ${inputHtml(row, f)}${codeName(f.key)}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の科目: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
         ${f.key === "summary" ? noteHtml(row) : ""}
