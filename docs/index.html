@@ -225,7 +225,10 @@
   .code-name.unknown { color: var(--err); }
   .trial-tag { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; background: var(--info-soft); color: var(--info); font-size: 10px; }
   .dialog-wide { max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; }
-  .dlg-system { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
+  .dlg-system { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
+  .dlg-system label { display: flex; align-items: center; gap: 8px; }
+  .dlg-system [hidden], #masterTabs[hidden], #masterTabs .tab[hidden] { display: none; }
+  #newCompanyType { height: 40px; font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; background: var(--surface-2); }
   .dlg-system select { height: 32px; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; background: var(--surface); }
   .dlg-sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6px; }
   #masterDlg[hidden] { display: none; }
@@ -250,7 +253,7 @@
   .master-row .muted { color: var(--muted); font-size: 12.5px; }
   .master-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
   .doc-types { display: flex; gap: 6px; margin: -6px 0 16px; flex-wrap: wrap; }
-  .doc-types[hidden] { display: none; }
+  .doc-types[hidden], .methods[hidden] { display: none !important; }
   .doc-type { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface);
     color: var(--muted); border-radius: 999px; padding: 5px 14px; cursor: pointer; }
   .doc-type.active { background: var(--text); border-color: var(--text); color: #fff; }
@@ -495,6 +498,9 @@
     #companiesView .co-main input { max-width: none; font-size: 16px; }
     .mobile-capture .btn { border-radius: 12px; }
     .dropzone .btn, .add-more { display: none; }
+    .company-add .add-row { flex-wrap: wrap; }
+    .company-add .add-row input { flex: 1 1 100%; font-size: 16px; }
+    #newCompanyType { flex: 1; font-size: 16px; }
     .std-tools .tabs { width: 100%; }
     .std-tools select, .std-tools input { width: 100%; font-size: 16px; }
     .std-row { padding: 9px 14px; }
@@ -553,7 +559,7 @@
         </div>
       </div>
 
-      <div class="methods" id="methods" role="tablist" aria-label="取り込み方法">
+      <!-- 取り込み方法は会社の「取り込むもの」で決まるので、切り替えは出さない --><div class="methods" id="methods" role="tablist" aria-label="取り込み方法" hidden>
         <button class="method" data-method="receipt"><span class="method-no">①</span>原始資料</button>
         <button class="method" data-method="format2"><span class="method-no">②</span>現金預金収支日計表<span class="soon-tag">準備中</span></button>
         <button class="method" data-method="format3"><span class="method-no">③</span>試算表入力</button>
@@ -601,6 +607,7 @@
         <div class="panel-head"><span class="panel-title">会社を追加</span></div>
         <div class="add-row">
           <input id="newCompany" type="text" placeholder="例: 株式会社サンプル" autocomplete="off">
+          <select id="newCompanyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">現金預金収支日計表</option><option value="format3">試算表</option></select>
           <button class="btn btn-primary" id="addCompany">追加</button>
         </div>
       </div>
@@ -664,9 +671,10 @@
 <div class="dialog-back" id="masterDlg" hidden>
   <div class="dialog dialog-wide">
     <h2>会社の設定 <span class="dlg-sub" id="masterCompany"></span></h2>
-    <label class="dlg-system">この会社の元の会計ソフト
-      <select id="companySystem" aria-label="この会社の元の会計ソフト"></select>
-    </label>
+    <div class="dlg-system">
+      <label>取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">現金預金収支日計表</option><option value="format3">試算表</option></select></label>
+      <label id="companySystemWrap">元の会計ソフト <select id="companySystem" aria-label="元の会計ソフト"></select></label>
+    </div>
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">科目マスタ</button>
       <button class="tab" data-mtab="receipt"><span class="nb">レシートの</span><span class="nb">自動入力</span></button>
@@ -2182,17 +2190,32 @@ companySystemSel.innerHTML = SOURCE_SYSTEMS.map(x => `<option value="${x.id}">${
 companySystemSel.onchange = () => {
   const c = companies.find(x => x.id === masterCid);
   if (c) { c.system = companySystemSel.value; saveCompanies(); }
-  renderMaster(); render();
+  renderMaster(); renderCompanyList(); render();
 };
+const companyTypeSel = document.getElementById("companyType");
+companyTypeSel.onchange = () => {
+  const c = companies.find(x => x.id === masterCid);
+  if (c) { c.method = companyTypeSel.value; saveCompanies(); if (c.id === currentCompanyId) switchCompany(c.id); }
+  renderMaster(); renderCompanyList();
+};
+// 会社の種類ごとに、出すタブ（原始資料 → レシートの自動入力、試算表 → 試算表の読み替え）
+const TABS_BY_TYPE = { receipt: ["master", "receipt"], format2: ["master"], format3: ["master", "mapping"] };
 function renderMaster() {
+  const type = companies.find(x => x.id === masterCid)?.method || "receipt";
+  companyTypeSel.value = type;
   companySystemSel.value = systemOf(masterCid).id;
+  document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
+  const tabs = TABS_BY_TYPE[type] || TABS_BY_TYPE.receipt;
+  if (!tabs.includes(masterTab)) masterTab = "master";
+  for (const b of document.querySelectorAll("[data-mtab]")) b.hidden = !tabs.includes(b.dataset.mtab);
+  document.getElementById("masterTabs").hidden = tabs.length < 2;
   for (const b of document.querySelectorAll("[data-mtab]")) b.classList.toggle("active", b.dataset.mtab === masterTab);
   document.getElementById("masterReset").textContent = masterTab === "master" ? "標準に戻す" : "すべて消す";
   document.getElementById("masterCsv").hidden = masterTab === "receipt";
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
-    document.getElementById("masterHelp").textContent = `ミロクの科目コードの一覧（${masterOf(masterCid).length}科目）。レシートと試算表の両方で使います`;
+    document.getElementById("masterHelp").textContent = `ミロクの科目コードの一覧（${masterOf(masterCid).length}科目）`;
     const items = masterOf(masterCid).map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q))
       .sort((a, b) => (a.code === "" ? -1 : 0) - (b.code === "" ? -1 : 0) || Number(a.code) - Number(b.code) || a.code.localeCompare(b.code)); // コード順（追加したばかりの空の行は先頭）
     listEl.innerHTML = items.length ? items.map(m => `<div class="master-row">
@@ -2418,7 +2441,8 @@ function renderCompany() {
 function switchCompany(id) {
   currentCompanyId = id;
   const c = currentCompany();
-  if (c?.method) { settings.method = c.method; settings.docType = c.docType || "receipt"; saveSettings(); renderMethod(); }
+  // 会社の種類（原始資料・日計表・試算表）に取り込み方法を合わせる
+  if (c) { settings.method = c.method || "receipt"; if (settings.method === "receipt") settings.docType = "receipt"; saveSettings(); renderMethod(); }
   saveCompanies();
   render();
 }
@@ -2436,7 +2460,7 @@ function openCompanies() {
 function methodLabel(c) {
   if (c.method === TRIAL_SOURCE) return `試算表（${systemOf(c.id).name}）`;
   if (c.method === "format2") return "日計表";
-  return `原始資料（${{ payroll: "給与台帳", passbook: "通帳" }[c.docType] || "レシート"}）`;
+  return "原始資料";
 }
 function renderCompanyList() {
   const listEl = document.getElementById("companyList");
@@ -2445,7 +2469,7 @@ function renderCompanyList() {
       <span class="co-avatar">${escapeHtml(coInitial(c.name))}</span>
       <div class="co-main">
         <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
-        <span class="co-meta">${countFor(c.id)}件${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}${c.method ? `<span class="method-tag">${escapeHtml(methodLabel(c))}</span>` : ""}</span>
+        <span class="co-meta">${countFor(c.id)}件${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}<span class="method-tag">${escapeHtml(methodLabel(c))}</span></span>
       </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社の設定</button>
       <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
@@ -2460,10 +2484,9 @@ document.getElementById("addCompany").onclick = () => {
   const input = document.getElementById("newCompany");
   const name = input.value.trim();
   if (!name) { input.focus(); return; }
-  const c = { id: uid(), name };
+  const c = { id: uid(), name, method: document.getElementById("newCompanyType").value };
   companies.push(c);
-  currentCompanyId = c.id; // 追加した会社にそのまま切り替える
-  saveCompanies();
+  switchCompany(c.id); // 追加した会社にそのまま切り替える
   input.value = "";
   renderCompanyList();
   render();
@@ -2541,22 +2564,14 @@ document.getElementById("docTypes").addEventListener("click", e => {
   const b = e.target.closest("[data-doc]");
   if (!b) return;
   settings.docType = b.dataset.doc;
-  saveSettings(); rememberMethod();
+  saveSettings();
   renderMethod();
 });
-// 会社ごとに、最後に使った取り込み方法を覚える（会社を選び直すと、その方法に切り替わる）
-function rememberMethod() {
-  const c = currentCompany();
-  if (!c) return;
-  c.method = settings.method || "receipt";
-  c.docType = settings.docType || "receipt";
-  saveCompanies();
-}
 document.getElementById("methods").addEventListener("click", e => {
   const b = e.target.closest("[data-method]");
   if (!b) return;
   settings.method = b.dataset.method;
-  saveSettings(); rememberMethod();
+  saveSettings();
   renderMethod();
   render(); // 取り込み方法ごとに一覧が分かれているため
 });
