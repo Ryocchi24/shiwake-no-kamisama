@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>仕訳の神様</title>
-<meta name="theme-color" content="#14213d">
+<meta name="theme-color" content="#0e1424">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="仕訳の神様">
 <link rel="icon" type="image/png" href="favicon.png">
@@ -14,14 +14,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --sidebar: #14213d; --sidebar-text: #aeb8cc; --sidebar-active: #22335a;
-    --bg: #f3f5f8; --surface: #fff; --surface-2: #f8f9fb;
-    --text: #1b2433; --muted: #6a7385; --line: #e2e6ec; --line-strong: #cfd5de;
-    --primary: #2463eb; --primary-hover: #1d52c7; --primary-soft: #eaf1ff;
-    --debit: #eef4ff; --debit-text: #2451b3; --credit: #fff3ec; --credit-text: #b3521e;
+    --sidebar: #0e1424; --sidebar-text: #97a1b6; --sidebar-active: rgba(255,255,255,.08);
+    --bg: #f5f6f8; --surface: #fff; --surface-2: #f7f8fa;
+    --text: #111827; --muted: #6b7280; --line: #e7e9ee; --line-strong: #d5d9e0;
+    --primary: #2f5bea; --primary-hover: #2449c7; --primary-soft: #eef2fe;
+    --debit: #f2f5fe; --debit-text: #2f4fb8; --credit: #fdf5ef; --credit-text: #a8521f;
     --ok: #127a4a; --ok-soft: #e4f5ec; --warn: #9a6200; --warn-soft: #fff4d9;
     --err: #c62a2a; --err-soft: #fdeaea; --info: #4a5568; --info-soft: #edf0f4;
-    --radius: 8px;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(17,24,39,.04), 0 1px 3px rgba(17,24,39,.04);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -307,6 +308,81 @@
   .dlg-help:empty { margin: 0 0 10px; }
   .dlg-actions { display: flex; gap: 8px; align-items: center; }
 
+  /* ---- 見た目の仕上げ ---- */
+  body { -webkit-font-smoothing: antialiased; letter-spacing: .01em; }
+  .sidebar { padding: 20px 14px; border-right: 1px solid rgba(255,255,255,.04); }
+  .brand { font-size: 15px; letter-spacing: .04em; padding: 0 8px 24px; }
+  .brand-mark { border-radius: 8px; }
+  .nav-label { font-size: 10.5px; letter-spacing: .12em; color: #5b667d; padding: 16px 10px 6px; }
+  .nav a { padding: 9px 10px; border-radius: 8px; transition: background .15s, color .15s; }
+  .nav a:not(.disabled):hover { background: rgba(255,255,255,.05); color: #fff; }
+  .nav .soon { border-color: #2c3650; color: #6b7690; }
+  .topbar { height: 56px; background: rgba(245,246,248,.85); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid transparent; }
+  .crumb { font-size: 12.5px; }
+  .content { padding: 8px 32px 56px; max-width: 1280px; }
+  .page-head { margin-bottom: 22px; }
+  .page-head h1 { font-size: 24px; letter-spacing: .02em; }
+  .panel { border-radius: var(--radius); box-shadow: var(--shadow); border-color: var(--line); }
+  .panel-head { padding: 14px 18px; }
+  .panel-title { font-size: 14.5px; }
+  .btn { border-radius: 8px; height: 38px; padding: 0 16px; transition: background .15s, border-color .15s, box-shadow .15s; }
+  .btn-sm { height: 32px; padding: 0 12px; border-radius: 8px; }
+  .btn-primary { box-shadow: 0 1px 2px rgba(47,91,234,.25); }
+  .icon-btn { border-radius: 8px; width: 32px; height: 32px; }
+  /* 会社の選択 */
+  .company-select { margin-top: 12px; gap: 0; }
+  .company-select > svg, .company-select > span { display: none; }
+  .company-select select { -webkit-appearance: none; appearance: none; height: 38px; min-width: 240px; border-radius: 999px; padding: 0 38px 0 16px; font-weight: 600;
+    border: 1px solid var(--line-strong); background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 14px center; box-shadow: var(--shadow); cursor: pointer; }
+  /* 取り込み方法: ひとつながりの切り替え */
+  .methods { display: inline-flex; gap: 2px; padding: 4px; background: #eceef2; border-radius: 12px; margin-bottom: 14px; max-width: 100%; }
+  .method { border: none; background: none; color: var(--muted); border-radius: 9px; padding: 8px 16px; font-weight: 600; transition: background .15s, color .15s; }
+  .method:hover { color: var(--text); }
+  .method.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(17,24,39,.1); }
+  .method-no { color: var(--primary); font-weight: 700; }
+  .method:not(.active) .method-no { color: inherit; opacity: .7; }
+  .soon-tag { font-size: 10px; font-weight: 500; border: none; background: rgba(17,24,39,.06); border-radius: 4px; padding: 1px 5px; }
+  .doc-types { margin: 0 0 18px; gap: 6px; }
+  .doc-type { border: 1px solid var(--line); border-radius: 999px; padding: 5px 14px; font-weight: 500; transition: background .15s, color .15s; }
+  .doc-type:hover { color: var(--text); }
+  .doc-type.active { background: var(--primary-soft); border-color: transparent; color: var(--primary); }
+  .doc-type.active .soon-tag { color: var(--primary); background: rgba(47,91,234,.1); }
+  /* 読み取り結果の表 */
+  thead th { font-size: 11.5px; letter-spacing: .02em; }
+  tbody tr:hover td { background: #fafbfc; }
+  td.c-code { width: 80px; }
+  /* 候補リスト付きの欄に出る▼を消して、4桁のコードが隠れないようにする */
+  input[list]::-webkit-calendar-picker-indicator { display: none !important; }
+  .thumb, .no-img, .trial-tag { border-radius: 8px; }
+  .dropzone { border: 1.5px dashed var(--line-strong); border-radius: 12px; margin: 18px; padding: 56px 16px; background: var(--surface-2); }
+  .dropzone svg { width: 32px; height: 32px; color: #b4bcc9; }
+  .dropzone b { font-size: 15px; font-weight: 600; margin: 10px 0 2px; }
+  .badge { font-weight: 600; }
+  /* 会社の画面 */
+  .company-add { box-shadow: var(--shadow); }
+  .company-add .add-row { padding: 14px 18px; }
+  .company-add .add-row input { border-radius: 10px; background: var(--surface-2); border-color: var(--line); }
+  .company-add .add-row input:focus { outline: none; background: #fff; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  #companiesView .company-list { padding: 4px 8px 8px; }
+  #companiesView .company-item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto auto; align-items: center; gap: 12px; padding: 10px 10px; border-bottom: 1px solid var(--line); border-radius: 0; }
+  #companiesView .company-item:hover { background: var(--surface-2); }
+  .co-avatar { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; font-size: 16px; color: var(--primary); background: var(--primary-soft); }
+  .co-main { min-width: 0; display: flex; flex-direction: column; }
+  #companiesView .co-main input { width: 100%; max-width: 360px; height: 30px; font: inherit; font-size: 15px; font-weight: 600; color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: 0 6px; margin-left: -7px; background: transparent; text-overflow: ellipsis; }
+  #companiesView .co-main input:hover { border-color: var(--line); }
+  #companiesView .co-main input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
+  .co-meta { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .company-item .current-tag { font-weight: 600; font-size: 10.5px; }
+  /* 会社の設定 */
+  .dialog { border-radius: 16px; padding: 24px; box-shadow: 0 24px 60px rgba(17,24,39,.22); }
+  .dialog h2 { font-size: 18px; }
+  .dialog-back { background: rgba(17,24,39,.45); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+  .tabs { background: #eceef2; border: none; border-radius: 10px; padding: 4px; }
+  .tab { border-radius: 7px; font-weight: 600; padding: 6px 14px; }
+  .master-list { border-radius: 10px; }
+  .rc-credit { background: var(--surface-2); }
+  .toast { border-radius: 12px; background: #111827; }
+
   /* スマホ */
   @media (max-width: 860px) {
     .app { grid-template-columns: 1fr; }
@@ -379,6 +455,26 @@
     .tabs { width: 100%; }
     .tab { flex: 1; justify-content: center; padding: 7px 4px; }
     .row-actions .btn-sm { height: 32px; }
+  }
+
+  @media (max-width: 860px) {
+    .topbar { background: var(--sidebar); backdrop-filter: none; -webkit-backdrop-filter: none; }
+    .content { padding: 16px 16px 110px; }
+    .page-head h1 { font-size: 22px; }
+    .company-select select { min-width: 0; }
+    .methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; gap: 2px; }
+    .method { padding: 8px 4px; font-size: 12px; }
+    .doc-types { margin: 0 0 14px; }
+    .doc-type { padding: 7px 4px; }
+    #companiesView .company-list { padding: 0; }
+    #companiesView .company-item { grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 10px 8px; padding: 14px 16px; }
+    #companiesView .co-main { grid-column: 2 / 4; padding-left: 4px; }
+    #companiesView .company-item .btn-sm { grid-row: 2; height: 38px; justify-content: center; }
+    #companiesView .company-item .open-master { grid-column: 1 / 3; }
+    #companiesView .company-item [data-use] { grid-column: 3 / 5; }
+    #companiesView .company-item .icon-btn { grid-column: 4; grid-row: 1; }
+    #companiesView .co-main input { max-width: none; font-size: 16px; }
+    .mobile-capture .btn { border-radius: 12px; }
   }
 </style>
 </head>
@@ -679,6 +775,8 @@ const currentCompany = () => companies.find(c => c.id === currentCompanyId) || n
 // 取り込み方法（①レシート ②③…）ごとに一覧を分けて管理する
 const currentSource = () => settings.method || "receipt";
 const companyRows = () => rows.filter(r => r.companyId === currentCompanyId && (r.source || "receipt") === currentSource());
+// 会社のアイコンの文字（「株式会社」などを除いた最初の1文字）
+const coInitial = name => (String(name || "").replace(/株式会社|有限会社|合同会社|一般社団法人|\(株\)|（株）|\(有\)|（有）|\s/g, "") || "?").slice(0, 1);
 const countFor = id => rows.filter(r => r.companyId === id && r.status === "done").length;
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -2226,9 +2324,11 @@ function renderCompanyList() {
   const listEl = document.getElementById("companyList");
   document.getElementById("companyCount").textContent = companies.length ? `${companies.length}社` : "";
   listEl.innerHTML = companies.length ? companies.map(c => `<div class="company-item">
-      <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
-      ${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}
-      <span class="cnt">${countFor(c.id)}件</span>
+      <span class="co-avatar">${escapeHtml(coInitial(c.name))}</span>
+      <div class="co-main">
+        <input type="text" value="${escapeHtml(c.name)}" data-rename="${c.id}" aria-label="会社名">
+        <span class="co-meta">${countFor(c.id)}件${c.id === currentCompanyId ? `<span class="current-tag">選択中</span>` : ""}</span>
+      </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社の設定</button>
       <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
       <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
