@@ -358,7 +358,7 @@
   .dropzone svg { width: 32px; height: 32px; color: #b4bcc9; }
   .dropzone b { font-size: 15px; font-weight: 600; margin: 10px 0 2px; }
   .dropzone .btn { display: flex; width: fit-content; margin: 16px auto 0; }
-  .add-more[hidden] { display: none; }
+  .add-more[hidden], #listClear[hidden] { display: none; }
   .dropzone .btn svg { width: 16px; height: 16px; color: inherit; }
   body.web .open-camera { display: none; }
   .badge { font-weight: 600; }
@@ -563,9 +563,9 @@
           <div class="trial-bar" id="trialBar" hidden>
             <span class="trial-balance" id="trialBalance"></span>
             <label class="field">伝票日付<input type="date" id="trialDate"></label>
-            <button class="btn btn-sm btn-ghost" id="trialClear">一覧を空にする</button>
           </div>
           <span class="spacer"></span>
+          <button class="btn btn-ghost" id="listClear" hidden>一覧を空にする</button>
           <button class="btn add-more" id="addMore" hidden><svg><use href="#i-upload"/></svg>追加</button>
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
@@ -1267,12 +1267,11 @@ const noteHtml = r => {
   return `<div class="note" data-note-for="${r.id}" ${w.length ? "" : "hidden"}>⚠ ${escapeHtml(w.join("／"))}</div>`;
 };
 
-// 一覧に出すのは、まだCSVに出力していない仕訳（出力済みは「格納済み」として保管）
+// 一覧に出すのは、この会社・この取り込み方法の仕訳（CSVに出力した後も「一覧を空にする」まで残す）
 function sortedRows() {
   // 日付順（未入力・読み取り中は末尾）
   const k = r => r.date || "9999";
   return companyRows()
-    .filter(r => r.review !== "exported")
     .sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
 }
 const csvTargetRows = () => sortedRows().filter(r => r.status === "done");
@@ -1280,7 +1279,8 @@ const csvTargetRows = () => sortedRows().filter(r => r.status === "done");
 function statusBadge(row) {
   if (row.status === "reading") return `<span class="badge info"><span class="spinner"></span>読取中</span>`;
   if (row.status === "error") return `<span class="badge err">エラー</span>`;
-  return warningsOf(row).length ? `<span class="badge warn">要確認</span>` : "";
+  if (warningsOf(row).length) return `<span class="badge warn">要確認</span>`;
+  return row.review === "exported" ? `<span class="badge ok">出力済み</span>` : "";
 }
 
 function renderStats() {
@@ -1314,6 +1314,7 @@ function render() {
   renderTrialBar();
   const items = sortedRows();
   document.getElementById("addMore").hidden = !items.length;
+  document.getElementById("listClear").hidden = !items.length;
   if (!items.length) {
     list.innerHTML = currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
@@ -1369,7 +1370,7 @@ function render() {
         <th></th>
       </tr>
       <tr>
-        <th>No.</th><th>状態</th><th>証憑</th><th>①伝票日付</th>
+        <th>No.</th><th>状態</th><th>画像</th><th>①伝票日付</th>
         <th class="b-left" title="勘定科目コード">②科目</th><th title="科目別補助コード">③補助</th><th class="num">④金額</th>
         <th class="b-left">⑤摘要</th>
         <th class="b-left" title="勘定科目コード">⑥科目</th><th title="科目別補助コード">⑦補助</th><th class="num">⑧金額</th>
@@ -1520,7 +1521,7 @@ document.getElementById("download").onclick = async () => {
   const name = `${company}_仕訳_${stamp}.csv`;
   if (!(await saveFile(blob, name))) return; // 保存をキャンセルした場合は一覧に残す
 
-  // 二重取り込みを防ぐため、出力した仕訳は一覧から外して「格納済み」として保管する
+  // 出力した仕訳は「出力済み」の印を付けて、一覧に残す
   setReview(done.map(r => r.id), "exported", `${done.length}件を保存しました`);
 };
 
@@ -2091,12 +2092,12 @@ document.getElementById("trialDate").addEventListener("change", e => {
   for (const r of sortedRows()) r.date = e.target.value;
   save(); render();
 });
-document.getElementById("trialClear").onclick = () => {
+document.getElementById("listClear").onclick = () => {
   const items = sortedRows();
-  if (!items.length || !confirm(`試算表から作った ${items.length} 行を一覧から消しますか？（対応表は残ります）`)) return;
+  if (!items.length || !confirm(`一覧の ${items.length} 行を消しますか？`)) return;
   const ids = new Set(items.map(r => r.id));
   rows = rows.filter(r => !ids.has(r.id));
-  save(); render();
+  save(); render(); pruneImages();
 };
 
 // ---- 科目マスタ・対応表の画面 ----
