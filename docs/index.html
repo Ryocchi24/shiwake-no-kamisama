@@ -230,6 +230,7 @@
   .master-csv[hidden] { display: none; }
   .rc-credit { display: grid; grid-template-columns: auto 110px 1fr; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
   .rc-credit b { font-size: 13px; }
+  .rc-credit select { height: 32px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 6px; background: var(--surface); }
   .rc-credit input { height: 32px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; }
   .rc-head { font-size: 12px; color: var(--muted); padding: 8px 12px 4px; }
   .master-row.rule { grid-template-columns: 1fr 100px 1fr 36px; }
@@ -1676,6 +1677,19 @@ const DEFAULT_MAPPING = [
   {"srcCode": "819", "srcName": "雑収入", "code": "5105"},
   {"srcCode": "821", "srcName": "支払利息", "code": "5201"}
 ];
+// 別の会計システムの種類。会社の設定で選ぶと、その標準の対応表を使う（会社ごとに違う科目は会社の対応表で上書き）
+const SOURCE_SYSTEMS = [
+  { id: "pca", name: "PCA会計", mapping: DEFAULT_MAPPING },
+  { id: "yayoi", name: "弥生会計", mapping: [] },
+  { id: "freee", name: "freee", mapping: [] },
+  { id: "mf", name: "マネーフォワード", mapping: [] },
+  { id: "bugyo", name: "勘定奉行", mapping: [] },
+  { id: "other", name: "その他", mapping: [] },
+];
+const systemOf = (cid = currentCompanyId) => {
+  const id = companies.find(c => c.id === cid)?.system || "pca";
+  return SOURCE_SYSTEMS.find(x => x.id === id) || SOURCE_SYSTEMS[0];
+};
 let masters = load(MASTERS_KEY, {});
 let mappings = load(MAPPINGS_KEY, {});
 function saveMasters() { try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masters)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {} }
@@ -1909,7 +1923,7 @@ async function importTrial(files) {
       const learned = map[key]?.code;
       // 会社の対応表 → 標準の対応（番号と科目名が一致）→ 科目名からの推測 の順に探す
       // 番号が一致し、科目名もほぼ同じ（読み取りで1〜2文字違うことがあるため）ものを使う
-      const std = DEFAULT_MAPPING.find(d => d.srcCode === a.srcCode && nameSimilarity(normName(a.srcName), normName(d.srcName)) >= 0.6)?.code;
+      const std = systemOf().mapping.find(d => d.srcCode === a.srcCode && nameSimilarity(normName(a.srcName), normName(d.srcName)) >= 0.6)?.code;
       const code = learned || std || suggestCode(a.srcName);
       const base = { id: "", groupId, companyId: currentCompanyId, source: TRIAL_SOURCE, thumb: "", status: "done", review: "pending",
         date, summary: "", debitCode: "", debitSub: "", debitAmount: "", creditCode: "", creditSub: "", creditAmount: "",
@@ -2022,14 +2036,21 @@ function renderMaster() {
     const map = mappingOf(masterCid);
     const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code, masterCid)).includes(q))
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
-    document.getElementById("masterHelp").textContent = "別会計システムの科目 → ミロクのコード";
-    listEl.innerHTML = entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
+    const sys = systemOf(masterCid);
+    document.getElementById("masterHelp").textContent = "";
+    listEl.innerHTML = `<div class="rc-credit">
+        <b>会計システム</b>
+        <select data-system aria-label="会計システム">${SOURCE_SYSTEMS.map(x => `<option value="${x.id}" ${x.id === sys.id ? "selected" : ""}>${escapeHtml(x.name)}</option>`).join("")}</select>
+        <span class="muted">標準 ${sys.mapping.length}件</span>
+      </div>
+      <div class="rc-head">この会社だけの対応</div>`
+      + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
         <input value="${escapeHtml(v.code)}" data-mapkey="${escapeHtml(k)}" list="masterCodes" inputmode="numeric" aria-label="ミロクのコード">
         <span class="muted">${escapeHtml(masterName(v.code, masterCid) || "（マスタにない）")}</span>
         <button class="icon-btn" data-mapdel="${escapeHtml(k)}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
-      : `<div class="master-empty">対応はまだありません</div>`;
+      : `<div class="master-empty">まだありません</div>`);
   }
   renderMasterCodes();
 }
@@ -2081,6 +2102,11 @@ document.getElementById("masterReset").onclick = () => {
 };
 document.getElementById("masterList").addEventListener("change", e => {
   const t = e.target;
+  if (t.dataset.system !== undefined) {
+    const c = companies.find(x => x.id === masterCid);
+    if (c) { c.system = t.value; saveCompanies(); }
+    renderMaster(); return;
+  }
   const rc = receiptSettingsOf(masterCid);
   if (t.dataset.rck === "credit") { rc.creditCode = (t.value.match(/^\s*(\d+)/) || [])[1] || ""; saveReceiptSettings(); renderMaster(); return; }
   if (t.dataset.rri !== undefined) {
