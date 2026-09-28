@@ -1607,7 +1607,7 @@ function tapToShare(file) {
 // 元の科目 → ミロクの科目コードは、会社ごとの「対応表」で変換する（初回だけ選べば、翌月から自動）
 
 const TRIAL_SOURCE = "format3";
-const MASTERS_KEY = "shiwake-masters";   // { 会社ID: [{ code, name }] }  ミロクの科目マスタ
+const MASTERS_KEY = "shiwake-masters";   // { 会社ID: { adds: [{ code, name }], deleted: [code] } }  ミロクの科目マスタの、標準との違いだけ
 const MAPPINGS_KEY = "shiwake-mappings"; // { 会社ID: { 元の科目キー: { code, srcName, srcCode } } }
 // 標準の科目マスタ（ミロクの科目コードと科目名）。会社を追加したときは、これが最初から入る。
 // 銀行口座など会社ごとに違う科目は、各会社の「科目マスタ・対応表」で手直しする
@@ -1828,9 +1828,31 @@ const systemOf = (cid = currentCompanyId) => {
   const id = companies.find(c => c.id === cid)?.system || "pca";
   return SOURCE_SYSTEMS.find(x => x.id === id) || SOURCE_SYSTEMS[0];
 };
-let masters = load(MASTERS_KEY, {});
+// 会社の科目マスタは「標準 ＋ その会社だけの違い」で持つ。保存するのは違い（追加・名前の変更・削除）だけなので、
+// 標準（DEFAULT_MASTER）を直すと、すべての会社に反映され、会社ごとの手直しは残る
+function masterDiffOf(list) {
+  const std = new Map(DEFAULT_MASTER.map(m => [m.code, m.name]));
+  const codes = new Set(list.map(m => m.code));
+  return {
+    adds: list.filter(m => !std.has(m.code) || std.get(m.code) !== m.name).map(m => ({ code: m.code, name: m.name })),
+    deleted: DEFAULT_MASTER.filter(m => !codes.has(m.code)).map(m => m.code),
+  };
+}
+function masterFromDiff(diff) {
+  const deleted = new Set(diff.deleted || []);
+  const adds = diff.adds || [];
+  const changed = new Map(adds.filter(m => m.code).map(m => [m.code, m.name]));
+  const list = DEFAULT_MASTER.filter(m => !deleted.has(m.code)).map(m => ({ code: m.code, name: changed.has(m.code) ? changed.get(m.code) : m.name }));
+  const stdCodes = new Set(DEFAULT_MASTER.map(m => m.code));
+  return [...adds.filter(m => !stdCodes.has(m.code) || !m.code).map(m => ({ ...m })), ...list];
+}
+// 以前の形（会社ごとに全科目を丸ごと保存）は、ここで違いだけの形に直す
+const masterDiffs = Object.fromEntries(Object.entries(load(MASTERS_KEY, {})).map(([cid, v]) => [cid, Array.isArray(v) ? masterDiffOf(v) : v]));
+const masters = {}; // 画面で使う、会社ごとの科目マスタ（標準 ＋ 違い）
 let mappings = load(MAPPINGS_KEY, {});
-function saveMasters() { try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masters)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {} }
+function saveMasters() {
+  for (const [cid, list] of Object.entries(masters)) masterDiffs[cid] = masterDiffOf(list);
+  try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masterDiffs)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {} }
 // レシートの設定（会社ごと）: 貸方のいつもの科目と、「店名・品目 → 借方の科目」のルール
 const RECEIPT_SETTINGS_KEY = "shiwake-receipt-settings"; // { 会社ID: { creditCode, rules: [{ keyword, code }] } }
 let receiptSettings = load(RECEIPT_SETTINGS_KEY, {});
@@ -1844,7 +1866,8 @@ function receiptDebitCode(cid, store, summary) {
   return hit ? hit.code : "";
 }
 const masterOf = (cid = currentCompanyId) => {
-  if (!masters[cid] || !masters[cid].length) masters[cid] = DEFAULT_MASTER.map(m => ({ ...m }));
+  if (!masters[cid]) masters[cid] = masterFromDiff(masterDiffs[cid] || {});
+  if (!masters[cid].length) masters[cid] = DEFAULT_MASTER.map(m => ({ ...m }));
   return masters[cid];
 };
 const mappingOf = (cid = currentCompanyId) => (mappings[cid] ||= {});
