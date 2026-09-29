@@ -1711,8 +1711,8 @@ document.getElementById("download").onclick = async () => {
 
   const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  // 試算表の行は片側だけなので、その会社のミロク科目マスタに「諸口」があれば、反対側を諸口にする
-  const shokuchi = masterOf().find(m => normName(m.name) === "諸口")?.code || "";
+  // 試算表の行は片側だけなので、反対側を諸口にする（その会社のミロク科目マスタの「諸口」。なければミロクで基本の 3999）
+  const shokuchi = masterOf().find(m => normName(m.name) === "諸口")?.code || "3999";
   const lines = done.map(r => {
     let { debitCode, debitAmount, creditCode, creditAmount } = r;
     if (r.source === TRIAL_SOURCE && shokuchi) {
