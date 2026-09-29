@@ -258,6 +258,12 @@
   .master-row input:focus { border-color: var(--primary); background: #fff; outline: none; }
   .master-row .muted { color: var(--muted); font-size: 12.5px; }
   .map-head { font-size: 11.5px; color: var(--muted); background: var(--surface-2); padding-top: 6px !important; padding-bottom: 6px !important; }
+  .code-suggest { position: fixed; z-index: 120; width: 260px; max-height: 300px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px rgba(17,24,39,.18); padding: 4px; }
+  .code-suggest[hidden] { display: none; }
+  .cs-item { display: flex; gap: 10px; padding: 8px 10px; border-radius: 7px; font-size: 14px; cursor: pointer; color: var(--text); }
+  .cs-item.active, .cs-item:hover { background: var(--primary-soft); }
+  .cs-code { font-family: "Roboto Mono", monospace; color: var(--muted); min-width: 40px; }
+  .dlg-system input#companyShokuchi { max-width: 200px; }
   .master-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
   .doc-types { display: flex; gap: 6px; margin: -6px 0 16px; flex-wrap: wrap; }
   .doc-types[hidden], .methods[hidden] { display: none !important; }
@@ -745,6 +751,7 @@
       <label>会社名 <input id="companyNameInput" type="text" autocomplete="off" aria-label="会社名"></label>
       <label>取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">現金預金収支日計表</option><option value="format3">試算表</option></select></label>
       <label id="companySystemWrap">元の会計ソフト <select id="companySystem" aria-label="元の会計ソフト"></select></label>
+      <label id="companyShokuchiWrap">諸口のコード <input id="companyShokuchi" inputmode="numeric" autocomplete="off" placeholder="ミロクの諸口のコード" aria-label="諸口のコード"></label>
     </div>
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">ミロク科目マスタ</button>
@@ -1437,7 +1444,7 @@ function inputHtml(row, f) {
   const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
   const attrs = f.type === "date" ? 'type="date"' : f.num ? 'inputmode="numeric"' : "";
   const cls = [f.num ? "num" : "", f.code ? "code" : "", fieldMissing(row, f.key, v) ? "missing" : ""].join(" ");
-  const list = f.key === "debitCode" || f.key === "creditCode" ? 'list="masterCodes"' : "";
+  const list = f.key === "debitCode" || f.key === "creditCode" ? 'data-code-suggest autocomplete="off"' : "";
   return `<input ${attrs} ${list} class="${cls}" ${f.code ? 'placeholder="—"' : ""} data-id="${row.id}" data-key="${f.key}" value="${escapeHtml(shown)}">`;
 }
 
@@ -1460,7 +1467,7 @@ function render() {
   if (!items.length) {
     list.innerHTML = currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
-      <b>${systemOf().id ? `${escapeHtml(systemOf().name)}の` : ""}試算表を選んでください</b>Excel・PDF・画像
+      <b>${systemOf().id ? `${escapeHtml(systemOf().name)}の` : ""}試算表を選んでください</b>${NATIVE ? "Excel・PDF・画像" : "Excel・CSV"}
       <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div>`
       : NATIVE
       ? `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
@@ -1547,9 +1554,59 @@ function setReview(ids, review, message) {
   showToast(message);
 }
 
+// ---- コードの欄: コードの数字か科目名を入れると、その会社のミロク科目マスタから候補を出して選べる ----
+const isCodeSearch = el => el?.matches?.("[data-code-suggest]") && /[^\d\s]/.test(el.value);
+const suggestEl = Object.assign(document.createElement("div"), { className: "code-suggest", hidden: true });
+document.body.appendChild(suggestEl);
+let suggestInput = null, suggestIdx = 0, suggestItems = [];
+function suggestList(input) {
+  const cid = input.closest("#masterDlg") ? masterCid : (rows.find(r => r.id === input.dataset.id)?.companyId || currentCompanyId);
+  return masterOf(cid);
+}
+function showSuggest(input) {
+  const q = input.value.trim(), n = normName(q), all = suggestList(input);
+  const items = (!q ? all : /^\d+$/.test(q) ? all.filter(m => m.code.startsWith(q)) : all.filter(m => normName(m.name).includes(n))).slice(0, 8);
+  if (!items.length || (items.length === 1 && items[0].code === q)) return hideSuggest();
+  suggestInput = input; suggestItems = items; suggestIdx = 0;
+  suggestEl.innerHTML = items.map((m, i) => `<div class="cs-item ${i ? "" : "active"}" data-i="${i}"><span class="cs-code">${escapeHtml(m.code)}</span>${escapeHtml(m.name)}</div>`).join("");
+  const rc = input.getBoundingClientRect();
+  suggestEl.style.left = Math.max(8, Math.min(rc.left, innerWidth - 268)) + "px";
+  suggestEl.style.top = rc.bottom + 4 + "px";
+  suggestEl.hidden = false;
+}
+function hideSuggest() { suggestEl.hidden = true; suggestInput = null; }
+function pickSuggest(i) {
+  const m = suggestItems[i], input = suggestInput;
+  if (!m || !input) return;
+  hideSuggest();
+  input.value = m.code;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  hideSuggest();
+}
+document.addEventListener("input", e => { if (e.target.matches?.("[data-code-suggest]")) showSuggest(e.target); });
+document.addEventListener("focusin", e => { if (e.target.matches?.("[data-code-suggest]")) e.target.dataset.prev = e.target.value; });
+document.addEventListener("focusout", e => {
+  const t = e.target;
+  if (!t.matches?.("[data-code-suggest]")) return;
+  setTimeout(() => { if (suggestInput === t) hideSuggest(); if (isCodeSearch(t)) t.value = t.dataset.prev || ""; }, 150); // 選ばずに離れたら元に戻す
+});
+document.addEventListener("keydown", e => {
+  if (suggestEl.hidden || e.target !== suggestInput) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    suggestIdx = (suggestIdx + (e.key === "ArrowDown" ? 1 : suggestItems.length - 1)) % suggestItems.length;
+    [...suggestEl.children].forEach((c, i) => c.classList.toggle("active", i === suggestIdx));
+  } else if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); pickSuggest(suggestIdx); }
+  else if (e.key === "Escape") hideSuggest();
+});
+suggestEl.addEventListener("pointerdown", e => { const it = e.target.closest("[data-i]"); if (it) { e.preventDefault(); pickSuggest(Number(it.dataset.i)); } });
+addEventListener("scroll", e => { if (!suggestEl.hidden && !suggestEl.contains(e.target)) hideSuggest(); }, true);
+
 // 入力の反映（再描画はしないのでフォーカスが外れない）
 const list = document.getElementById("list");
 list.addEventListener("input", e => {
+  if (isCodeSearch(e.target)) return; // 科目名で探している途中は、まだ反映しない
   const { id, key } = e.target.dataset;
   const row = rows.find(r => r.id === id);
   if (!row) return;
@@ -1583,6 +1640,7 @@ list.addEventListener("input", e => {
 });
 // 金額はフォーカスが外れたらカンマ区切りで表示、日付変更時は並び替え
 list.addEventListener("change", e => {
+  if (isCodeSearch(e.target)) return; // 科目名で探している途中は、まだ反映しない
   const { id, key } = e.target.dataset;
   const row = rows.find(r => r.id === id);
   if (!row) return;
@@ -1650,7 +1708,16 @@ document.getElementById("download").onclick = async () => {
 
   const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  const lines = done.map(r => [formatDate(r.date), r.debitCode, r.debitSub, r.debitAmount, r.summary, r.creditCode, r.creditSub, r.creditAmount].map(cell).join(","));
+  // 試算表の行は片側だけなので、会社設定に諸口のコードがあれば、反対側を諸口にする
+  const shokuchi = currentCompany()?.shokuchi || "";
+  const lines = done.map(r => {
+    let { debitCode, debitAmount, creditCode, creditAmount } = r;
+    if (r.source === TRIAL_SOURCE && shokuchi) {
+      if (Number(debitAmount) && !creditCode && !Number(creditAmount)) { creditCode = shokuchi; creditAmount = debitAmount; }
+      else if (Number(creditAmount) && !debitCode && !Number(debitAmount)) { debitCode = shokuchi; debitAmount = creditAmount; }
+    }
+    return [formatDate(r.date), debitCode, r.debitSub, debitAmount, r.summary, creditCode, r.creditSub, creditAmount].map(cell).join(",");
+  });
   if (settings.includeHeader) lines.unshift(CSV_HEADERS.join(","));
   const csv = lines.join("\r\n") + "\r\n";
 
@@ -1899,7 +1966,7 @@ function parseTrialTable(allRows) {
     const srcName = name.join("").replace(/[［\[].*$/, "").replace(/\s/g, "");
     if ((!srcName && !srcCode) || nums.length < 4) continue; // 科目名が読めなくても番号があれば残す
     if (needCode && !srcCode) continue;
-    if (/計$|合計|^[【〔(（].*[】〕)）]$|^9\d{3}$/.test(srcName) || /^9\d{3}$/.test(srcCode)) continue;
+    if (isSubtotalName(srcName) || /^9\d{3}$/.test(srcName) || /^9\d{3}$/.test(srcCode)) continue;
     const [zen, debit, credit, zan] = nums.slice(-4);
     const ok = zen + debit - credit === zan || zen - debit + credit === zan;
     accounts.push({ srcCode, srcName, zen, debit, credit, zan, ok });
@@ -1923,6 +1990,8 @@ function loadScript(src) {
 }
 const isSheetFile = f => /\.(xlsx|xlsm|xls|csv)$/i.test(f.name) || /spreadsheet|excel|text\/csv/.test(f.type);
 async function sheetToRows(file) {
+  // CSVは文字コード（UTF-8／Excelの標準のShift_JIS）を見分けて読む
+  if (/\.csv$/i.test(file.name) || /text\/csv/.test(file.type)) return readCsvFile(file);
   if (!window.XLSX) await loadScript("vendor/sheetjs/xlsx.full.min.js");
   const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", codepage: 932 });
   // すべてのシートを上から順に（試算表が複数シートに分かれている場合も読む）
@@ -1997,6 +2066,20 @@ function setCompanySource(cid, items, replace) {
 }
 
 // 見出しの行（「借方」「貸方」を含む行）から列の位置を決めて読む。見つからなければ表の読み取りと同じ方法で読む
+// 小計・合計・見出しの行（科目ではない行）か
+function isSubtotalName(name) {
+  const n = String(name).replace(/\s/g, "");
+  return /計$|合計|小計|累計|総計/.test(n)
+    || /^[【〔(（［\[<＜《].*[】〕)）］\]>＞》]$/.test(n)
+    || /の部$|^(資産|負債|純資産|負債純資産|負債・純資産)(の部)?$/.test(n)
+    || /^(売上総|営業|経常|税引前当期純?|税引前|当期純?)(利益|損失|損益)/.test(n)
+    || /^(流動資産|固定資産|有形固定資産|無形固定資産|投資その他の資産|繰延資産|流動負債|固定負債|株主資本|利益剰余金|その他利益剰余金|資本剰余金|評価・換算差額等|販売費及び一般管理費|営業外収益|営業外費用|特別利益|特別損失|売上原価|製造原価|製造費用|当期製造費用|当期製品製造原価)$/.test(n);
+}
+// 科目コードの列がある表では、コードのない行（見出しや小計）は読まない
+function dropUncoded(accounts) {
+  const coded = accounts.filter(a => a.srcCode).length;
+  return coded >= 5 && coded >= accounts.length * 0.5 ? accounts.filter(a => a.srcCode) : accounts;
+}
 function parseTrialSheet(rows) {
   const headerIdx = rows.findIndex((r, i) => i < 30 && r.some(c => /借方/.test(c)) && r.some(c => /貸方/.test(c)));
   if (headerIdx < 0) return parseTrialTable(rows.map(r => r.filter(c => c !== "")));
@@ -2025,7 +2108,7 @@ function parseTrialSheet(rows) {
     const m = srcName.match(/^(.*?)[［\[]\s*(\d+)\s*[］\]]?$/); // 「現金［111］」のように番号が科目名に付いている形
     if (m) { srcName = m[1]; srcCode ||= m[2]; }
     if (!srcCode && /^\d{2,5}$/.test(String(row[0] || "")) && nameCol !== 0) srcCode = String(row[0]);
-    if (!srcName || /計$|合計|^[【〔(（].*[】〕)）]$/.test(srcName) || /^9\d{3}$/.test(srcCode)) continue;
+    if (!srcName || isSubtotalName(srcName) || /^9\d{3}$/.test(srcCode)) continue;
     const debit = amount(row[debitCol]), credit = amount(row[creditCol]);
     const zen = zenCol >= 0 ? amount(row[zenCol]) : 0, zan = zanCol >= 0 ? amount(row[zanCol]) : 0;
     if (!debit && !credit && !zen && !zan) continue;
@@ -2033,7 +2116,7 @@ function parseTrialSheet(rows) {
     accounts.push({ srcCode, srcName, zen, debit, credit, zan, ok });
   }
   const { date } = parseTrialTable(rows.slice(0, 12).map(r => r.filter(c => c !== "")));
-  return { accounts, date };
+  return { accounts: dropUncoded(accounts), date };
 }
 
 async function importTrial(files) {
@@ -2171,6 +2254,10 @@ document.getElementById("companyNameInput").addEventListener("change", e => {
   document.getElementById("masterCompany").textContent = name;
   renderCompanyList(); render();
 });
+document.getElementById("companyShokuchi").addEventListener("change", e => {
+  const c = companies.find(x => x.id === masterCid);
+  if (c) { c.shokuchi = (e.target.value.match(/\d+/) || [""])[0]; e.target.value = c.shokuchi; saveCompanies(); }
+});
 const companyTypeSel = document.getElementById("companyType");
 companyTypeSel.onchange = () => {
   const c = companies.find(x => x.id === masterCid);
@@ -2184,6 +2271,8 @@ function renderMaster() {
   companyTypeSel.value = type;
   companySystemSel.value = systemOf(masterCid).id;
   document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
+  document.getElementById("companyShokuchiWrap").hidden = type !== TRIAL_SOURCE;
+  document.getElementById("companyShokuchi").value = companies.find(x => x.id === masterCid)?.shokuchi || "";
   const tabs = TABS_BY_TYPE[type] || TABS_BY_TYPE.receipt;
   if (!tabs.includes(masterTab)) masterTab = "master";
   for (const b of document.querySelectorAll("[data-mtab]")) b.hidden = !tabs.includes(b.dataset.mtab);
@@ -2209,13 +2298,13 @@ function renderMaster() {
     const rules = rc.rules.map((x, i) => ({ ...x, i })).filter(x => !q || normName(x.keyword + x.code + masterName(x.code, masterCid)).includes(q));
     listEl.innerHTML = `<div class="rc-credit">
         <b>貸方の科目</b>
-        <input value="${escapeHtml(rc.creditCode)}" data-rck="credit" list="masterCodes" inputmode="numeric" placeholder="例: 1101" aria-label="貸方の科目コード">
+        <input value="${escapeHtml(rc.creditCode)}" data-rck="credit" data-code-suggest autocomplete="off" placeholder="例: 1101" aria-label="貸方の科目コード">
         <span class="muted">${escapeHtml(rc.creditCode ? (masterName(rc.creditCode, masterCid) || "（マスタにない）") : "")}</span>
       </div>
       <div class="rc-head">店名 → 借方の科目</div>`
       + (rules.length ? rules.map(x => `<div class="master-row rule">
         <input value="${escapeHtml(x.keyword)}" data-rri="${x.i}" data-rrk="keyword" placeholder="例: セブンイレブン" aria-label="店名・品目に含まれる言葉">
-        <input value="${escapeHtml(x.code)}" data-rri="${x.i}" data-rrk="code" list="masterCodes" inputmode="numeric" placeholder="コード" aria-label="借方の科目コード">
+        <input value="${escapeHtml(x.code)}" data-rri="${x.i}" data-rrk="code" data-code-suggest autocomplete="off" placeholder="コード" aria-label="借方の科目コード">
         <span class="muted">${escapeHtml(x.code ? (masterName(x.code, masterCid) || "（マスタにない）") : "")}</span>
         <button class="icon-btn" data-rrdel="${x.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
       : `<div class="master-empty">ルールはまだありません</div>`);
@@ -2230,7 +2319,7 @@ function renderMaster() {
       + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
-        <input value="${escapeHtml(v.code)}" data-mapkey="${escapeHtml(k)}" list="masterCodes" inputmode="numeric" aria-label="ミロクのコード">
+        <input value="${escapeHtml(v.code)}" data-mapkey="${escapeHtml(k)}" data-code-suggest autocomplete="off" aria-label="ミロクのコード">
         <span class="muted">${escapeHtml(masterName(v.code, masterCid) || "（マスタにない）")}</span>
         <button class="icon-btn" data-mapdel="${escapeHtml(k)}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
       : `<div class="master-empty">まだありません</div>`);
@@ -2288,6 +2377,7 @@ document.getElementById("masterReset").onclick = () => {
   saveMasters(); renderMaster();
 };
 document.getElementById("masterList").addEventListener("change", e => {
+  if (isCodeSearch(e.target)) return; // 科目名で探している途中は、まだ反映しない
   const t = e.target;
   const rc = receiptSettingsOf(masterCid);
   if (t.dataset.rck === "credit") { rc.creditCode = (t.value.match(/^\s*(\d+)/) || [])[1] || ""; saveReceiptSettings(); renderMaster(); return; }
@@ -2572,8 +2662,10 @@ function renderMethod() {
     el.dataset.orig ||= el.textContent;
     el.textContent = method === TRIAL_SOURCE ? "ファイルを選ぶ" : el.dataset.orig;
   }
+  // Web版の文字読み取りは表の数字に弱いので、試算表はExcel・CSVだけにする（iPhoneアプリはPDF・写真も読める）
+  const sheetTypes = ".xlsx,.xlsm,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv";
   for (const input of document.querySelectorAll(".file-picker:not([capture])")) input.accept = method === TRIAL_SOURCE
-    ? "image/*,application/pdf,.pdf,.xlsx,.xlsm,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" : "image/*";
+    ? (NATIVE ? "image/*,application/pdf,.pdf," + sheetTypes : sheetTypes) : "image/*";
   const label = el => el ? el.textContent.replace("準備中", "").trim() : "";
   const activeMethod = document.querySelector(`.method[data-method="${method}"]`);
   const activeDoc = document.querySelector(`.doc-type[data-doc="${doc}"]`);
