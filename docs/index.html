@@ -821,9 +821,6 @@
 <div class="dialog-back" id="settings" hidden>
   <div class="dialog">
     <h2>設定</h2>
-    <div class="mode-box">
-      <b>現在の読み取り方式：<span id="modeName"></span></b>
-    </div>
     <div class="dlg-label">CSVの形式</div>
     <div class="csv-opts">
       <label class="field">日付形式
@@ -834,14 +831,9 @@
       </label>
       <label class="field"><input id="includeHeader" type="checkbox"> 見出し行を入れる</label>
     </div>
-    <label class="dlg-label" for="apiKey">高精度モード用 APIキー（任意・有料）</label>
-    <input id="apiKey" type="password" autocomplete="off" placeholder="空欄のままなら無料モード">
-    <p class="dlg-help">1枚あたり数円。キーはこの端末にだけ保存されます。</p>
     <div class="dlg-actions">
-      <button class="btn btn-ghost" id="keyDelete">キーを削除</button>
       <span style="flex:1"></span>
-      <button class="btn" id="settingsClose">キャンセル</button>
-      <button class="btn btn-primary" id="keySave">保存</button>
+      <button class="btn btn-primary" id="settingsClose">閉じる</button>
     </div>
   </div>
 </div>
@@ -849,16 +841,13 @@
 <script src="vendor/encoding.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
 <script type="module">
-// 高精度モード（Claude）の部品は、使うときだけネットから読み込む（アプリを電波がなくても開けるように）
-const ANTHROPIC_SDK_URL = "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm";
-
-const MODEL = "claude-opus-5";
-const API_KEY_STORAGE = "shiwake-api-key";
+// お客さんのデータ（画像・試算表・マスタ・仕訳）は、この端末の外へ送らない。読み取りも端末の中だけで行う
+// 以前の版で保存されたかもしれない外部AI用のAPIキーは消しておく
+try { localStorage.removeItem("shiwake-api-key"); } catch {}
 const STORAGE_KEY = "receipt-rows-v1";
 const COMPANIES_KEY = "shiwake-companies";
 const CURRENT_COMPANY_KEY = "shiwake-current-company";
 const SETTINGS_KEY = "receipt-settings-v1";
-const MAX_PARALLEL_AI = 3;  // Claude はサーバー側で処理するので並列で送る
 const MAX_PARALLEL_OCR = 1; // 端末内OCRはスマホの負荷が高いので1枚ずつ
 
 /** 1行 = 1仕訳。thumb は一覧用の小さい画像（localStorage）、大きい画像は IndexedDB に保存 */
@@ -1017,7 +1006,7 @@ function resize(file, maxSide, quality) {
 }
 
 function pump() {
-  const limit = getApiKey() ? MAX_PARALLEL_AI : MAX_PARALLEL_OCR;
+  const limit = MAX_PARALLEL_OCR;
   while (running < limit && queue.length) {
     const groupId = queue.shift();
     running++;
@@ -1030,7 +1019,7 @@ async function readGroup(groupId) {
   try {
     const image = ocrImages.get(groupId) || await getFullImage(groupId);
     if (!image) throw new Error("画像が見つかりません。もう一度撮影してください");
-    const data = { receipts: getApiKey() ? await readReceipt(image.split(",")[1]) : await readReceiptFree(image) };
+    const data = { receipts: await readReceiptFree(image) };
 
     const idx = rows.indexOf(placeholder);
     if (idx < 0) return; // 読み取り中に削除された
@@ -1054,78 +1043,6 @@ async function readGroup(groupId) {
   }
   save();
   render();
-}
-
-// ---- AI 読み取り（ブラウザから直接 Claude API を呼ぶ） ----
-const RECEIPT_SCHEMA = {
-  type: "object",
-  properties: {
-    receipts: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          date: { type: "string", description: "取引日 YYYY-MM-DD。読めない場合は空文字" },
-          amount: { type: "integer", description: "支払総額（税込・円）。読めない場合は0" },
-          store: { type: "string", description: "店名・発行者名" },
-          summary: { type: "string", description: "摘要: 「店名 主な品目」の形で短く（全角20文字程度まで）" },
-          note: { type: "string", description: "読み取りに自信がない点があれば短く。なければ空文字" },
-        },
-        required: ["date", "amount", "store", "summary", "note"],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: ["receipts"],
-  additionalProperties: false,
-};
-
-function buildPrompt() {
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
-  return `この画像は日本の領収書・レシートです。会計仕訳の入力に使うため、次の情報を読み取ってください。
-
-- date: 取引日を西暦 YYYY-MM-DD で。和暦（令和など）は西暦に変換。年が印字されていない場合は、今日（${today}）以前で最も近い年と判断する。
-- amount: 実際に支払った合計金額（税込）。お預かり・お釣りの金額ではなく「合計」「お買上計」「領収金額」の金額を使う。
-- store: 店名・発行者名。
-- summary: 「店名 主な品目」の形で短く。品目が多い場合は代表的なものか分類名（例: 文具類、飲食代）でまとめる。
-- note: かすれ・折れなどで確信が持てない項目があれば短く記載。
-
-1枚の画像に複数のレシートが写っている場合は、それぞれを別の要素として返してください。
-レシートが写っていない場合は receipts を空配列にしてください。`;
-}
-
-function getApiKey() { try { return localStorage.getItem(API_KEY_STORAGE) || ""; } catch { return ""; } }
-
-async function readReceipt(imageBase64) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("APIキーが未設定です（右上の設定から登録してください）");
-  const { default: Anthropic } = await import(ANTHROPIC_SDK_URL);
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-  let response;
-  try {
-    response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 16000,
-      output_config: { effort: "medium", format: { type: "json_schema", schema: RECEIPT_SCHEMA } },
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } },
-          { type: "text", text: buildPrompt() },
-        ],
-      }],
-    });
-  } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) throw new Error("APIキーが正しくありません（設定を確認してください）");
-    if (err instanceof Anthropic.RateLimitError) throw new Error("混み合っています。少し待ってから再読み取りしてください");
-    if (err instanceof Anthropic.APIConnectionError) throw new Error("AIに接続できません。電波状況を確認してください");
-    if (err instanceof Anthropic.APIError) throw new Error(`AIエラー (${err.status}): ${err.message}`);
-    throw err;
-  }
-  if (response.stop_reason === "refusal") throw new Error("AIが読み取りを断りました。画像を確認してください");
-  const text = response.content.find(b => b.type === "text")?.text;
-  if (!text) throw new Error("読み取り結果が空でした");
-  return JSON.parse(text).receipts;
 }
 
 // ---- 無料モード：端末内OCR（Tesseract.js）＋ルールで項目を抜き出す ----
@@ -2698,26 +2615,10 @@ document.getElementById("methods").addEventListener("click", e => {
 });
 renderMethod();
 
-// ---- 設定（APIキー） ----
+// ---- 設定（CSVの形式） ----
 const settingsDlg = document.getElementById("settings");
-const apiKeyInput = document.getElementById("apiKey");
-function openSettings() { apiKeyInput.value = getApiKey(); updateMode(); settingsDlg.hidden = false; }
-function closeSettings() { settingsDlg.hidden = true; updateMode(); }
-function updateMode() {
-  const name = getApiKey() ? "高精度モード（Claude）" : NATIVE ? "無料モード（iPhone標準の文字認識）" : "無料モード（端末内）";
-  document.getElementById("modeName").textContent = name;
-}
-for (const el of document.querySelectorAll(".open-settings")) el.addEventListener("click", e => { e.preventDefault(); openSettings(); });
-document.getElementById("settingsClose").onclick = closeSettings;
-document.getElementById("keySave").onclick = () => {
-  try { localStorage.setItem(API_KEY_STORAGE, apiKeyInput.value.trim()); } catch {}
-  closeSettings();
-};
-document.getElementById("keyDelete").onclick = () => {
-  if (!confirm("この端末に保存したAPIキーを削除しますか？")) return;
-  try { localStorage.removeItem(API_KEY_STORAGE); } catch {}
-  closeSettings();
-};
+for (const el of document.querySelectorAll(".open-settings")) el.addEventListener("click", e => { e.preventDefault(); settingsDlg.hidden = false; });
+document.getElementById("settingsClose").onclick = () => { settingsDlg.hidden = true; };
 
 // ---- カメラ（アプリ内で連続撮影） ----
 const cameraEl = document.getElementById("camera");
@@ -2826,7 +2727,6 @@ pruneImages();
 // 開いたときも、選んでいる会社の種類の取り込み画面にする
 if (currentCompany()) { settings.method = currentCompany().method || "receipt"; renderMethod(); }
 render();
-updateMode();
 renderMasterCodes();
 showView("import");
 </script>
