@@ -1,5 +1,27 @@
 .DS_Store
 .env
 node_modules/
-# お客さんの実データを含む可能性があるサンプルはGitHubに上げない
+
+# ---- お客さんのデータをGitHubに上げないための設定 ----
+# サンプルや作業用のフォルダ（お客さんの実データを含む可能性がある）
 samples/
+data/
+private/
+
+# 試算表・領収書・マスタになりうるファイルは、どこに置いても上げない
+*.csv
+*.tsv
+*.xlsx
+*.xlsm
+*.xls
+*.pdf
+*.jpg
+*.jpeg
+*.heic
+*.heif
+*.tif
+*.tiff
+*.zip
+
+# コミット前のチェックで使う「禁止ワード」の一覧（この一覧自体も上げない）
+.private-words

@@ -1,0 +1,3 @@
+#!/bin/bash
+# コミットする前に、お客さんのデータが含まれていないか調べる
+exec "$(git rev-parse --show-toplevel)/.githooks/check-private.sh" staged

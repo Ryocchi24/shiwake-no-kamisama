@@ -1,0 +1,11 @@
+#!/bin/bash
+# GitHubに送る前に、送る範囲の変更をもう一度調べる（コミット時のチェックをすり抜けたもの対策）
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue # 削除のときは調べない
+  from="$remote_sha"
+  # 初めて送るとき、またはGitHub側の版が手元にないときは、全部を調べる
+  if [ "$from" = "$zero" ] || ! git cat-file -e "$from^{commit}" 2>/dev/null; then from="$(git hash-object -t tree /dev/null)"; fi
+  "$(git rev-parse --show-toplevel)/.githooks/check-private.sh" range "$from" "$local_sha" || exit 1
+done
+exit 0
