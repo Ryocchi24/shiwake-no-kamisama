@@ -268,6 +268,7 @@
   .cs-item.active, .cs-item:hover { background: var(--primary-soft); }
   .cs-code { font-family: "Roboto Mono", monospace; color: var(--muted); min-width: 40px; }
 
+  .side-codes { font-size: 11px; color: var(--gold-deep); }
   .master-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
   .doc-types { display: flex; gap: 6px; margin: -6px 0 16px; flex-wrap: wrap; }
   .doc-types[hidden], .methods[hidden] { display: none !important; }
@@ -1650,7 +1651,7 @@ list.addEventListener("change", e => {
   if (key === "date") render();
   else if (row.source === TRIAL_SOURCE && (key === "debitCode" || key === "creditCode")) {
     // 選んだコードを対応表に覚え、同じ元の科目の行すべてに反映する
-    applyMapping(row, row[key]);
+    applyMapping(row, row[key], key === "debitCode" ? "debit" : "credit");
     render();
   }
   else if (row.source !== TRIAL_SOURCE && key === "debitCode" && row.store) {
@@ -2154,7 +2155,8 @@ async function importTrial(files) {
     const made = [];
     for (const a of accounts) {
       const key = srcKeyOf(a.srcCode, a.srcName);
-      const learned = map[key]?.code;
+      const learnedD = mappedCode(map[key], "debit"), learnedC = mappedCode(map[key], "credit");
+      const learned = learnedD || learnedC;
       // 会社の対応表 → 標準の対応（番号と科目名が一致）→ 科目名からの推測 の順に探す
       // 番号が一致し、科目名もほぼ同じ（読み取りで1〜2文字違うことがあるため）ものを使う
       // Web版の文字認識では科目名（漢字）が読めず番号だけになることがあるので、そのときは番号だけで標準の対応を使い、科目名も補う
@@ -2166,8 +2168,8 @@ async function importTrial(files) {
       const base = { id: "", groupId, companyId: currentCompanyId, source: TRIAL_SOURCE, thumb: "", status: "done", review: "pending",
         date, summary: "", debitCode: "", debitSub: "", debitAmount: "", creditCode: "", creditSub: "", creditAmount: "",
         srcKey: key, srcCode: a.srcCode, srcName: a.srcName, codeHow: learned ? "対応表" : std ? "標準の対応" : code ? "推測" : "", note: "", _ok: a.ok };
-      if (a.debit) made.push({ ...base, id: uid(), debitCode: code, debitAmount: a.debit });
-      if (a.credit) made.push({ ...base, id: uid(), creditCode: code, creditAmount: a.credit });
+      if (a.debit) made.push({ ...base, id: uid(), debitCode: learnedD || code, debitAmount: a.debit });
+      if (a.credit) made.push({ ...base, id: uid(), creditCode: learnedC || code, creditAmount: a.credit });
     }
     const d = made.reduce((s, r) => s + Number(r.debitAmount || 0), 0), c = made.reduce((s, r) => s + Number(r.creditAmount || 0), 0);
     // 借方と貸方の合計がずれているときだけ、前残・残高の計算が合わない行に目印をつける（読み間違いの候補）
@@ -2183,15 +2185,24 @@ async function importTrial(files) {
 }
 
 // 試算表の行: 元の科目の対応を決めたら、同じ科目の行すべてに反映し、対応表に覚える
-function applyMapping(row, code) {
+// 対応表のコード。借方・貸方で別のコードを覚えていればそれを使う
+// （例: PCAの「期末材料棚卸高」は、ミロクでは借方が「期首材料棚卸高」、貸方が「期末材料棚卸高」）
+const mappedCode = (e, side) => e ? (e[side === "debit" ? "debitCode" : "creditCode"] || e.code || "") : "";
+// 対応を覚えて、同じ元の科目の行に反映する。side: "debit"／"credit" はその側だけ、なしは両側の基本のコード
+function applyMapping(row, code, side) {
   if (!row.srcKey) return;
   const map = mappingOf(row.companyId);
-  if (code) map[row.srcKey] = { code, srcName: row.srcName, srcCode: row.srcCode };
-  else delete map[row.srcKey];
+  const e = map[row.srcKey] ||= { code: "", srcName: row.srcName, srcCode: row.srcCode };
+  if (side) { e[side === "debit" ? "debitCode" : "creditCode"] = code; if (!e.code) e.code = code; }
+  else e.code = code;
+  for (const k of ["debitCode", "creditCode"]) if (k in e && (!e[k] || e[k] === e.code)) delete e[k];
+  if (!e.code && !e.debitCode && !e.creditCode) delete map[row.srcKey];
   for (const r of rows) {
     if (r.companyId !== row.companyId || r.srcKey !== row.srcKey || r.review === "exported") continue;
-    if (Number(r.debitAmount)) r.debitCode = code; else r.creditCode = code;
-    r.codeHow = code ? "対応表" : "";
+    const rs = Number(r.debitAmount) ? "debit" : "credit", key = rs + "Code";
+    if (side && rs !== side && r[key]) continue; // 反対側は、まだ空のときだけ埋める
+    r[key] = mappedCode(map[row.srcKey], rs);
+    r.codeHow = r[key] ? "対応表" : "";
   }
   saveMasters(); save();
 }
@@ -2317,7 +2328,7 @@ function renderMaster() {
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
         <input value="${escapeHtml(v.code)}" data-mapkey="${escapeHtml(k)}" data-code-suggest autocomplete="off" aria-label="ミロクのコード">
-        <span class="muted">${escapeHtml(masterName(v.code, masterCid) || "（マスタにない）")}</span>
+        <span class="muted">${escapeHtml(masterName(v.code, masterCid) || "（マスタにない）")}${v.debitCode || v.creditCode ? `<br><span class="side-codes">${v.debitCode ? `借方は ${escapeHtml(v.debitCode)} ${escapeHtml(masterName(v.debitCode, masterCid))}` : ""}${v.debitCode && v.creditCode ? "／" : ""}${v.creditCode ? `貸方は ${escapeHtml(v.creditCode)} ${escapeHtml(masterName(v.creditCode, masterCid))}` : ""}</span>` : ""}</span>
         <button class="icon-btn" data-mapdel="${escapeHtml(k)}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
       : `<div class="master-empty">まだありません</div>`);
   }
