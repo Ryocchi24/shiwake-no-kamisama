@@ -1484,16 +1484,32 @@ function suggestList(input) {
   const cid = input.closest("#masterDlg") ? masterCid : (rows.find(r => r.id === input.dataset.id)?.companyId || currentCompanyId);
   return masterOf(cid);
 }
-function showSuggest(input) {
-  const q = input.value.trim(), n = normName(q), all = suggestList(input);
-  const items = (!q ? all : /^\d+$/.test(q) ? all.filter(m => m.code.startsWith(q)) : all.filter(m => normName(m.name).includes(n))).slice(0, 8);
-  if (!items.length || (items.length === 1 && items[0].code === q)) return hideSuggest();
-  suggestInput = input; suggestItems = items; suggestIdx = 0;
-  suggestEl.innerHTML = items.map((m, i) => `<div class="cs-item ${i ? "" : "active"}" data-i="${i}"><span class="cs-code">${escapeHtml(m.code)}</span>${escapeHtml(m.name)}</div>`).join("");
-  const rc = input.getBoundingClientRect();
-  suggestEl.style.left = Math.max(8, Math.min(rc.left, innerWidth - 268)) + "px";
-  suggestEl.style.top = rc.bottom + 4 + "px";
+function showSuggest(input, showAll) {
+  const q = showAll ? "" : input.value.trim(), n = normName(q), all = suggestList(input);
+  // 空なら全部、数字ならそのコードで始まるもの、文字なら科目名に含むもの
+  const items = (!q ? all : /^\d+$/.test(q) ? all.filter(m => m.code.startsWith(q)) : all.filter(m => normName(m.name).includes(n))).slice(0, 200);
+  if (!items.length) return hideSuggest();
+  suggestInput = input; suggestItems = items;
+  suggestIdx = Math.max(0, items.findIndex(m => m.code === input.value.trim())); // 今のコードを選んだ状態にする
+  suggestEl.innerHTML = items.map((m, i) => `<div class="cs-item ${i === suggestIdx ? "active" : ""}" data-i="${i}"><span class="cs-code">${escapeHtml(m.code)}</span>${escapeHtml(m.name)}</div>`).join("");
   suggestEl.hidden = false;
+  placeSuggest();
+  keepSuggestVisible();
+}
+// 選んでいる候補が見えるように、候補の一覧の中だけをスクロールする（画面全体は動かさない）
+function keepSuggestVisible() {
+  const el = suggestEl.children[suggestIdx]; if (!el) return;
+  if (el.offsetTop < suggestEl.scrollTop) suggestEl.scrollTop = el.offsetTop;
+  else if (el.offsetTop + el.offsetHeight > suggestEl.scrollTop + suggestEl.clientHeight) suggestEl.scrollTop = el.offsetTop + el.offsetHeight - suggestEl.clientHeight;
+}
+// 候補の位置: 欄のすぐ下（下に入りきらなければ上）
+function placeSuggest() {
+  if (!suggestInput) return;
+  const rc = suggestInput.getBoundingClientRect();
+  if (rc.bottom < 0 || rc.top > innerHeight) return hideSuggest(); // 欄が画面の外に出たら閉じる
+  const h = Math.min(300, suggestEl.scrollHeight);
+  suggestEl.style.left = Math.max(8, Math.min(rc.left, innerWidth - 268)) + "px";
+  suggestEl.style.top = (rc.bottom + 4 + h > innerHeight && rc.top - 4 - h > 0 ? rc.top - 4 - h : rc.bottom + 4) + "px";
 }
 function hideSuggest() { suggestEl.hidden = true; suggestInput = null; }
 function pickSuggest(i) {
@@ -1506,7 +1522,11 @@ function pickSuggest(i) {
   hideSuggest();
 }
 document.addEventListener("input", e => { if (e.target.matches?.("[data-code-suggest]")) showSuggest(e.target); });
-document.addEventListener("focusin", e => { if (e.target.matches?.("[data-code-suggest]")) e.target.dataset.prev = e.target.value; });
+document.addEventListener("focusin", e => {
+  if (!e.target.matches?.("[data-code-suggest]")) return;
+  e.target.dataset.prev = e.target.value;
+  const t = e.target; setTimeout(() => { if (document.activeElement === t) showSuggest(t, true); }, 0); // 押しただけで候補の一覧を出す
+});
 document.addEventListener("focusout", e => {
   const t = e.target;
   if (!t.matches?.("[data-code-suggest]")) return;
@@ -1518,11 +1538,13 @@ document.addEventListener("keydown", e => {
     e.preventDefault();
     suggestIdx = (suggestIdx + (e.key === "ArrowDown" ? 1 : suggestItems.length - 1)) % suggestItems.length;
     [...suggestEl.children].forEach((c, i) => c.classList.toggle("active", i === suggestIdx));
+    keepSuggestVisible();
   } else if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); pickSuggest(suggestIdx); }
   else if (e.key === "Escape") hideSuggest();
 });
 suggestEl.addEventListener("pointerdown", e => { const it = e.target.closest("[data-i]"); if (it) { e.preventDefault(); pickSuggest(Number(it.dataset.i)); } });
-addEventListener("scroll", e => { if (!suggestEl.hidden && !suggestEl.contains(e.target)) hideSuggest(); }, true);
+addEventListener("scroll", e => { if (!suggestEl.hidden && !suggestEl.contains(e.target)) placeSuggest(); }, true);
+addEventListener("resize", () => { if (!suggestEl.hidden) placeSuggest(); });
 
 // 入力の反映（再描画はしないのでフォーカスが外れない）
 const list = document.getElementById("list");
@@ -1994,6 +2016,7 @@ function isSubtotalName(name) {
     || /^[【〔(（［\[<＜《].*[】〕)）］\]>＞》]$/.test(n)
     || /の部$|^(資産|負債|純資産|負債純資産|負債・純資産)(の部)?$/.test(n)
     || /^(売上総|営業|経常|税引前当期純?|税引前|当期純?)(利益|損失|損益)/.test(n)
+    || /^(純売上高|売上高合計|売上原価合計|製造原価合計|当期総製造費用|売上総損益金額|営業損益金額|経常損益金額|税引前当期純損益金額|当期純損益金額)$/.test(n)
     || /^(流動資産|固定資産|有形固定資産|無形固定資産|投資その他の資産|繰延資産|流動負債|固定負債|株主資本|利益剰余金|その他利益剰余金|資本剰余金|評価・換算差額等|販売費及び一般管理費|営業外収益|営業外費用|特別利益|特別損失|売上原価|製造原価|製造費用|当期製造費用|当期製品製造原価)$/.test(n);
 }
 // 科目コードの列がある表では、コードのない行（見出しや小計）は読まない
@@ -2011,8 +2034,17 @@ function parseTrialSheet(rows) {
   const creditCol = find(/貸方/, /残高|繰越|前|期首/);
   const zenCol = find(/前月|前残|前期|期首|繰越/);
   const zanCol = find(/残高/, /前月|前残|期首|繰越|借方残高|貸方残高/);
-  const codeCol = find(/コード|番号|^No|^ＮＯ/i);
+  let codeCol = find(/コード|番号|^No|^ＮＯ/i);
   let nameCol = find(/科目|勘定/);
+  // 見出しに「コード」がなくても、借方の列より左で、ほとんどの行が番号（2〜6桁）の列を科目コードの列とみなす
+  if (codeCol < 0) {
+    const body = rows.slice(headerIdx + 1).filter(r => r.some(c => String(c).trim()));
+    for (let c = 0; c < Math.min(debitCol, creditCol); c++) {
+      const hits = body.filter(r => /^\s*\d{2,6}\s*$/.test(String(r[c] ?? ""))).length;
+      if (body.length && hits >= body.length * 0.4) { codeCol = c; break; }
+    }
+    if (codeCol === nameCol) nameCol = codeCol === 0 ? 1 : 0;
+  }
   if (nameCol < 0) nameCol = codeCol === 0 ? 1 : 0;
   if (debitCol < 0 || creditCol < 0) return parseTrialTable(rows.map(r => r.filter(c => c !== "")));
   const amount = v => {
@@ -2064,6 +2096,8 @@ async function importTrial(files) {
       const res = parseTrialTable(allRows);
       accounts.push(...res.accounts); date = date || res.date;
     }
+    // PCA会計の試算表は、科目にコード番号が付いている。番号のない行（純売上高・営業利益などの集計）は読まない
+    if (systemOf().id === "pca" && accounts.some(a => a.srcCode)) accounts.splice(0, accounts.length, ...accounts.filter(a => a.srcCode));
     banner.hidden = true;
     if (!accounts.length) { alert("試算表の科目を読み取れませんでした。Excelの場合は「借方」「貸方」の見出しがある表か確認してください。写真の場合は、表全体がまっすぐ写るように撮り直してください。"); return; }
 
