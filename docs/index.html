@@ -466,6 +466,9 @@
   .nav a:not(.disabled):hover { color: var(--gold-light); }
   .btn-primary { background: var(--navy); border-color: var(--navy); color: var(--gold-light); box-shadow: 0 1px 2px rgba(13,22,41,.3); }
   .btn-primary:hover { background: var(--primary-hover); }
+  /* 消す操作のボタン: 赤い枠と文字で、押すと消えることが分かるようにする */
+  .btn-danger { color: var(--err); border-color: #f0c4c4; background: var(--surface); }
+  .btn-danger:hover { background: var(--err-soft); border-color: var(--err); }
   .btn-primary:disabled { background: #a9afbd; border-color: #a9afbd; color: #fff; }
   .panel { border-color: var(--line); }
   .panel-head { border-bottom-color: var(--line); }
@@ -689,8 +692,8 @@
             <label class="field">伝票日付<input type="date" id="trialDate"></label>
           </div>
           <span class="spacer"></span>
-          <button class="btn btn-ghost" id="listClear" hidden>一覧を空にする</button>
-          <button class="btn add-more" id="addMore" hidden><svg><use href="#i-upload"/></svg>追加</button>
+          <button class="btn btn-danger" id="listClear" hidden><svg><use href="#i-trash"/></svg>一覧を空にする</button>
+          <button class="btn add-more" id="addMore" hidden><svg><use href="#i-upload"/></svg>ファイルを追加</button>
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
         <div id="list"></div>
