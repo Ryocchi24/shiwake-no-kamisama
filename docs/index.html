@@ -227,6 +227,10 @@
   .code-name.unknown { color: var(--err); }
   .trial-tag { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; background: var(--info-soft); color: var(--info); font-size: 10px; }
   .dialog-wide { max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; }
+  /* 会社設定は一覧を途中で切らずに全部出し、画面全体をスクロールして見る */
+  #masterDlg .dialog-wide { overflow: auto; }
+  #masterDlg .master-list { flex: none; overflow: visible; }
+  #masterDlg .dlg-actions { position: sticky; bottom: -24px; margin: 14px -24px -24px !important; padding: 12px 24px 20px; background: var(--surface); border-top: 1px solid var(--line); }
   .dlg-system { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
   .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px 12px !important; }
   .dlg-system label { display: contents; }
@@ -263,7 +267,7 @@
   .cs-item { display: flex; gap: 10px; padding: 8px 10px; border-radius: 7px; font-size: 14px; cursor: pointer; color: var(--text); }
   .cs-item.active, .cs-item:hover { background: var(--primary-soft); }
   .cs-code { font-family: "Roboto Mono", monospace; color: var(--muted); min-width: 40px; }
-  .dlg-system input#companyShokuchi { max-width: 200px; }
+
   .master-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
   .doc-types { display: flex; gap: 6px; margin: -6px 0 16px; flex-wrap: wrap; }
   .doc-types[hidden], .methods[hidden] { display: none !important; }
@@ -751,7 +755,6 @@
       <label>会社名 <input id="companyNameInput" type="text" autocomplete="off" aria-label="会社名"></label>
       <label>取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">現金預金収支日計表</option><option value="format3">試算表</option></select></label>
       <label id="companySystemWrap">元の会計ソフト <select id="companySystem" aria-label="元の会計ソフト"></select></label>
-      <label id="companyShokuchiWrap">諸口のコード <input id="companyShokuchi" inputmode="numeric" autocomplete="off" placeholder="ミロクの諸口のコード" aria-label="諸口のコード"></label>
     </div>
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">ミロク科目マスタ</button>
@@ -1708,8 +1711,8 @@ document.getElementById("download").onclick = async () => {
 
   const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  // 試算表の行は片側だけなので、会社設定に諸口のコードがあれば、反対側を諸口にする
-  const shokuchi = currentCompany()?.shokuchi || "";
+  // 試算表の行は片側だけなので、その会社のミロク科目マスタに「諸口」があれば、反対側を諸口にする
+  const shokuchi = masterOf().find(m => normName(m.name) === "諸口")?.code || "";
   const lines = done.map(r => {
     let { debitCode, debitAmount, creditCode, creditAmount } = r;
     if (r.source === TRIAL_SOURCE && shokuchi) {
@@ -2254,10 +2257,6 @@ document.getElementById("companyNameInput").addEventListener("change", e => {
   document.getElementById("masterCompany").textContent = name;
   renderCompanyList(); render();
 });
-document.getElementById("companyShokuchi").addEventListener("change", e => {
-  const c = companies.find(x => x.id === masterCid);
-  if (c) { c.shokuchi = (e.target.value.match(/\d+/) || [""])[0]; e.target.value = c.shokuchi; saveCompanies(); }
-});
 const companyTypeSel = document.getElementById("companyType");
 companyTypeSel.onchange = () => {
   const c = companies.find(x => x.id === masterCid);
@@ -2271,8 +2270,6 @@ function renderMaster() {
   companyTypeSel.value = type;
   companySystemSel.value = systemOf(masterCid).id;
   document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
-  document.getElementById("companyShokuchiWrap").hidden = type !== TRIAL_SOURCE;
-  document.getElementById("companyShokuchi").value = companies.find(x => x.id === masterCid)?.shokuchi || "";
   const tabs = TABS_BY_TYPE[type] || TABS_BY_TYPE.receipt;
   if (!tabs.includes(masterTab)) masterTab = "master";
   for (const b of document.querySelectorAll("[data-mtab]")) b.hidden = !tabs.includes(b.dataset.mtab);
@@ -2294,7 +2291,7 @@ function renderMaster() {
       : `<div class="master-empty">「ファイルから読み込む」でミロクの科目マスタを入れてください</div>`;
   } else if (masterTab === "receipt") {
     const rc = receiptSettingsOf(masterCid);
-    document.getElementById("masterHelp").textContent = "領収書を読んだときに、自動で入れる科目";
+    document.getElementById("masterHelp").textContent = "";
     const rules = rc.rules.map((x, i) => ({ ...x, i })).filter(x => !q || normName(x.keyword + x.code + masterName(x.code, masterCid)).includes(q));
     listEl.innerHTML = `<div class="rc-credit">
         <b>貸方の科目</b>
@@ -2313,7 +2310,7 @@ function renderMaster() {
     const entries = Object.entries(map).filter(([, v]) => !q || normName(v.srcCode + v.srcName + v.code + masterName(v.code, masterCid)).includes(q))
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
     const sys = systemOf(masterCid);
-    document.getElementById("masterHelp").textContent = "試算表を読むとき、別の会計ソフトの科目をミロクのどのコードにするか";
+    document.getElementById("masterHelp").textContent = "";
     listEl.innerHTML = `<div class="rc-head">この会社の対応（${Object.keys(map).length}件）${sys.mapping.length ? `。ここにない科目は${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）を使います` : ""}</div>`
       + (entries.length ? `<div class="master-row mapping map-head"><span>元コード</span><span>元の科目名</span><span>→ ミロク</span><span>ミロク科目名</span><span></span></div>` : "")
       + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
