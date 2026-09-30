@@ -585,9 +585,26 @@
     td.c-thumb { position: absolute; left: 14px; top: 14px; }
     td.c-status { grid-column: 1 / 3; padding-right: 30px; }
     td.c-summary, td.c-msg { grid-column: 1 / 3; }
-    /* 領収書は ①〜⑫ を1項目ずつ縦に並べる */
-    tbody tr.row-receipt { grid-template-columns: minmax(0, 1fr); }
-    tbody tr.row-receipt td:not(.c-thumb):not(.c-del) { grid-column: 1 !important; }
+    /* 領収書・日計表は、借方を左、貸方を右に並べる（日付は上、摘要は下） */
+    tbody tr.row-receipt { grid-auto-flow: row dense; }
+    tbody tr.row-receipt td.c-date { grid-column: 1 / 3; }
+    tbody tr.row-receipt td.s-debit { grid-column: 1; }
+    tbody tr.row-receipt td.s-credit { grid-column: 2; }
+    tbody tr.row-receipt td.c-summary { grid-column: 1 / 3; order: 2; }
+    tbody tr.row-receipt { row-gap: 0; }
+    tbody tr.row-receipt td.c-status { margin-bottom: 6px; }
+    tbody tr.row-receipt td.c-date { margin-bottom: 8px; }
+    tbody tr.row-receipt td.c-summary { margin-top: 8px; }
+    /* 借方・貸方それぞれを1枚の枠に見せる */
+    tbody tr.row-receipt td.s-debit, tbody tr.row-receipt td.s-credit { padding: 5px 10px; border-radius: 0; }
+    tbody tr.row-receipt td.c-date + td.s-debit, tbody tr.row-receipt td.c-summary + td.s-credit { border-radius: 10px 10px 0 0; padding-top: 10px; }
+    tbody tr.row-receipt td.s-debit:has(+ td.c-summary), tbody tr.row-receipt td.s-credit:has(+ td.c-del) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
+    tbody tr.row-receipt td.s-debit { background: var(--debit); }
+    tbody tr.row-receipt td.s-credit { background: var(--credit); }
+    tbody tr.row-receipt td.s-debit::before { color: var(--debit-text); }
+    tbody tr.row-receipt td.s-credit::before { color: var(--credit-text); }
+    tbody tr.row-receipt td.s-debit input, tbody tr.row-receipt td.s-debit select,
+    tbody tr.row-receipt td.s-credit input, tbody tr.row-receipt td.s-credit select { background: #fff; }
     td.c-del { position: absolute; right: 8px; top: 8px; }
     td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
     td input, td select { border-color: var(--line); height: 40px; font-size: 16px; }
@@ -1570,7 +1587,7 @@ function render() {
     const codeName = key => (key === "debitCode" || key === "creditCode") && row[key]
       ? `<div class="code-name ${masterName(row[key]) ? "" : "unknown"}" data-code-name-for="${row.id}-${key}">${escapeHtml(masterName(row[key]) || "マスタにない")}</div>`
       : (key === "debitCode" || key === "creditCode") ? `<div class="code-name" data-code-name-for="${row.id}-${key}"></div>` : "";
-    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + fields.map(f => `<td class="${f.cls}" data-label="${f.label}">
+    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + fields.map(f => `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}" data-label="${f.label}">
         ${inputHtml(row, f)}${codeName(f.key)}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の科目: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
         ${f.key === "summary" ? noteHtml(row) : ""}
