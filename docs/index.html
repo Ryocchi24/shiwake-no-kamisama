@@ -110,7 +110,7 @@
   td.c-date { width: 132px; } td.c-code { width: 68px; } td.c-amount { width: 112px; min-width: 104px; } td.c-summary { min-width: 170px; }
   td.c-amount input { padding: 0 4px; }
   td.c-blank { display: none; }
-  td.c-code { min-width: 68px; } td.c-tax { width: 84px; min-width: 84px; } td.c-rate { width: 112px; min-width: 112px; }
+  td.c-code { min-width: 68px; } td.c-acct { width: 150px; min-width: 150px; } td.c-tax { width: 84px; min-width: 84px; } td.c-rate { width: 112px; min-width: 112px; }
   td select { width: 100%; font: inherit; font-size: 13px; height: 32px; border: 1px solid transparent; border-radius: 5px; padding: 0 2px; background: transparent; color: var(--text); }
   td select:hover { border-color: var(--line); }
   td select:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
@@ -237,8 +237,14 @@
   .trial-balance.ok { background: var(--ok-soft); color: var(--ok); }
   .trial-balance.ng { background: var(--err-soft); color: var(--err); }
   .src-line { font-size: 11.5px; color: var(--muted); margin: 2px 7px 0; }
-  .code-name { font-size: 11px; color: var(--muted); margin: 1px 7px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
-  .code-name.unknown { color: var(--err); }
+  /* 科目コード欄：コードの右に科目名（コードは等幅の数字なので、桁数から名前の位置を決める） */
+  .code-box { position: relative; --cw: 8.1px; }
+  .code-box::after { content: "▾"; position: absolute; right: 7px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--muted); pointer-events: none; }
+  .code-box input { padding-right: 20px; }
+  .code-box .code-name { position: absolute; top: 50%; transform: translateY(-50%); left: calc(var(--len) * var(--cw) + 14px); right: 20px;
+    font-size: 12.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+  .code-box .code-name.unknown { color: var(--err); }
+  .code-box.searching .code-name { display: none; }
   .trial-tag { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 5px; background: var(--info-soft); color: var(--info); font-size: 10px; }
   .dialog-wide { max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; }
   /* 会社設定は一覧を途中で切らずに全部出し、画面全体をスクロールして見る */
@@ -428,7 +434,7 @@
   /* 読み取り結果の表 */
   thead th { font-size: 11.5px; letter-spacing: .02em; }
   tbody tr:hover td { background: #fafbfc; }
-  td.c-code { width: 80px; }
+  td.c-code { width: 80px; } td.c-acct { width: 150px; }
   /* 候補リスト付きの欄に出る▼を消して、4桁のコードが隠れないようにする */
   input[list]::-webkit-calendar-picker-indicator { display: none !important; }
   .thumb, .no-img, .trial-tag { border-radius: 8px; }
@@ -601,6 +607,8 @@
     td.c-del { position: absolute; right: 8px; top: 8px; }
     td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
     td input, td select { border-color: var(--line); height: 40px; font-size: 16px; }
+    .code-box { --cw: 9.6px; } .code-box .code-name { font-size: 13px; left: calc(var(--len) * var(--cw) + 12px); right: 6px; }
+    .code-box::after { display: none; } .code-box input { padding-right: 7px; }
     td input[type="date"] { line-height: 38px; }
     tbody td { min-width: 0; }
     tfoot tr { display: flex; justify-content: space-between; padding: 12px 14px; }
@@ -1382,13 +1390,13 @@ const TAX_TYPES = ["課税", "非課税", "対象外"];
 const TAX_RATES = ["10%", "8%軽", "8%", "非課税", "対象外", "免税事業者"];
 const FIELDS = [
   { key: "date", label: "①伝票日付", type: "date", cls: "c-date" },
-  { key: "debitCode", label: "②借方科目", head: "②科目", side: "debit", code: true, cls: "c-code b-left" },
+  { key: "debitCode", label: "②借方科目", head: "②科目", side: "debit", code: true, cls: "c-code c-acct b-left" },
   { key: "debitSub", label: "③借方補助", head: "③補助", side: "debit", sub: true, code: true, cls: "c-code" },
   { key: "debitAmount", label: "④借方金額", head: "④金額", side: "debit", num: true, cls: "c-amount" },
   { key: "debitTax", label: "⑤借方消費税", head: "⑤消費税", side: "debit", tax: true, options: TAX_TYPES, cls: "c-tax" },
   { key: "debitRate", label: "⑥借方税率", head: "⑥税率", side: "debit", tax: true, options: TAX_RATES, cls: "c-rate" },
   { key: "summary", label: "⑦借方摘要", head: "⑦摘要", side: "debit", cls: "c-summary" },
-  { key: "creditCode", label: "⑧貸方科目", head: "⑧科目", side: "credit", code: true, cls: "c-code b-left" },
+  { key: "creditCode", label: "⑧貸方科目", head: "⑧科目", side: "credit", code: true, cls: "c-code c-acct b-left" },
   { key: "creditSub", label: "⑨貸方補助", head: "⑨補助", side: "credit", sub: true, code: true, cls: "c-code" },
   { key: "creditAmount", label: "⑩貸方金額", head: "⑩金額", side: "credit", num: true, cls: "c-amount" },
   { key: "creditTax", label: "⑪貸方消費税", head: "⑪消費税", side: "credit", tax: true, options: TAX_TYPES, cls: "c-tax" },
@@ -1590,14 +1598,17 @@ function render() {
       return;
     }
     const isTrial = row.source === TRIAL_SOURCE;
-    const codeName = key => (key === "debitCode" || key === "creditCode") && row[key]
-      ? `<div class="code-name ${masterName(row[key]) ? "" : "unknown"}" data-code-name-for="${row.id}-${key}">${escapeHtml(masterName(row[key]) || "マスタにない")}</div>`
-      : (key === "debitCode" || key === "creditCode") ? `<div class="code-name" data-code-name-for="${row.id}-${key}"></div>` : "";
+    // 科目コードの欄は、コードのすぐ右に科目名を出す
+    const cellInput = f => {
+      if (f.key !== "debitCode" && f.key !== "creditCode") return inputHtml(row, f);
+      const code = String(row[f.key] || ""), name = code ? masterName(code) : "";
+      return `<div class="code-box" style="--len:${code.length}">${inputHtml(row, f)}<span class="code-name ${code && !name ? "unknown" : ""}" data-code-name-for="${row.id}-${f.key}">${escapeHtml(code ? name || "マスタにない" : "")}</span></div>`;
+    };
     // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
     const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
       [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(k => fields.find(f => f.side === side && kindOf(f.key) === k) || { blank: true, side }))];
     body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + cells.map(f => f.blank ? `<td class="c-blank s-${f.side}"></td>` : `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}" data-label="${f.label}">
-        ${inputHtml(row, f)}${codeName(f.key)}
+        ${cellInput(f)}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の科目: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
         ${f.key === (isTrial ? "summary" : "date") ? noteHtml(row) : ""}
       </td>`).join("") + `${actions(row)}</tr>`;
@@ -1688,11 +1699,15 @@ function pickSuggest(i) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
   hideSuggest();
 }
-document.addEventListener("input", e => { if (e.target.matches?.("[data-code-suggest]")) showSuggest(e.target); });
+document.addEventListener("input", e => {
+  if (!e.target.matches?.("[data-code-suggest]")) return;
+  e.target.closest(".code-box")?.classList.toggle("searching", isCodeSearch(e.target)); // 科目名で探している間は、横の科目名を隠す
+  showSuggest(e.target);
+});
 document.addEventListener("focusin", e => {
   if (!e.target.matches?.("[data-code-suggest]")) return;
   e.target.dataset.prev = e.target.value;
-  const t = e.target; setTimeout(() => { if (document.activeElement === t) showSuggest(t, true); }, 0); // 押しただけで候補の一覧を出す
+  const t = e.target; setTimeout(() => { if (document.activeElement === t) { showSuggest(t, true); t.select(); } }, 0); // 押しただけで候補の一覧を出し、そのまま科目名を打てるようにする
 });
 document.addEventListener("focusout", e => {
   const t = e.target;
@@ -1727,7 +1742,11 @@ list.addEventListener("input", e => {
   if (codeKey) {
     value = (value.match(/^\s*(\d+)/) || [])[1] || "";
     const label = list.querySelector(`[data-code-name-for="${row.id}-${key}"]`);
-    if (label) { label.textContent = value ? (masterName(value) || "マスタにない") : ""; label.classList.toggle("unknown", !!value && !masterName(value)); }
+    if (label) {
+      label.textContent = value ? (masterName(value) || "マスタにない") : "";
+      label.classList.toggle("unknown", !!value && !masterName(value));
+      label.parentElement.style.setProperty("--len", value.length);
+    }
   }
   // 借方金額と貸方金額が同じだった場合は連動させる（試算表の行は片側だけなので連動しない）
   if (row.source !== TRIAL_SOURCE && key === "debitAmount" && String(row.creditAmount) === String(row.debitAmount)) {
