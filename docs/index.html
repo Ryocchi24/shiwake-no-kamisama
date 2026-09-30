@@ -159,7 +159,7 @@
   .company-switch .caret { color: var(--muted); font-size: 11px; }
   .company-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 240px; max-width: 320px; background: var(--surface); border: 1px solid var(--line);
     border-radius: 8px; box-shadow: 0 10px 30px rgba(15,23,42,.15); padding: 6px; z-index: 30; color: var(--text); }
-  .company-menu[hidden], #companies[hidden], #moveDlg[hidden] { display: none; }
+  .company-menu[hidden], #companies[hidden] { display: none; }
   .menu-item { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; font-size: 13.5px; text-align: left; border: none; background: none;
     color: var(--text); padding: 8px 10px; border-radius: 6px; cursor: pointer; }
   .menu-item:hover { background: var(--surface-2); }
@@ -177,11 +177,8 @@
   .company-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
   .add-row { display: flex; gap: 8px; }
   .add-row input { flex: 1; }
-  .move-list { display: flex; flex-direction: column; gap: 6px; }
-  .move-list .btn { justify-content: flex-start; height: 40px; }
   .row-actions { display: flex; gap: 2px; }
   .act-label { display: none; }
-  .icon-btn.move:hover { background: var(--primary-soft); color: var(--primary); }
   .tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
   .tab { font: inherit; font-size: 13px; font-weight: 500; border: none; background: none; color: var(--muted); padding: 5px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
   .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(15,23,42,.1); }
@@ -681,7 +678,6 @@
   <symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
-  <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
 </svg>
@@ -886,13 +882,6 @@
   </div>
 </div>
 
-<div class="dialog-back" id="moveDlg" hidden>
-  <div class="dialog">
-    <h2>別の会社へ移動</h2>
-    <div class="move-list" id="moveList"></div>
-    <div class="dlg-actions" style="margin-top:14px"><span style="flex:1"></span><button class="btn" id="moveClose">キャンセル</button></div>
-  </div>
-</div>
 
 <!-- 設定 -->
 <div class="dialog-back" id="settings" hidden>
@@ -1627,9 +1616,8 @@ function render() {
   }
 
   const actions = row => {
-    const move = companies.length > 1 ? `<button class="icon-btn move" data-move="${row.id}" title="別の会社へ移動"><svg><use href="#i-move"/></svg><span class="act-label">別の会社へ</span></button>` : "";
     const del = `<button class="icon-btn del" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg><span class="act-label">削除</span></button>`;
-    return `<td class="c-del"><div class="row-actions">${move}${del}</div></td>`;
+    return `<td class="c-del"><div class="row-actions">${del}</div></td>`;
   };
   const fields = visibleFields();
   // 消費税の項目ができる前に読み取った行にも、自動で入れる
@@ -1872,11 +1860,9 @@ list.addEventListener("change", e => {
 });
 
 list.addEventListener("click", async e => {
-  const t = e.target.closest("[data-del], [data-retry], [data-move], .thumb");
+  const t = e.target.closest("[data-del], [data-retry], .thumb");
   if (!t) return;
-  if (t.dataset.move) {
-    openMove(t.dataset.move);
-  } else if (t.dataset.del) {
+  if (t.dataset.del) {
     const row = rows.find(r => r.id === t.dataset.del);
     if (row && (row.status !== "done" || confirm("この仕訳を削除しますか？"))) {
       rows = rows.filter(r => r !== row);
@@ -3145,23 +3131,6 @@ document.getElementById("companyList").addEventListener("click", e => {
   renderCompanyList(); renderCompany(); pruneImages();
 });
 
-const moveDlg = document.getElementById("moveDlg");
-let movingRowId = null;
-function openMove(rowId) {
-  movingRowId = rowId;
-  document.getElementById("moveList").innerHTML = companies.filter(c => c.id !== currentCompanyId)
-    .map(c => `<button class="btn" data-to="${c.id}"><svg><use href="#i-building"/></svg>${escapeHtml(c.name)}</button>`).join("");
-  moveDlg.hidden = false;
-}
-document.getElementById("moveList").onclick = e => {
-  const t = e.target.closest("[data-to]");
-  if (!t) return;
-  const row = rows.find(r => r.id === movingRowId);
-  if (row) row.companyId = t.dataset.to;
-  moveDlg.hidden = true;
-  save(); render();
-};
-document.getElementById("moveClose").onclick = () => { moveDlg.hidden = true; };
 
 // ---- 取り込み方法（①レシート ②③は今後フォーマットを追加） ----
 // ①原始資料は、さらに種類（レシート・領収書／給与台帳／通帳）ごとに読み込み方を分ける
