@@ -241,6 +241,9 @@
   .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px 12px !important; }
   .dlg-system label { display: contents; }
   .dlg-system label[hidden] { display: none; }
+  .dlg-flags { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--text); }
+  .dlg-system .dlg-flags label.flag { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .dlg-system .dlg-flags input { width: 18px; height: 18px; padding: 0; margin: 0; accent-color: var(--primary, #2563eb); }
   .dlg-system select { width: 100%; }
   .dlg-system input { height: 32px; width: 100%; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; }
   .co-name { font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
@@ -776,6 +779,11 @@
       <label>会社名 <input id="companyNameInput" type="text" autocomplete="off" aria-label="会社名"></label>
       <label>取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">日計表</option><option value="format3">試算表</option></select></label>
       <label id="companySystemWrap">元の会計ソフト <select id="companySystem" aria-label="元の会計ソフト"></select></label>
+      <span>区分</span>
+      <div class="dlg-flags">
+        <label class="flag"><input type="checkbox" id="companyUseSub"> 補助コードを使う</label>
+        <label class="flag"><input type="checkbox" id="companyTaxExempt"> 免税事業者</label>
+      </div>
     </div>
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">ミロク科目マスタ</button>
@@ -1337,6 +1345,13 @@ async function readReceiptFree(dataUrl) {
 }
 
 // ---- 表示 ----
+// 会社ごとに表示する列（補助コードを使わない会社は ③⑦ を出さない。CSVはミロクの形式のまま8列）
+const SUB_KEYS = ["debitSub", "creditSub"];
+function visibleFields(items = rows) {
+  const c = currentCompany();
+  const useSub = !!c?.useSub || items.some(r => r.debitSub || r.creditSub); // 入力済みの補助コードは隠さない
+  return useSub ? FIELDS : FIELDS.filter(f => !SUB_KEYS.includes(f.key));
+}
 const FIELDS = [
   { key: "date", label: "①伝票日付", type: "date", cls: "c-date" },
   { key: "debitCode", label: "②借方科目", code: true, cls: "c-code b-left" },
@@ -1454,6 +1469,8 @@ function render() {
     const del = `<button class="icon-btn" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg></button>`;
     return `<td class="c-del"><div class="row-actions">${move}${del}</div></td>`;
   };
+  const fields = visibleFields(items);
+  const sideSpan = fields.includes(FIELDS[2]) ? 3 : 2;
   let body = "";
   items.forEach((row, i) => {
     const thumb = row.source === TRIAL_SOURCE ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
@@ -1465,14 +1482,14 @@ function render() {
       const msg = row.status === "reading"
         ? `<span class="status-msg">読み取っています…</span>`
         : `<span class="status-msg error">${escapeHtml(row.error)}<button class="btn" data-retry="${row.id}">再読み取り</button></span>`;
-      body += `<tr class="is-${row.status}" data-row="${row.id}">${head}<td colspan="${FIELDS.length}" class="c-msg">${msg}</td>${actions(row)}</tr>`;
+      body += `<tr class="is-${row.status}" data-row="${row.id}">${head}<td colspan="${fields.length}" class="c-msg">${msg}</td>${actions(row)}</tr>`;
       return;
     }
     const isTrial = row.source === TRIAL_SOURCE;
     const codeName = key => (key === "debitCode" || key === "creditCode") && row[key]
       ? `<div class="code-name ${masterName(row[key]) ? "" : "unknown"}" data-code-name-for="${row.id}-${key}">${escapeHtml(masterName(row[key]) || "マスタにない")}</div>`
       : (key === "debitCode" || key === "creditCode") ? `<div class="code-name" data-code-name-for="${row.id}-${key}"></div>` : "";
-    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + FIELDS.map(f => `<td class="${f.cls}" data-label="${f.label}">
+    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + fields.map(f => `<td class="${f.cls}" data-label="${f.label}">
         ${inputHtml(row, f)}${codeName(f.key)}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の科目: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
         ${f.key === "summary" ? noteHtml(row) : ""}
@@ -1483,16 +1500,16 @@ function render() {
     <thead>
       <tr class="group">
         <th colspan="4"></th>
-        <th class="debit b-left" colspan="3">借方</th>
+        <th class="debit b-left" colspan="${sideSpan}">借方</th>
         <th class="b-left"></th>
-        <th class="credit b-left" colspan="3">貸方</th>
+        <th class="credit b-left" colspan="${sideSpan}">貸方</th>
         <th></th>
       </tr>
       <tr>
         <th>No.</th><th>状態</th><th>画像</th><th>①伝票日付</th>
-        <th class="b-left" title="勘定科目コード">②科目</th><th title="科目別補助コード">③補助</th><th class="num">④金額</th>
+        <th class="b-left" title="勘定科目コード">②科目</th>${sideSpan === 3 ? `<th title="科目別補助コード">③補助</th>` : ""}<th class="num">④金額</th>
         <th class="b-left">⑤摘要</th>
-        <th class="b-left" title="勘定科目コード">⑥科目</th><th title="科目別補助コード">⑦補助</th><th class="num">⑧金額</th>
+        <th class="b-left" title="勘定科目コード">⑥科目</th>${sideSpan === 3 ? `<th title="科目別補助コード">⑦補助</th>` : ""}<th class="num">⑧金額</th>
         <th></th>
       </tr>
     </thead>
@@ -2527,6 +2544,13 @@ document.getElementById("companyNameInput").addEventListener("change", e => {
   document.getElementById("masterCompany").textContent = name;
   renderCompanyList(); render();
 });
+for (const [id, key] of [["companyUseSub", "useSub"], ["companyTaxExempt", "taxExempt"]]) {
+  document.getElementById(id).onchange = e => {
+    const c = companies.find(x => x.id === masterCid);
+    if (c) { c[key] = e.target.checked; saveCompanies(); }
+    renderCompanyList(); render();
+  };
+}
 const companyTypeSel = document.getElementById("companyType");
 companyTypeSel.onchange = () => {
   const c = companies.find(x => x.id === masterCid);
@@ -2541,6 +2565,9 @@ function renderMaster() {
   companyTypeSel.value = type;
   companySystemSel.value = systemOf(masterCid).id;
   document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
+  const mc = companies.find(x => x.id === masterCid);
+  document.getElementById("companyUseSub").checked = !!mc?.useSub;
+  document.getElementById("companyTaxExempt").checked = !!mc?.taxExempt;
   const tabs = TABS_BY_TYPE[type] || TABS_BY_TYPE.receipt;
   if (!tabs.includes(masterTab)) masterTab = "master";
   for (const b of document.querySelectorAll("[data-mtab]")) b.hidden = !tabs.includes(b.dataset.mtab);
@@ -2810,6 +2837,7 @@ function renderCompanyList() {
       <div class="co-main">
         <span class="co-name">${escapeHtml(c.name)}</span>
         <span class="method-tag t-${c.method || "receipt"}">${escapeHtml(methodLabel(c))}</span>
+        ${c.useSub ? `<span class="method-tag">補助あり</span>` : ""}${c.taxExempt ? `<span class="method-tag">免税</span>` : ""}
       </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社設定</button>
       <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
