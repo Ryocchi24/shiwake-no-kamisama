@@ -682,7 +682,7 @@
       </div>
       <section class="method-soon" id="methodSoon" hidden>
         <h2 id="methodSoonTitle"></h2>
-        準備中
+        <span id="methodSoonNote">準備中</span>
       </section>
 
       <div class="banner" id="ocrBanner" hidden></div>
@@ -975,6 +975,7 @@ async function addFiles(fileList) {
   const files = Array.from(fileList);
   if (!files.length) return;
   if (settings.method === TRIAL_SOURCE) return importTrial(files);
+  if (settings.method === NIKKEI_SOURCE) return importNikkei(files);
   if ((settings.method || "receipt") !== "receipt" || (settings.docType || "receipt") !== "receipt") {
     alert("この取り込み方法は準備中です。「① 原始資料」の「レシート・領収書」を選んでください。");
     return;
@@ -1344,6 +1345,11 @@ function warningsOf(r) {
   }
   const w = [];
   if (!r.date) w.push("日付が空です");
+  if (r.source === NIKKEI_SOURCE) {
+    if (!r.debitCode || !r.creditCode) w.push("コードが未設定です");
+    for (const c of [r.debitCode, r.creditCode]) if (c && masterOf(r.companyId).length && !masterOf(r.companyId).some(m => m.code === String(c))) { w.push("マスタにないコードです"); break; }
+    if (r.codeHow === "推測") w.push("科目名から推測したコードです");
+  }
   if (!Number(r.debitAmount)) w.push("金額が空です");
   else if (Number(r.debitAmount) !== Number(r.creditAmount)) w.push("借方と貸方の金額が違います");
   if (!String(r.summary || "").trim()) w.push("摘要が空です");
@@ -1404,7 +1410,11 @@ function render() {
   document.getElementById("addMore").hidden = !items.length;
   document.getElementById("listClear").hidden = !items.length;
   if (!items.length) {
-    list.innerHTML = currentSource() === TRIAL_SOURCE
+    list.innerHTML = currentSource() === NIKKEI_SOURCE
+      ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
+      <b>現金預金収支日計表を撮影するか、PDFを選んでください</b>
+      <button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button></div>`
+      : currentSource() === TRIAL_SOURCE
       ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
       <b>${systemOf().id ? `${escapeHtml(systemOf().name)}の` : ""}試算表を選んでください</b>${NATIVE ? "Excel・PDF・画像" : "Excel・CSV"}
       <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div>`
@@ -1427,7 +1437,7 @@ function render() {
   items.forEach((row, i) => {
     const thumb = row.source === TRIAL_SOURCE ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
       : row.thumb
-      ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="レシート"></td>`
+      ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="${row.source === NIKKEI_SOURCE ? "日計表" : "レシート"}"></td>`
       : `<td class="c-thumb"><span class="no-img">画像なし</span></td>`;
     const head = `<td class="rowno">${i + 1}</td><td class="c-status">${statusBadge(row)}</td>${thumb}`;
     if (row.status !== "done") {
@@ -1907,6 +1917,183 @@ function suggestCode(srcName, cid = currentCompanyId) {
   if (exact.length > 1) return "";
   const best = list.map(m => ({ ...m, s: nameSimilarity(n, m.n) })).sort((a, b) => b.s - a.s)[0];
   return best && best.s >= 0.75 ? best.code : "";
+}
+
+// ---- 現金預金収支日計表（手書き） ----
+// 決まった用紙（上: 収入の部・支出の部、真ん中: 本日の合計、下: 振替）を、iPhoneアプリの文字認識で読み、
+// 用紙の中の位置から「科目・相手先・内容・金額」を取り出して仕訳にする。
+// 手書きの科目名は読み違えやすいので、科目のコード（4桁）と金額を頼りにし、合計欄と照らし合わせて確かめる。
+const NIKKEI_SOURCE = "format2";
+// 用紙の中の列の位置（用紙の幅を1とした左からの割合）。読み取った文字の中心がどの範囲にあるかで列を決める
+const NIKKEI_COLS = {
+  income:  [[0.155, "acct"], [0.18, "code"], [0.28, "party"], [0.40, "content"], [0.425, "day"], [0.50, "amount"]],
+  expense: [[0.59, "acct"], [0.615, "code"], [0.71, "party"], [0.765, "check"], [0.885, "content"], [0.91, "day"], [1, "amount"]],
+  transfer: [[0.265, "party"], [0.32, "check"], [0.565, "content"], [0.615, "day"], [0.70, "dAcct"], [0.725, "dCode"], [0.80, "dAmount"], [0.885, "cAcct"], [0.91, "cCode"], [1, "cAmount"]],
+};
+// 手書きの数字を英字と読み違えたものを直す（例: 「Slol保険」→「5101保険」）
+// 表の枠線（「|」）は文字ではないので消す。英字が混ざった3〜5文字だけを数字に直す
+function fixDigits(t) {
+  return t.replace(/[|｜]/g, " ").replace(/(^|[^A-Za-z])([SslIoOBZ0-9]{3,5})(?=[^\x00-\x7F]|$)/g, (m, p, g) =>
+    /[SslIoOBZ]/.test(g) ? p + g.replace(/[Ss]/g, "5").replace(/[lI]/g, "1").replace(/[oO]/g, "0").replace(/B/g, "8").replace(/Z/g, "2") : m);
+}
+// 文字のかたまりを「数字のかたまり」と「それ以外」に分け、それぞれの中心の位置を見積もる
+function nikkeiTokens(items) {
+  const out = [];
+  for (const it of items) {
+    const text = fixDigits(String(it.text || "").normalize("NFKC"));
+    if (!text.trim()) continue;
+    const re = /[\d,]+|[^\d,\s]+/g; let m;
+    while ((m = re.exec(text))) {
+      const mid = (m.index + m[0].length / 2) / text.length;
+      out.push({ t: m[0], x: it.x + it.w * mid, y: it.y + it.h / 2, h: it.h });
+    }
+  }
+  return out;
+}
+const numOf = t => Number(String(t).replace(/[^\d]/g, "")) || 0;
+function nikkeiCell(cols, x) { for (const [edge, name] of cols) if (x < edge) return name; return null; }
+// 行ごとに、列の名前 → 文字 の形にまとめる
+function nikkeiRows(tokens, cols, x0) {
+  const rows = [];
+  for (const k of tokens.filter(k => k.x >= x0).sort((a, b) => a.y - b.y)) {
+    const row = rows.find(r => Math.abs(r.y - k.y) < 0.012);
+    if (row) row.toks.push(k); else rows.push({ y: k.y, toks: [k] });
+  }
+  return rows.map(r => {
+    const cells = {};
+    for (const k of r.toks.sort((a, b) => a.x - b.x)) {
+      const c = nikkeiCell(cols, k.x); if (!c) continue;
+      cells[c] = (cells[c] || "") + k.t;
+    }
+    return cells;
+  });
+}
+// 「5101保険窓口」→ コードと科目名。コードがマスタになければ、科目名から推測する
+function nikkeiAccount(text, cid) {
+  const t = String(text || "").replace(/[〃”"'’`]/g, "").trim();
+  const code = (t.match(/\d{3,5}/) || [""])[0];
+  const name = t.replace(code, "").trim();
+  const master = masterOf(cid);
+  if (code && master.some(m => m.code === code)) return { code, how: "" };
+  const guess = name && suggestCode(name, cid);
+  if (guess) return { code: guess, how: "推測" };
+  return { code, how: "" };
+}
+const isDitto = t => !String(t || "").replace(/[〃”"'’`\s]/g, ""); // 「〃」（上と同じ）や空欄
+const isDittoMark = t => /^[〃”"'’`]+$/.test(String(t || "").trim()); // はっきり「〃」と書いてある
+function parseNikkei(items, cid) {
+  const tokens = nikkeiTokens(items);
+  const find = re => items.find(it => re.test(String(it.text || "").normalize("NFKC")));
+  // 日付（例: 令和7年7月2日。手書きの「1」が「／」などに読まれることがある）
+  let date = "";
+  for (const it of items) {
+    const m = String(it.text || "").normalize("NFKC").replace(/[／/|lI!]/g, "1").match(/(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+    if (m) { const y = 2018 + Number(m[1]); if (validDate(y, +m[2], +m[3])) { date = `${y}-${pad(+m[2])}-${pad(+m[3])}`; break; } }
+  }
+  // 区切りの位置: 見出しの行、本日の合計の行、振替の見出しの行
+  const headY = (find(/金額|科目名/)?.y ?? 0.11) + 0.012;
+  const totalIt = find(/本日入金合計|入金合計/);
+  const bLabel = items.filter(it => /\(B\)|（B）/.test(it.text) && it.y > 0.3).sort((a, b) => a.y - b.y)[0];
+  const totalY = Math.min(totalIt?.y ?? 0.5, bLabel?.y ?? 1) - 0.008;
+  const transIt = find(/借方科目名|借方金額/);
+  const transY = (transIt?.y ?? 0.57) + 0.012;
+  const upper = tokens.filter(k => k.y > headY && k.y < totalY);
+  const lower = tokens.filter(k => k.y > transY);
+  const entries = [];
+  // 収入の部・支出の部（「〃」や空欄の科目・相手先は、上の行と同じ）
+  for (const [side, cols, x0, x1] of [["income", NIKKEI_COLS.income, 0, 0.5], ["expense", NIKKEI_COLS.expense, 0.5, 1]]) {
+    let last = {};
+    for (const c of nikkeiRows(upper.filter(k => k.x >= x0 && k.x < x1), cols, x0)) {
+      const amount = numOf(c.amount);
+      const acct = isDitto(c.acct) && !c.code ? last.acct : (c.acct || "") + (c.code || "");
+      const party = isDittoMark(c.party) ? last.party : c.party;
+      last = { acct, party };
+      if (!amount) continue;
+      entries.push({ side, acct, party: party || "", content: (c.content || "").replace(/^[〃”"'’`]+/, ""), amount });
+    }
+  }
+  // 振替（現金以外の取引）
+  let last = {};
+  for (const c of nikkeiRows(lower, NIKKEI_COLS.transfer, 0)) {
+    const dAmount = numOf(c.dAmount), cAmount = numOf(c.cAmount);
+    const dAcct = isDitto(c.dAcct) && !c.dCode ? last.dAcct : (c.dAcct || "") + (c.dCode || "");
+    const cAcct = isDitto(c.cAcct) && !c.cCode ? last.cAcct : (c.cAcct || "") + (c.cCode || "");
+    const party = isDittoMark(c.party) ? last.party : c.party;
+    last = { dAcct, cAcct, party };
+    if (!dAmount && !cAmount) continue;
+    entries.push({ side: "transfer", dAcct, cAcct, party: party || "", content: (c.content || "").replace(/^[〃”"'’`]+/, ""), dAmount: dAmount || cAmount, cAmount: cAmount || dAmount });
+  }
+  // 合計欄: 本日入金合計(B)・本日出金合計(C)・前日繰越(A)・本日現金残高
+  const near = (y0, y1, x0, x1) => tokens.filter(k => k.y > y0 && k.y < y1 && k.x >= x0 && k.x < x1 && /\d{3,}/.test(k.t)).map(k => numOf(k.t));
+  const bTotal = near(totalY - 0.03, totalY + 0.03, 0.40, 0.50)[0] || 0;
+  const cTotal = near(totalY - 0.03, totalY + 0.03, 0.90, 1)[0] || 0;
+  const balance = near(totalY + 0.012, totalY + 0.06, 0.85, 1)[0] || 0;
+  const prevRaw = near(totalY + 0.012, totalY + 0.06, 0.15, 0.38)[0] || 0;
+  return { date, entries, bTotal, cTotal, balance, prevRaw };
+}
+// 読み取った内容を確かめる（入金・出金の合計、前日繰越＋入金−出金＝本日残高）
+function checkNikkei(p) {
+  const notes = [];
+  const sumB = p.entries.filter(e => e.side === "income").reduce((s, e) => s + e.amount, 0);
+  const sumC = p.entries.filter(e => e.side === "expense").reduce((s, e) => s + e.amount, 0);
+  if (p.bTotal && sumB !== p.bTotal) notes.push(`入金の合計が合いません（読み取り ${sumB.toLocaleString()}円／日計表 ${p.bTotal.toLocaleString()}円）`);
+  if (p.cTotal && sumC !== p.cTotal) notes.push(`出金の合計が合いません（読み取り ${sumC.toLocaleString()}円／日計表 ${p.cTotal.toLocaleString()}円）`);
+  if (p.balance && p.prevRaw) {
+    // 前日繰越は、枠の線を「1」と読むことがあるので、先頭の1桁を外したものでも確かめる
+    const s = String(p.prevRaw), cands = [p.prevRaw, s.length > 1 ? Number(s.slice(1)) : 0];
+    if (!cands.some(a => a + (p.bTotal || sumB) - (p.cTotal || sumC) === p.balance)) notes.push("前日繰越＋入金−出金が、本日現金残高と合いません");
+  }
+  return notes;
+}
+async function dataUrlToBlob(dataUrl) { return (await fetch(dataUrl)).blob(); }
+async function importNikkei(files) {
+  if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
+  if (!NATIVE) { alert("現金預金収支日計表（手書き）は、iPhoneアプリで読み取れます。"); return; }
+  const banner = document.getElementById("ocrBanner");
+  const show = t => { banner.textContent = t; banner.hidden = false; };
+  const cid = currentCompanyId;
+  const cash = masterOf(cid).find(m => normName(m.name) === "現金")?.code || "1101";
+  let made = 0; const problems = [];
+  try {
+    const pages = [];
+    for (const file of files) {
+      if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) { show(`PDFを開いています（${file.name}）…`); pages.push(...await pdfToImages(file)); }
+      else pages.push(await resize(file, OCR_MAX_SIDE, 0.9));
+    }
+    for (let i = 0; i < pages.length; i++) {
+      show(`日計表を読み取っています（${i + 1} / ${pages.length} 枚）…`);
+      const res = await callNative("recognizeText", { image: pages[i].split(",")[1] });
+      const p = parseNikkei(res.items || [], cid);
+      if (!p.entries.length) { problems.push(`${i + 1}枚目: 金額を読み取れませんでした`); continue; }
+      const notes = checkNikkei(p);
+      if (notes.length) problems.push(`${i + 1}枚目${p.date ? `（${p.date.replace(/-/g, "/")}）` : ""}: ${notes.join("／")}`);
+      // 元の画像を保存して、一覧の画像を押すと拡大して見比べられるようにする
+      const groupId = uid(), blob = await dataUrlToBlob(pages[i]);
+      const [full, thumb] = await Promise.all([resize(blob, 1600, 0.85), resize(blob, 240, 0.7)]);
+      fullImages.set(groupId, full); imageStore.put(groupId, full).catch(() => {});
+      p.entries.forEach((e, k) => {
+        const base = { id: uid(), groupId, companyId: cid, source: NIKKEI_SOURCE, thumb, status: "done", review: "pending", date: p.date,
+          debitSub: "", creditSub: "", summary: [e.party, e.content].filter(Boolean).join(" "), note: k === 0 && notes.length ? notes.join("／") : "" };
+        if (e.side === "transfer") {
+          const d = nikkeiAccount(e.dAcct, cid), c = nikkeiAccount(e.cAcct, cid);
+          rows.push({ ...base, debitCode: d.code, debitAmount: e.dAmount, creditCode: c.code, creditAmount: e.cAmount, codeHow: d.how || c.how });
+        } else {
+          const a = nikkeiAccount(e.acct, cid);
+          rows.push(e.side === "income"
+            ? { ...base, debitCode: cash, debitAmount: e.amount, creditCode: a.code, creditAmount: e.amount, codeHow: a.how }
+            : { ...base, debitCode: a.code, debitAmount: e.amount, creditCode: cash, creditAmount: e.amount, codeHow: a.how });
+        }
+        made++;
+      });
+    }
+  } catch (err) {
+    alert(`日計表を読み取れませんでした: ${err.message}`);
+  } finally {
+    banner.hidden = true;
+  }
+  save(); render();
+  if (problems.length) alert(`${made}行を作りました。次の点を確かめてください。\n\n${problems.join("\n")}`);
+  else if (made) showToast(`${made}行を作りました（合計欄と一致）`);
 }
 
 // ---- 表の読み取り: 文字のかたまりを、行の高さに合わせて1行ずつに分ける ----
@@ -2700,17 +2887,20 @@ function renderMethod() {
   for (const b of document.querySelectorAll(".method")) b.classList.toggle("active", b.dataset.method === method);
   for (const b of document.querySelectorAll(".doc-type")) b.classList.toggle("active", b.dataset.doc === doc);
   document.getElementById("docTypes").hidden = method !== "receipt";
-  const ready = (method === "receipt" && doc === "receipt") || method === TRIAL_SOURCE;
+  // 日計表は手書きなので、iPhoneアプリ（端末内の文字認識）だけで読む
+  const ready = (method === "receipt" && doc === "receipt") || method === TRIAL_SOURCE || (method === NIKKEI_SOURCE && !!NATIVE);
   document.getElementById("methodSoon").hidden = ready;
+  document.getElementById("methodSoonNote").textContent = method === NIKKEI_SOURCE ? "現金預金収支日計表（手書き）は、iPhoneアプリで読み取れます" : "準備中";
   // 試算表はPDFでも読み込めるようにする
   for (const el of document.querySelectorAll(".pick-label")) {
     el.dataset.orig ||= el.textContent;
-    el.textContent = method === TRIAL_SOURCE ? "ファイルを選ぶ" : el.dataset.orig;
+    el.textContent = method === TRIAL_SOURCE || method === NIKKEI_SOURCE ? "ファイルを選ぶ" : el.dataset.orig;
   }
   // Web版の文字読み取りは表の数字に弱いので、試算表はExcel・CSVだけにする（iPhoneアプリはPDF・写真も読める）
   const sheetTypes = ".xlsx,.xlsm,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv";
   for (const input of document.querySelectorAll(".file-picker:not([capture])")) input.accept = method === TRIAL_SOURCE
-    ? (NATIVE ? "image/*,application/pdf,.pdf," + sheetTypes : sheetTypes) : "image/*";
+    ? (NATIVE ? "image/*,application/pdf,.pdf," + sheetTypes : sheetTypes)
+    : method === NIKKEI_SOURCE ? "image/*,application/pdf,.pdf" : "image/*";
   const label = el => el ? el.textContent.replace("準備中", "").trim() : "";
   const activeMethod = document.querySelector(`.method[data-method="${method}"]`);
   const activeDoc = document.querySelector(`.doc-type[data-doc="${doc}"]`);
