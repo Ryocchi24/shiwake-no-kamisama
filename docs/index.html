@@ -248,11 +248,22 @@
   .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px 12px !important; }
   .dlg-system label { display: contents; }
   .dlg-system label[hidden] { display: none; }
-  .dlg-flags { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px 14px; color: var(--text); }
+  /* 使う項目：共通・借方・貸方に分けて、押すと切り替わるボタンで並べる */
   .dlg-flags[hidden], .fields-label[hidden] { display: none; }
-  .fields-label { align-self: start; padding-top: 1px; }
-  .dlg-system .dlg-flags label.flag { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-  .dlg-system .dlg-flags input { width: 18px; height: 18px; padding: 0; margin: 0; accent-color: var(--primary, #2563eb); }
+  .fields-label { grid-column: 1 / -1; margin-top: 4px; }
+  .dlg-flags { grid-column: 1 / -1; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 10px; align-items: start;
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+  .fg-name { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 5px 8px; text-align: center; line-height: 1.2; background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+  .fg-name.debit { background: var(--debit); color: var(--debit-text); border-color: transparent; }
+  .fg-name.credit { background: var(--credit); color: var(--credit-text); border-color: transparent; }
+  .fg-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+  .dlg-system .dlg-flags label.chip { display: flex; position: relative; cursor: pointer; }
+  .dlg-system .dlg-flags label.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .chip span { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 30px; padding: 0 8px; border-radius: 999px; font-size: 12.5px; white-space: nowrap;
+    border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); }
+  .chip input:checked + span { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .chip input:checked + span::before { content: "✓"; font-size: 11px; }
+  .chip input:focus-visible + span { box-shadow: 0 0 0 3px var(--primary-soft); }
   .dlg-system select { width: 100%; }
   .dlg-system input { height: 32px; width: 100%; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; }
   .co-name { font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
@@ -2653,8 +2664,9 @@ function renderMaster() {
   document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
   const mc = companies.find(x => x.id === masterCid);
   const keys = fieldKeysOf(mc);
-  document.getElementById("companyFields").innerHTML = FIELDS.map(f =>
-    `<label class="flag"><input type="checkbox" value="${f.key}"${keys.includes(f.key) ? " checked" : ""}> ${f.label}</label>`).join("");
+  const chip = f => `<label class="chip"><input type="checkbox" value="${f.key}"${keys.includes(f.key) ? " checked" : ""} aria-label="${f.label}"><span>${f.head || f.label}</span></label>`;
+  document.getElementById("companyFields").innerHTML = [["", "共通", f => !f.side], ["debit", "借方", f => f.side === "debit"], ["credit", "貸方", f => f.side === "credit"]]
+    .map(([cls, name, pick]) => `<div class="fg-name ${cls}">${name}</div><div class="fg-items">${FIELDS.filter(pick).map(chip).join("")}</div>`).join("");
   document.getElementById("companyFields").hidden = document.getElementById("companyFieldsLabel").hidden = type === TRIAL_SOURCE;
   const tabs = TABS_BY_TYPE[type] || TABS_BY_TYPE.receipt;
   if (!tabs.includes(masterTab)) masterTab = "master";
