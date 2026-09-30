@@ -1123,19 +1123,27 @@ async function readGroup(groupId) {
       : [{ date: "", amount: 0, summary: "", note: "レシートを検出できませんでした" }];
     const rc = receiptSettingsOf(placeholder.companyId);
     const newRows = receipts.flatMap(r => {
-      // 8%と10%の品物が混ざっていれば、借方を税率ごとに2行に分ける（金額はそれぞれの対象額）
+      // 8%と10%の品物が混ざっていれば、諸口を使った複合仕訳にする
+      //   借方 科目（8%の対象額） ／ 貸方 諸口
+      //   借方 科目（10%の対象額）／ 貸方 諸口
+      //   借方 諸口（合計）       ／ 貸方 現金など
       const hint = receiptTaxHint(r.ocrText), split = hint.mixed ? splitByRate(r.ocrText) : null;
       if (!split) return [r];
-      const off = r.amount && split.r8 + split.r10 !== Number(r.amount) ? "8%と10%の対象額の合計が、合計金額と合いません" : "";
-      return [{ ...r, amount: split.r8, reduced: true, note: [r.note, off].filter(Boolean).join("／") }, { ...r, amount: split.r10, reduced: false, note: r.note }];
+      const total = split.r8 + split.r10;
+      const off = r.amount && total !== Number(r.amount) ? "8%と10%の対象額の合計が、合計金額と合いません" : "";
+      return [
+        { ...r, amount: split.r8, reduced: true, split: true, creditShokuchi: true, note: [r.note, off].filter(Boolean).join("／") },
+        { ...r, amount: split.r10, reduced: false, split: true, creditShokuchi: true },
+        { ...r, amount: total, split: true, debitShokuchi: true },
+      ];
     }).map(r => ({
       id: uid(), groupId, companyId: placeholder.companyId, source: placeholder.source || "receipt", thumb: placeholder.thumb, status: "done", review: "pending",
       store: r.store || "",
       date: r.date || "",
-      debitCode: receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
+      debitCode: r.debitShokuchi ? shokuchiOf(placeholder.companyId) : receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
-      creditCode: rc.fixedCode || "", creditSub: "", creditAmount: r.amount || "",
-      note: [r.note, receiptTaxHint(r.ocrText).mixed && r.reduced === undefined ? "8%と10%の品物が混ざっています" : "", receiptTaxHint(r.ocrText).noInvoice ? "登録番号（T＋13桁）が見つかりません" : ""].filter(Boolean).join("／"),
+      creditCode: r.creditShokuchi ? shokuchiOf(placeholder.companyId) : rc.fixedCode || "", creditSub: "", creditAmount: r.amount || "",
+      note: [r.note, receiptTaxHint(r.ocrText).mixed && !r.split ? "8%と10%の品物が混ざっています" : "", receiptTaxHint(r.ocrText).noInvoice ? "登録番号（T＋13桁）が見つかりません" : ""].filter(Boolean).join("／"),
       ocrText: r.ocrText || "",
       taxHint: r.reduced === undefined ? receiptTaxHint(r.ocrText) : { ...receiptTaxHint(r.ocrText), reduced: r.reduced },
     }));
@@ -1458,6 +1466,7 @@ const TAX_WORDS = {
 };
 function autoTaxType(code, summary, cid) {
   if (!code) return "";
+  if (String(code) === shokuchiOf(cid)) return "対象外"; // 諸口
   const name = masterName(code, cid), text = String(summary || "");
   if (TAX_WORDS.対象外.some(w => name.includes(w))) return "対象外"; // 現金・預金・給料など
   for (const type of ["非課税", "対象外"]) if (TAX_WORDS[type].some(w => text.includes(w))) return type; // 摘要（切手・香典など）
@@ -1465,6 +1474,8 @@ function autoTaxType(code, summary, cid) {
   return name ? "課税" : ""; // マスタにないコードは判定しない
 }
 // 領収書の文字から、軽減税率（8%）と、インボイスの登録番号（T＋13桁）があるかを調べる
+// 諸口のコード（その会社のミロク科目マスタの「諸口」。なければミロクで基本の 3999）
+const shokuchiOf = (cid = currentCompanyId) => masterOf(cid).find(m => normName(m.name) === "諸口")?.code || "3999";
 // 8%と10%が混ざった領収書の、それぞれの対象額（「8%対象 ¥1,080」のような行から読む）。読めなければ null
 function splitByRate(text) {
   const got = {};
@@ -1978,7 +1989,7 @@ document.getElementById("download").onclick = async () => {
   const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   // 試算表の行は片側だけなので、反対側を諸口にする（その会社のミロク科目マスタの「諸口」。なければミロクで基本の 3999）
-  const shokuchi = masterOf().find(m => normName(m.name) === "諸口")?.code || "3999";
+  const shokuchi = shokuchiOf();
   const fields = visibleFields(); // CSVは確認画面と同じ項目
   const lines = done.map(r => {
     let { debitCode, debitAmount, creditCode, creditAmount } = r;
