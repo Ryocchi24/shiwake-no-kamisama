@@ -727,11 +727,12 @@
       </div>
       <!-- ①原始資料の種類（レシート・領収書／給与台帳／通帳） -->
       <div class="doc-types" id="docTypes" role="tablist" aria-label="原始資料の種類">
-        <button class="doc-type" data-doc="receipt">領収書</button>
+        <button class="doc-type" data-doc="receipt">出金領収書</button>
+        <button class="doc-type" data-doc="income">入金領収書<span class="soon-tag">準備中</span></button>
         <button class="doc-type" data-doc="passbook">通帳<span class="soon-tag">準備中</span></button>
-        <button class="doc-type" data-doc="payroll">給与台帳<span class="soon-tag">準備中</span></button>
-        <button class="doc-type" data-doc="sales">売上請求書<span class="soon-tag">準備中</span></button>
         <button class="doc-type" data-doc="purchase">仕入請求書<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="sales">売上請求書<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="payroll">給与台帳<span class="soon-tag">準備中</span></button>
       </div>
       <section class="method-soon" id="methodSoon" hidden>
         <h2 id="methodSoonTitle"></h2>
@@ -924,7 +925,7 @@ const FILE_TYPES = {
   CSV: ".csv,text/csv",
 };
 const IMPORT_FORMATS = {
-  receipt: { name: "領収書", web: [], app: ["写真", "PDF"] },
+  receipt: { name: "出金領収書", web: [], app: ["写真", "PDF"] },
   format2: { name: "日計表", web: [], app: ["写真", "PDF"] },
   format3: { name: "試算表", web: ["Excel", "CSV"], app: ["Excel", "CSV", "PDF", "写真"] },
 };
@@ -2121,11 +2122,12 @@ function saveMasters() {
 // 原始資料の自動入力ルール（会社ごと・書類の種類ごと）
 // 「いつも使う科目」1つと、「言葉 → 科目」のルールを持つ。領収書以外は、読み取りを作ったときに使う（先に登録しておける）
 const AUTO_RULE_TYPES = [
-  { id: "receipt",  name: "領収書",     ready: true,  fixed: "貸方の科目",     fixedEx: "例: 1101", rule: "店名 → 借方の科目",     ruleEx: "例: セブンイレブン" },
+  { id: "receipt",  name: "出金領収書", ready: true,  fixed: "貸方の科目",     fixedEx: "例: 1101", rule: "店名 → 借方の科目",     ruleEx: "例: セブンイレブン" },
+  { id: "income",   name: "入金領収書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1101", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "passbook", name: "通帳",       ready: false, fixed: "この通帳の科目", fixedEx: "例: 1107", rule: "摘要 → 相手の科目",     ruleEx: "例: NTT" },
-  { id: "payroll",  name: "給与台帳",   ready: false, fixed: "支払いの科目",   fixedEx: "例: 1107", rule: "項目名 → 科目",         ruleEx: "例: 源泉所得税" },
-  { id: "sales",    name: "売上請求書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1142", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "purchase", name: "仕入請求書", ready: false, fixed: "貸方の科目",     fixedEx: "例: 2103", rule: "取引先 → 借方の科目",   ruleEx: "例: 取引先の名前" },
+  { id: "sales",    name: "売上請求書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1142", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
+  { id: "payroll",  name: "給与台帳",   ready: false, fixed: "支払いの科目",   fixedEx: "例: 1107", rule: "項目名 → 科目",         ruleEx: "例: 源泉所得税" },
 ];
 const RECEIPT_SETTINGS_KEY = "shiwake-receipt-settings"; // { 会社ID: { 書類の種類: { fixedCode, rules: [{ keyword, code }] } } }
 let receiptSettings = load(RECEIPT_SETTINGS_KEY, {});
@@ -3143,7 +3145,8 @@ function renderMethod() {
   const fmt = importFormat(method);
   const ready = (method === "receipt" ? doc === "receipt" : true) && fmt.types.length > 0;
   document.getElementById("methodSoon").hidden = ready;
-  document.getElementById("methodSoonNote").textContent = (method !== "receipt" || doc === "receipt") && !fmt.types.length ? `${fmt.name}は、iPhoneアプリで読み取れます` : "準備中";
+  const docName = method === "receipt" ? (AUTO_RULE_TYPES.find(t => t.id === doc) || AUTO_RULE_TYPES[0]).name : fmt.name;
+  document.getElementById("methodSoonNote").textContent = (method !== "receipt" || doc === "receipt") && !fmt.types.length ? `${docName}は、iPhoneアプリで読み取れます` : "準備中";
   // 試算表はPDFでも読み込めるようにする
   for (const el of document.querySelectorAll(".pick-label")) {
     el.dataset.orig ||= el.textContent;
