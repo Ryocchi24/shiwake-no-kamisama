@@ -109,6 +109,7 @@
   td input.missing { border-color: #f0b4b4; background: var(--err-soft); }
   td.c-date { width: 132px; } td.c-code { width: 68px; } td.c-amount { width: 112px; min-width: 104px; } td.c-summary { min-width: 170px; }
   td.c-amount input { padding: 0 4px; }
+  td.c-blank { display: none; }
   td.c-code { min-width: 68px; } td.c-tax { width: 84px; min-width: 84px; } td.c-rate { width: 112px; min-width: 112px; }
   td select { width: 100%; font: inherit; font-size: 13px; height: 32px; border: 1px solid transparent; border-radius: 5px; padding: 0 2px; background: transparent; color: var(--text); }
   td select:hover { border-color: var(--line); }
@@ -248,22 +249,15 @@
   .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px 12px !important; }
   .dlg-system label { display: contents; }
   .dlg-system label[hidden] { display: none; }
-  /* 使う項目：共通・借方・貸方に分けて、押すと切り替わるボタンで並べる */
+  /* 使う項目：1列に、項目名を全部書いて並べる */
   .dlg-flags[hidden], .fields-label[hidden] { display: none; }
   .fields-label { grid-column: 1 / -1; margin-top: 4px; }
-  .dlg-flags { grid-column: 1 / -1; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 10px; align-items: start;
-    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
-  .fg-name { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 5px 8px; text-align: center; line-height: 1.2; background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
-  .fg-name.debit { background: var(--debit); color: var(--debit-text); border-color: transparent; }
-  .fg-name.credit { background: var(--credit); color: var(--credit-text); border-color: transparent; }
-  .fg-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
-  .dlg-system .dlg-flags label.chip { display: flex; position: relative; cursor: pointer; }
-  .dlg-system .dlg-flags label.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
-  .chip span { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 30px; padding: 0 8px; border-radius: 999px; font-size: 12.5px; white-space: nowrap;
-    border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); }
-  .chip input:checked + span { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
-  .chip input:checked + span::before { content: "✓"; font-size: 11px; }
-  .chip input:focus-visible + span { box-shadow: 0 0 0 3px var(--primary-soft); }
+  .dlg-flags { grid-column: 1 / -1; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+  .dlg-system .dlg-flags label.flag { display: flex; align-items: center; gap: 10px; padding: 0 12px; min-height: 40px; cursor: pointer; color: var(--text); font-size: 14px; border-top: 1px solid var(--line); }
+  .dlg-system .dlg-flags label.flag:first-child { border-top: none; }
+  .dlg-system .dlg-flags label.flag.debit { background: var(--debit); }
+  .dlg-system .dlg-flags label.flag.credit { background: var(--credit); }
+  .dlg-system .dlg-flags input { width: 18px; height: 18px; padding: 0; margin: 0; flex: none; accent-color: var(--primary); }
   .dlg-system select { width: 100%; }
   .dlg-system input { height: 32px; width: 100%; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; }
   .co-name { font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
@@ -590,15 +584,14 @@
     tbody tr.row-receipt td.c-date { grid-column: 1 / 3; }
     tbody tr.row-receipt td.s-debit { grid-column: 1; }
     tbody tr.row-receipt td.s-credit { grid-column: 2; }
-    tbody tr.row-receipt td.c-summary { grid-column: 1 / 3; order: 2; }
     tbody tr.row-receipt { row-gap: 0; }
+    tbody tr.row-receipt td.c-blank { display: block; }
     tbody tr.row-receipt td.c-status { margin-bottom: 6px; }
     tbody tr.row-receipt td.c-date { margin-bottom: 8px; }
-    tbody tr.row-receipt td.c-summary { margin-top: 8px; }
     /* 借方・貸方それぞれを1枚の枠に見せる */
     tbody tr.row-receipt td.s-debit, tbody tr.row-receipt td.s-credit { padding: 5px 10px; border-radius: 0; }
-    tbody tr.row-receipt td.c-date + td.s-debit, tbody tr.row-receipt td.c-summary + td.s-credit { border-radius: 10px 10px 0 0; padding-top: 10px; }
-    tbody tr.row-receipt td.s-debit:has(+ td.c-summary), tbody tr.row-receipt td.s-credit:has(+ td.c-del) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
+    tbody tr.row-receipt td.c-date + td.s-debit, tbody tr.row-receipt td.s-debit + td.s-credit { border-radius: 10px 10px 0 0; padding-top: 10px; }
+    tbody tr.row-receipt td.s-debit:has(+ td.s-credit), tbody tr.row-receipt td.s-credit:has(+ td.c-del) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
     tbody tr.row-receipt td.s-debit { background: var(--debit); }
     tbody tr.row-receipt td.s-credit { background: var(--credit); }
     tbody tr.row-receipt td.s-debit::before { color: var(--debit-text); }
@@ -1394,20 +1387,25 @@ const FIELDS = [
   { key: "debitAmount", label: "④借方金額", head: "④金額", side: "debit", num: true, cls: "c-amount" },
   { key: "debitTax", label: "⑤借方消費税", head: "⑤消費税", side: "debit", tax: true, options: TAX_TYPES, cls: "c-tax" },
   { key: "debitRate", label: "⑥借方税率", head: "⑥税率", side: "debit", tax: true, options: TAX_RATES, cls: "c-rate" },
-  { key: "summary", label: "⑦摘要", cls: "c-summary b-left" },
+  { key: "summary", label: "⑦借方摘要", head: "⑦摘要", side: "debit", cls: "c-summary" },
   { key: "creditCode", label: "⑧貸方科目", head: "⑧科目", side: "credit", code: true, cls: "c-code b-left" },
   { key: "creditSub", label: "⑨貸方補助", head: "⑨補助", side: "credit", sub: true, code: true, cls: "c-code" },
   { key: "creditAmount", label: "⑩貸方金額", head: "⑩金額", side: "credit", num: true, cls: "c-amount" },
   { key: "creditTax", label: "⑪貸方消費税", head: "⑪消費税", side: "credit", tax: true, options: TAX_TYPES, cls: "c-tax" },
   { key: "creditRate", label: "⑫貸方税率", head: "⑫税率", side: "credit", tax: true, options: TAX_RATES, cls: "c-rate" },
+  { key: "creditSummary", label: "⑬貸方摘要", head: "⑬摘要", side: "credit", cls: "c-summary" },
 ];
+// 借方・貸方をのぞいた項目の種類（debitCode と creditCode は どちらも Code）
+const kindOf = key => key === "summary" ? "Summary" : key.replace(/^(debit|credit)/, "");
+// 貸方摘要は、借方と別に入れていなければ借方摘要と同じ（単一仕訳）
+const creditSummaryOf = r => r.creditSummary ?? r.summary ?? "";
 // 試算表は6項目で固定（補助・消費税は使わない）
 const TRIAL_KEYS = ["date", "debitCode", "debitAmount", "summary", "creditCode", "creditAmount"];
 // 原始資料・日計表は、12項目のうち会社ごとに選んだ項目（選んでいなければ12項目すべて）
 function fieldKeysOf(c) {
   if (!c) return FIELDS.map(f => f.key);
   if (c.method === TRIAL_SOURCE) return TRIAL_KEYS;
-  if (Array.isArray(c.fields)) return c.fields;
+  if (Array.isArray(c.fields)) return c.fieldsV2 || !c.fields.includes("summary") ? c.fields : [...c.fields, "creditSummary"]; // 貸方摘要ができる前の設定には足す
   // 以前の「補助コードを使う」「免税事業者」の設定から引き継ぐ
   if ("useSub" in c || "taxExempt" in c) return FIELDS.filter(f => (!f.sub || c.useSub) && (!f.tax || !c.taxExempt)).map(f => f.key);
   return FIELDS.map(f => f.key);
@@ -1417,7 +1415,10 @@ function fieldKeysOf(c) {
 function visibleFields() {
   const keys = currentSource() === TRIAL_SOURCE ? TRIAL_KEYS : fieldKeysOf(currentCompany());
   const num = i => String.fromCharCode(0x2460 + i), plain = t => t.replace(/^[\u2460-\u2473]/, "");
-  return FIELDS.filter(f => keys.includes(f.key)).map((f, i) => ({ ...f, label: num(i) + plain(f.label), head: f.head && num(i) + plain(f.head) }));
+  // 試算表は片側だけの仕訳なので、摘要は1つ（借方と貸方の間）
+  const trialSummary = { key: "summary", label: "摘要", cls: "c-summary b-left" };
+  return FIELDS.filter(f => keys.includes(f.key)).map(f => currentSource() === TRIAL_SOURCE && f.key === "summary" ? trialSummary : f)
+    .map((f, i) => ({ ...f, label: num(i) + plain(f.label), head: f.head && num(i) + plain(f.head) }));
 }
 
 // ---- 消費税の自動判定 ----
@@ -1448,7 +1449,7 @@ function setAutoTax(row, side) {
   if (row.source === TRIAL_SOURCE) return;
   const c = companies.find(x => x.id === row.companyId);
   if (!c || row.taxManual?.[side]) return;
-  const type = autoTaxType(row[side + "Code"], row.summary, row.companyId);
+  const type = autoTaxType(row[side + "Code"], side === "credit" ? creditSummaryOf(row) : row.summary, row.companyId);
   const h = row.taxHint || {};
   row[side + "Tax"] = type;
   row[side + "Rate"] = type !== "課税" ? type
@@ -1523,7 +1524,7 @@ function renderStats() {
 }
 
 function inputHtml(row, f) {
-  const v = row[f.key] ?? "";
+  const v = f.key === "creditSummary" ? creditSummaryOf(row) : row[f.key] ?? "";
   if (f.options) return `<select data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">
     <option value="">—</option>${f.options.map(o => `<option${o === v ? " selected" : ""}>${o}</option>`).join("")}</select>`;
   const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
@@ -1568,7 +1569,12 @@ function render() {
   const fields = visibleFields();
   // 消費税の項目ができる前に読み取った行にも、自動で入れる
   for (const r of items) if (r.status === "done" && r.debitTax === undefined && r.debitRate === undefined) setAutoTaxBoth(r);
-  const sideCount = side => fields.filter(f => f.side === side).length;
+  // 見出しの上の段：続いている借方・貸方の項目をまとめる
+  const groupHead = fields.reduce((a, f) => {
+    const last = a[a.length - 1];
+    if (f.side && last?.side === f.side) last.n++; else a.push({ side: f.side, n: 1, left: f.cls.includes("b-left") });
+    return a;
+  }, []).map(g => g.side ? `<th class="${g.side} b-left" colspan="${g.n}">${g.side === "debit" ? "借方" : "貸方"}</th>` : `<th class="${g.left ? "b-left" : ""}" colspan="${g.n}"></th>`).join("");
   let body = "";
   items.forEach((row, i) => {
     const thumb = row.source === TRIAL_SOURCE ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
@@ -1587,20 +1593,20 @@ function render() {
     const codeName = key => (key === "debitCode" || key === "creditCode") && row[key]
       ? `<div class="code-name ${masterName(row[key]) ? "" : "unknown"}" data-code-name-for="${row.id}-${key}">${escapeHtml(masterName(row[key]) || "マスタにない")}</div>`
       : (key === "debitCode" || key === "creditCode") ? `<div class="code-name" data-code-name-for="${row.id}-${key}"></div>` : "";
-    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + fields.map(f => `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}" data-label="${f.label}">
+    // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
+    const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
+      [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(k => fields.find(f => f.side === side && kindOf(f.key) === k) || { blank: true, side }))];
+    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + cells.map(f => f.blank ? `<td class="c-blank s-${f.side}"></td>` : `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}" data-label="${f.label}">
         ${inputHtml(row, f)}${codeName(f.key)}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の科目: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
-        ${f.key === "summary" ? noteHtml(row) : ""}
+        ${f.key === (isTrial ? "summary" : "date") ? noteHtml(row) : ""}
       </td>`).join("") + `${actions(row)}</tr>`;
   });
 
   list.innerHTML = `<div class="table-wrap"><table>
     <thead>
       <tr class="group">
-        <th colspan="4"></th>
-        <th class="debit b-left" colspan="${sideCount("debit")}">借方</th>
-        <th class="b-left"></th>
-        <th class="credit b-left" colspan="${sideCount("credit")}">貸方</th>
+        <th colspan="3"></th>${groupHead}
         <th></th>
       </tr>
       <tr>
@@ -1729,6 +1735,12 @@ list.addEventListener("input", e => {
     const credit = list.querySelector(`input[data-id="${id}"][data-key="creditAmount"]`);
     if (credit) { credit.value = value ? Number(value).toLocaleString() : ""; credit.classList.toggle("missing", isMissing("creditAmount", value)); }
   }
+  // 借方摘要と貸方摘要が同じ（単一仕訳）なら、貸方摘要も一緒に変える
+  if (row.source !== TRIAL_SOURCE && key === "summary" && creditSummaryOf(row) === (row.summary ?? "")) {
+    row.creditSummary = value;
+    const cs = list.querySelector(`input[data-id="${id}"][data-key="creditSummary"]`);
+    if (cs) cs.value = value;
+  }
   row[key] = value;
   e.target.classList.toggle("missing", fieldMissing(row, key, value));
   const badge = e.target.closest("[data-row]")?.querySelector(".c-status");
@@ -1757,7 +1769,7 @@ list.addEventListener("change", e => {
     row.taxManual = { ...row.taxManual, [side]: true };
     save(); render(); return;
   }
-  if (row.source !== TRIAL_SOURCE && (key === "debitCode" || key === "creditCode" || key === "summary")) {
+  if (row.source !== TRIAL_SOURCE && (key === "debitCode" || key === "creditCode" || key === "summary" || key === "creditSummary")) {
     if (key === "summary") setAutoTaxBoth(row); else setAutoTax(row, side);
   }
   if (key === "date") render();
@@ -1776,7 +1788,7 @@ list.addEventListener("change", e => {
     saveReceiptSettings(); save(); render();
   }
   else if (FIELDS.find(f => f.key === key)?.num && row[key] !== "") e.target.value = Number(row[key]).toLocaleString();
-  else if (key === "debitCode" || key === "creditCode" || key === "summary") { save(); render(); }
+  else if (key === "debitCode" || key === "creditCode" || key === "summary" || key === "creditSummary") { save(); render(); }
 });
 
 list.addEventListener("click", async e => {
@@ -1880,7 +1892,7 @@ viewer.addEventListener("pointercancel", endPointer);
 // ---- CSV ----
 const CSV_HEADERS = {
   date: "伝票日付", debitCode: "借方勘定科目コード", debitSub: "借方科目別補助コード", debitAmount: "借方金額", debitTax: "借方消費税区分", debitRate: "借方消費税率",
-  summary: "摘要", creditCode: "貸方勘定科目コード", creditSub: "貸方科目別補助コード", creditAmount: "貸方金額", creditTax: "貸方消費税区分", creditRate: "貸方消費税率",
+  summary: "借方摘要", creditCode: "貸方勘定科目コード", creditSub: "貸方科目別補助コード", creditAmount: "貸方金額", creditTax: "貸方消費税区分", creditRate: "貸方消費税率", creditSummary: "貸方摘要",
 };
 document.getElementById("download").onclick = async () => {
   const done = csvTargetRows();
@@ -1905,10 +1917,11 @@ document.getElementById("download").onclick = async () => {
       if (Number(debitAmount) && !creditCode && !Number(creditAmount)) { creditCode = shokuchi; creditAmount = debitAmount; }
       else if (Number(creditAmount) && !debitCode && !Number(debitAmount)) { debitCode = shokuchi; debitAmount = creditAmount; }
     }
-    const v = { ...r, date: formatDate(r.date), debitCode, debitAmount, creditCode, creditAmount };
+    const v = { ...r, date: formatDate(r.date), debitCode, debitAmount, creditCode, creditAmount, creditSummary: creditSummaryOf(r) };
     return fields.map(f => cell(v[f.key])).join(",");
   });
-  if (settings.includeHeader) lines.unshift(fields.map(f => CSV_HEADERS[f.key]).join(","));
+  const isTrialCsv = currentSource() === TRIAL_SOURCE;
+  if (settings.includeHeader) lines.unshift(fields.map(f => isTrialCsv && f.key === "summary" ? "摘要" : CSV_HEADERS[f.key]).join(","));
   const csv = lines.join("\r\n") + "\r\n";
 
   const bytes = settings.encoding === "utf8"
@@ -2662,6 +2675,7 @@ document.getElementById("companyFields").onchange = e => {
   const c = companies.find(x => x.id === masterCid);
   if (!c) return;
   c.fields = [...document.querySelectorAll("#companyFields input:checked")].map(i => i.value);
+  c.fieldsV2 = true;
   delete c.useSub; delete c.taxExempt;
   saveCompanies(); render();
 };
@@ -2681,9 +2695,8 @@ function renderMaster() {
   document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
   const mc = companies.find(x => x.id === masterCid);
   const keys = fieldKeysOf(mc);
-  const chip = f => `<label class="chip"><input type="checkbox" value="${f.key}"${keys.includes(f.key) ? " checked" : ""} aria-label="${f.label}"><span>${f.head || f.label}</span></label>`;
-  document.getElementById("companyFields").innerHTML = [["", "共通", f => !f.side], ["debit", "借方", f => f.side === "debit"], ["credit", "貸方", f => f.side === "credit"]]
-    .map(([cls, name, pick]) => `<div class="fg-name ${cls}">${name}</div><div class="fg-items">${FIELDS.filter(pick).map(chip).join("")}</div>`).join("");
+  document.getElementById("companyFields").innerHTML = FIELDS.map(f =>
+    `<label class="flag ${f.side || ""}"><input type="checkbox" value="${f.key}"${keys.includes(f.key) ? " checked" : ""}> ${f.label}</label>`).join("");
   document.getElementById("companyFields").hidden = document.getElementById("companyFieldsLabel").hidden = type === TRIAL_SOURCE;
   const tabs = TABS_BY_TYPE[type] || TABS_BY_TYPE.receipt;
   if (!tabs.includes(masterTab)) masterTab = "master";
