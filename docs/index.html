@@ -596,6 +596,12 @@
     tbody tr.row-receipt td.s-credit { grid-column: 2; }
     tbody tr.row-receipt { row-gap: 0; }
     tbody tr.row-receipt td.c-blank { display: block; }
+    tbody tr.row-receipt td.c-none { display: none; }
+    /* 8%と10%に分けた仕訳は、2つ目（10%）を1つ目の続きとして見せる（間の線・日付・画像を出さない） */
+    tbody tr.split-head { border-bottom: none; padding-bottom: 4px; }
+    tbody tr.split-cont { padding-top: 0; }
+    tbody tr.split-cont td.c-date, tbody tr.split-cont td.c-thumb, tbody tr.split-cont td.c-status { display: none; }
+    tbody tr.split-head td.c-del { display: none; }
     tbody tr.row-receipt td.c-status { margin-bottom: 6px; }
     tbody tr.row-receipt td.c-date { margin-bottom: 8px; }
     /* 伝票日付は薄い緑の枠（借方と貸方が合っていなければ赤） */
@@ -1714,16 +1720,21 @@ function render() {
     }
     const isTrial = row.source === TRIAL_SOURCE;
     // 科目コードの欄は、コードのすぐ右に科目名を出す
-    const cellInput = f => {
-      if (f.key !== "debitCode" && f.key !== "creditCode") return inputHtml(row, f);
-      const code = String(row[f.key] || ""), name = code ? masterName(code) : "";
-      return `<div class="code-box" style="--len:${code.length}">${inputHtml(row, f)}<span class="code-name ${code && !name ? "unknown" : ""}" data-code-name-for="${row.id}-${f.key}">${escapeHtml(code ? name || "マスタにない" : "")}</span></div>`;
+    const cellInput = (r, f) => {
+      if (f.key !== "debitCode" && f.key !== "creditCode") return inputHtml(r, f);
+      const code = String(r[f.key] || ""), name = code ? masterName(code) : "";
+      return `<div class="code-box" style="--len:${code.length}">${inputHtml(r, f)}<span class="code-name ${code && !name ? "unknown" : ""}" data-code-name-for="${r.id}-${f.key}">${escapeHtml(code ? name || "マスタにない" : "")}</span></div>`;
     };
+    // 8%と10%に分けた仕訳は、諸口を出さずに「借方2つ・貸方1つ」で見せる
+    //   8%の行の貸方の欄に、隠している行の貸方（現金など・合計）を出し、10%の行の貸方は空にする
+    const tot = row.splitRole ? rows.find(o => o.groupId === row.groupId && o.splitRole === "total") : null;
+    const srcOf = f => f.side !== "credit" || !tot ? row : row.splitRole === "r8" ? tot : null;
     // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
     const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
       [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(k => fields.find(f => f.side === side && kindOf(f.key) === k) || { blank: true, side }))];
-    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}">${head}` + cells.map(f => f.blank ? `<td class="c-blank s-${f.side}"></td>` : `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(row).ok ? " unbalanced" : ""}" data-label="${f.label}">
-        ${cellInput(f)}
+    const splitCls = row.splitRole === "r8" ? " split-head" : row.splitRole === "r10" ? " split-cont" : "";
+    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}${splitCls}">${head}` + cells.map(f => f.blank ? `<td class="c-blank s-${f.side}"></td>` : !srcOf(f) ? `<td class="${f.cls} s-credit c-none"></td>` : `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(row).ok ? " unbalanced" : ""}" data-label="${f.label}">
+        ${cellInput(srcOf(f), f)}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の科目: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
         ${f.key === "date" ? balanceHtml(row) : ""}
         ${f.key === (isTrial ? "summary" : "date") ? noteHtml(row) : ""}
@@ -1871,7 +1882,8 @@ list.addEventListener("input", e => {
     if (credit) { credit.value = value ? Number(value).toLocaleString() : ""; credit.classList.toggle("missing", isMissing("creditAmount", value)); }
   }
   // 8%と10%に分けた行：片方の金額を直したら、もう片方を「合計（諸口の行）との差」にして、合計が変わらないようにする
-  if (row.splitRole && key === "debitAmount") {
+  if (row.splitRole && (key === "debitAmount" || (row.splitRole === "total" && key === "creditAmount"))) {
+    if (row.splitRole === "total") row.debitAmount = value; // 隠している諸口の行は、借方も貸方と同じ金額
     const grp = rows.filter(o => o.groupId === row.groupId && o.splitRole);
     const tot = grp.find(o => o.splitRole === "total"), r8 = grp.find(o => o.splitRole === "r8"), r10 = grp.find(o => o.splitRole === "r10");
     const setAmt = (o, v) => {
@@ -1884,6 +1896,19 @@ list.addEventListener("input", e => {
     if (tot && r8 && r10) {
       if (row === tot) { if (r8.debitAmount !== "" && value !== "") setAmt(r10, Math.max(0, Number(value) - Number(r8.debitAmount))); }
       else if (value !== "" && tot.debitAmount !== "") setAmt(row === r8 ? r10 : r8, Math.max(0, Number(tot.debitAmount) - Number(value)));
+    }
+  }
+  // 8%と10%に分けた仕訳は、日付と借方摘要を同じレシートの行すべてにそろえる
+  if (row.splitRole && (key === "date" || key === "summary")) {
+    for (const o of rows.filter(o => o !== row && o.groupId === row.groupId && o.splitRole)) {
+      if (key === "summary" && creditSummaryOf(o) === (o.summary ?? "")) {
+        o.creditSummary = value;
+        const cs = list.querySelector(`input[data-id="${o.id}"][data-key="creditSummary"]`);
+        if (cs) cs.value = value;
+      }
+      o[key] = value;
+      const el = list.querySelector(`input[data-id="${o.id}"][data-key="${key}"]`);
+      if (el) el.value = value;
     }
   }
   // 借方摘要と貸方摘要が同じ（単一仕訳）なら、貸方摘要も一緒に変える
@@ -2081,12 +2106,11 @@ document.getElementById("download").onclick = async () => {
   // 試算表の行は片側だけなので、反対側を諸口にする（その会社のミロク科目マスタの「諸口」。なければミロクで基本の 3999）
   const shokuchi = shokuchiOf();
   const fields = visibleFields(); // CSVは確認画面と同じ項目
-  // 画面に出していない「借方 諸口／貸方 現金など」の行は、8%と10%の行に合わせる（金額は2行の合計、日付・摘要は同じ）
+  // 画面に出していない「借方 諸口／貸方 現金など」の行：借方の金額は貸方（領収書の合計）と同じ、日付・摘要は1行目と同じにする
   for (const tot of done.filter(isHiddenRow)) {
     const parts = done.filter(r => r.groupId === tot.groupId && r.splitRole && r !== tot);
     if (!parts.length) continue;
-    const sum = parts.reduce((a, r) => a + Number(r.debitAmount || 0), 0);
-    Object.assign(tot, { debitAmount: sum, creditAmount: sum, date: parts[0].date, summary: parts[0].summary, creditSummary: parts[0].creditSummary });
+    Object.assign(tot, { debitAmount: tot.creditAmount, date: parts[0].date, summary: parts[0].summary });
   }
   const lines = done.map(r => {
     let { debitCode, debitAmount, creditCode, creditAmount } = r;
