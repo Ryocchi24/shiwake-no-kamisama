@@ -20,7 +20,7 @@
     --bg: #f5f6f8; --surface: #fff; --surface-2: #f8f9fb;
     --text: #111827; --muted: #5b6272; --line: #e5e7eb; --line-strong: #d1d5db;
     --primary: var(--navy); --primary-hover: #1f3159; --primary-soft: #f4ecd8;
-    --debit: #f1f3f8; --debit-text: #26375e; --credit: #faf3e6; --credit-text: #8c6a22;
+    --debit: #f1f3f8; --debit-text: #26375e; --credit: #faf3e6; --credit-text: #8c6a22; --date-bg: #e9f5ee; --date-text: #1f6b43;
     --ok: #127a4a; --ok-soft: #e4f5ec; --warn: #9a6200; --warn-soft: #fff4d9;
     --err: #c62a2a; --err-soft: #fdeaea; --info: #4a5568; --info-soft: #edf0f4;
     --radius: 12px;
@@ -92,6 +92,7 @@
   thead tr.group th { font-weight: 700; text-align: center; border-bottom: 1px solid var(--line); padding: 6px; }
   thead th.debit { background: var(--debit); color: var(--debit-text); }
   thead th.credit { background: var(--credit); color: var(--credit-text); }
+  thead th.date { background: var(--date-bg); color: var(--date-text); }
   thead th.num { text-align: right; }
   th.b-left, td.b-left { border-left: 1px solid var(--line); }
   tbody tr:hover td { background: #fafbfd; }
@@ -107,7 +108,7 @@
   td input.code { font-family: "Roboto Mono", monospace; }
   td input.code::placeholder { color: #c2c8d2; }
   td input.missing { border-color: #f0b4b4; background: var(--err-soft); }
-  td.c-date { width: 132px; } td.c-code { width: 68px; } td.c-amount { width: 112px; min-width: 104px; } td.c-summary { min-width: 170px; }
+  td.c-date { width: 132px; background: var(--date-bg); } td.c-code { width: 68px; } td.c-amount { width: 112px; min-width: 104px; } td.c-summary { min-width: 170px; }
   td.c-amount input { padding: 0 4px; }
   td.c-blank { display: none; }
   td.c-code { min-width: 68px; } td.c-acct { width: 150px; min-width: 150px; } td.c-tax { width: 84px; min-width: 84px; } td.c-rate { width: 84px; min-width: 84px; } td.c-biz { width: 112px; min-width: 112px; }
@@ -509,6 +510,7 @@
   .doc-type.active .soon-tag { color: var(--gold-light); background: rgba(236,208,140,.15); }
   thead th.debit { background: var(--debit); color: var(--debit-text); }
   thead th.credit { background: var(--credit); color: var(--credit-text); }
+  thead th.date { background: var(--date-bg); color: var(--date-text); }
   /* 会社の種類のタグ: 色の差がはっきり分かる、濃い文字 × 淡い背景 */
   .method-tag { font-size: 12px; font-weight: 700; padding: 3px 10px; }
   .method-tag.t-receipt { color: #0f5132; background: #d3f0de; }
@@ -594,6 +596,10 @@
     tbody tr.row-receipt td.c-blank { display: block; }
     tbody tr.row-receipt td.c-status { margin-bottom: 6px; }
     tbody tr.row-receipt td.c-date { margin-bottom: 8px; }
+    /* 伝票日付は薄い緑の枠 */
+    tbody td.c-date { background: var(--date-bg); padding: 8px 10px 10px; border-radius: 10px; }
+    tbody td.c-date::before { color: var(--date-text); }
+    tbody td.c-date input { background: #fff; }
     /* 借方・貸方それぞれを1枚の枠に見せる */
     tbody tr.row-receipt td.s-debit, tbody tr.row-receipt td.s-credit { padding: 5px 10px; border-radius: 0; }
     tbody tr.row-receipt td.c-date + td.s-debit, tbody tr.row-receipt td.s-debit + td.s-credit { border-radius: 10px 10px 0 0; padding-top: 10px; }
@@ -1656,7 +1662,7 @@ function render() {
         <th></th>
       </tr>
       <tr>
-        <th>No.</th><th>状態</th><th>画像</th>${fields.map(f => `<th class="${[f.num ? "num" : "", f.cls.includes("b-left") ? "b-left" : ""].join(" ")}">${f.head || f.label}</th>`).join("")}
+        <th>No.</th><th>状態</th><th>画像</th>${fields.map(f => `<th class="${[f.num ? "num" : "", f.cls.includes("b-left") ? "b-left" : "", f.key === "date" ? "date" : ""].join(" ")}">${f.head || f.label}</th>`).join("")}
         <th></th>
       </tr>
     </thead>
