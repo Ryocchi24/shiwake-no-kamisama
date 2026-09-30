@@ -416,7 +416,7 @@
   .dropzone { border: 1.5px dashed var(--line-strong); border-radius: 12px; margin: 18px; padding: 56px 16px; background: var(--surface-2); }
   .dropzone svg { width: 32px; height: 32px; color: #b4bcc9; }
   .dropzone b { font-size: 15px; font-weight: 600; margin: 10px 0 2px; }
-  .dropzone .btn { display: flex; width: fit-content; margin: 16px auto 0; }
+  .dropzone .drop-actions { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
   .add-more[hidden], #listClear[hidden] { display: none; }
   .dropzone .btn svg { width: 16px; height: 16px; color: inherit; }
   body.web .open-camera { display: none; }
@@ -669,7 +669,7 @@
 
       <!-- 取り込み方法は会社の「取り込むもの」で決まるので、切り替えは出さない --><div class="methods" id="methods" role="tablist" aria-label="取り込み方法" hidden>
         <button class="method" data-method="receipt"><span class="method-no">①</span>原始資料</button>
-        <button class="method" data-method="format2"><span class="method-no">②</span>現金預金収支日計表<span class="soon-tag">準備中</span></button>
+        <button class="method" data-method="format2"><span class="method-no">②</span>日計表</button>
         <button class="method" data-method="format3"><span class="method-no">③</span>試算表入力</button>
       </div>
       <!-- ①原始資料の種類（レシート・領収書／給与台帳／通帳） -->
@@ -728,7 +728,7 @@
 </div>
 
 <div class="mobile-capture">
-  <label class="btn"><svg><use href="#i-upload"/></svg><span class="pick-label">画像を選ぶ</span><input class="file-picker" type="file" accept="image/*" multiple></label>
+  <label class="btn"><svg><use href="#i-upload"/></svg><span class="pick-label">ファイルを選ぶ</span><input class="file-picker" type="file" accept="image/*" multiple></label>
   <button class="btn btn-primary open-camera"><svg><use href="#i-camera"/></svg>撮影する</button>
 </div>
 
@@ -772,7 +772,7 @@
     <h2>会社設定 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="dlg-system">
       <label>会社名 <input id="companyNameInput" type="text" autocomplete="off" aria-label="会社名"></label>
-      <label>取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">現金預金収支日計表</option><option value="format3">試算表</option></select></label>
+      <label>取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">日計表</option><option value="format3">試算表</option></select></label>
       <label id="companySystemWrap">元の会計ソフト <select id="companySystem" aria-label="元の会計ソフト"></select></label>
     </div>
     <div class="tabs" id="masterTabs">
@@ -867,6 +867,24 @@ const COMPANIES_KEY = "shiwake-companies";
 const CURRENT_COMPANY_KEY = "shiwake-current-company";
 const SETTINGS_KEY = "receipt-settings-v1";
 const MAX_PARALLEL_OCR = 1; // 端末内OCRはスマホの負荷が高いので1枚ずつ
+// ---- 取り込めるファイルの形式（取り込むもの × Web版／iPhoneアプリ） ----
+// 画面の表示と「ファイルを選ぶ」で選べる種類は、すべてここから作る。
+// Web版の文字読み取りは、表の数字や手書きに弱いので、試算表はExcel・CSVだけ、日計表は読まない（iPhoneアプリで読む）
+const FILE_TYPES = {
+  写真: "image/*",
+  PDF: "application/pdf,.pdf",
+  Excel: ".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel",
+  CSV: ".csv,text/csv",
+};
+const IMPORT_FORMATS = {
+  receipt: { name: "領収書", web: ["写真", "PDF"], app: ["写真", "PDF"] },
+  format2: { name: "日計表", web: [], app: ["写真", "PDF"] },
+  format3: { name: "試算表", web: ["Excel", "CSV"], app: ["Excel", "CSV", "PDF", "写真"] },
+};
+function importFormat(method) {
+  const f = IMPORT_FORMATS[method || settings.method || "receipt"] || IMPORT_FORMATS.receipt;
+  return { ...f, types: NATIVE ? f.app : f.web };
+}
 
 /** 1行 = 1仕訳。thumb は一覧用の小さい画像（localStorage）、大きい画像は IndexedDB に保存 */
 let rows = load(STORAGE_KEY, []);
@@ -977,7 +995,7 @@ async function addFiles(fileList) {
   if (settings.method === TRIAL_SOURCE) return importTrial(files);
   if (settings.method === NIKKEI_SOURCE) return importNikkei(files);
   if ((settings.method || "receipt") !== "receipt" || (settings.docType || "receipt") !== "receipt") {
-    alert("この取り込み方法は準備中です。「① 原始資料」の「レシート・領収書」を選んでください。");
+    alert("この取り込み方法は準備中です。");
     return;
   }
   if (!currentCompany()) {
@@ -985,7 +1003,15 @@ async function addFiles(fileList) {
     openCompanies();
     return;
   }
+  // PDFは1ページずつ画像にして、1ページを1枚の領収書として読む
+  const images = [];
   for (const file of files) {
+    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+      try { for (const page of await pdfToImages(file)) images.push(Object.assign(await dataUrlToBlob(page), { name: file.name })); }
+      catch (err) { alert(`${file.name}: PDFを開けませんでした`); }
+    } else images.push(file);
+  }
+  for (const file of images) {
     const groupId = uid();
     try {
       const [full, thumb, forOcr] = await Promise.all([
@@ -1410,21 +1436,13 @@ function render() {
   document.getElementById("addMore").hidden = !items.length;
   document.getElementById("listClear").hidden = !items.length;
   if (!items.length) {
-    list.innerHTML = currentSource() === NIKKEI_SOURCE
-      ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
-      <b>現金預金収支日計表を撮影するか、PDFを選んでください</b>
-      <button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button></div>`
-      : currentSource() === TRIAL_SOURCE
-      ? `<div class="dropzone"><svg><use href="#i-list"/></svg>
-      <b>${systemOf().id ? `${escapeHtml(systemOf().name)}の` : ""}試算表を選んでください</b>${NATIVE ? "Excel・PDF・画像" : "Excel・CSV"}
-      <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div>`
-      : NATIVE
-      ? `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
-      <b>領収書を撮影してください</b>
-      <button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button></div>`
-      : `<div class="dropzone"><svg><use href="#i-receipt"/></svg>
-      <b>領収書の画像を選んでください</b>
-      <button class="btn btn-primary drop-pick"><svg><use href="#i-upload"/></svg>画像を選ぶ</button></div>`;
+    const fmt = importFormat(currentSource());
+    const what = currentSource() === TRIAL_SOURCE && systemOf().id ? `${systemOf().name}の${fmt.name}` : fmt.name;
+    const icon = currentSource() === "receipt" ? "i-receipt" : "i-list";
+    list.innerHTML = `<div class="dropzone"><svg><use href="#${icon}"/></svg>
+      <b>${escapeHtml(what)}${NATIVE ? "を撮影するか、ファイルを選んでください" : "のファイルを選んでください"}</b>${fmt.types.join("・")}
+      <div class="drop-actions">${NATIVE ? `<button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button>` : ""}
+      <button class="btn ${NATIVE ? "" : "btn-primary"} drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div></div>`;
     return;
   }
 
@@ -1437,7 +1455,7 @@ function render() {
   items.forEach((row, i) => {
     const thumb = row.source === TRIAL_SOURCE ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
       : row.thumb
-      ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="${row.source === NIKKEI_SOURCE ? "日計表" : "レシート"}"></td>`
+      ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="${row.source === NIKKEI_SOURCE ? "日計表" : "領収書"}"></td>`
       : `<td class="c-thumb"><span class="no-img">画像なし</span></td>`;
     const head = `<td class="rowno">${i + 1}</td><td class="c-status">${statusBadge(row)}</td>${thumb}`;
     if (row.status !== "done") {
@@ -2048,7 +2066,7 @@ function checkNikkei(p) {
 async function dataUrlToBlob(dataUrl) { return (await fetch(dataUrl)).blob(); }
 async function importNikkei(files) {
   if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
-  if (!NATIVE) { alert("現金預金収支日計表（手書き）は、iPhoneアプリで読み取れます。"); return; }
+  if (!NATIVE) { alert("日計表は、iPhoneアプリで読み取れます。"); return; }
   const banner = document.getElementById("ocrBanner");
   const show = t => { banner.textContent = t; banner.hidden = false; };
   const cid = currentCompanyId;
@@ -2887,20 +2905,16 @@ function renderMethod() {
   for (const b of document.querySelectorAll(".method")) b.classList.toggle("active", b.dataset.method === method);
   for (const b of document.querySelectorAll(".doc-type")) b.classList.toggle("active", b.dataset.doc === doc);
   document.getElementById("docTypes").hidden = method !== "receipt";
-  // 日計表は手書きなので、iPhoneアプリ（端末内の文字認識）だけで読む
-  const ready = (method === "receipt" && doc === "receipt") || method === TRIAL_SOURCE || (method === NIKKEI_SOURCE && !!NATIVE);
+  const fmt = importFormat(method);
+  const ready = (method === "receipt" ? doc === "receipt" : true) && fmt.types.length > 0;
   document.getElementById("methodSoon").hidden = ready;
-  document.getElementById("methodSoonNote").textContent = method === NIKKEI_SOURCE ? "現金預金収支日計表（手書き）は、iPhoneアプリで読み取れます" : "準備中";
+  document.getElementById("methodSoonNote").textContent = method !== "receipt" && !fmt.types.length ? `${fmt.name}は、iPhoneアプリで読み取れます` : "準備中";
   // 試算表はPDFでも読み込めるようにする
   for (const el of document.querySelectorAll(".pick-label")) {
     el.dataset.orig ||= el.textContent;
-    el.textContent = method === TRIAL_SOURCE || method === NIKKEI_SOURCE ? "ファイルを選ぶ" : el.dataset.orig;
+    el.textContent = "ファイルを選ぶ";
   }
-  // Web版の文字読み取りは表の数字に弱いので、試算表はExcel・CSVだけにする（iPhoneアプリはPDF・写真も読める）
-  const sheetTypes = ".xlsx,.xlsm,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv";
-  for (const input of document.querySelectorAll(".file-picker:not([capture])")) input.accept = method === TRIAL_SOURCE
-    ? (NATIVE ? "image/*,application/pdf,.pdf," + sheetTypes : sheetTypes)
-    : method === NIKKEI_SOURCE ? "image/*,application/pdf,.pdf" : "image/*";
+  for (const input of document.querySelectorAll(".file-picker:not([capture])")) input.accept = fmt.types.map(t => FILE_TYPES[t]).join(",");
   const label = el => el ? el.textContent.replace("準備中", "").trim() : "";
   const activeMethod = document.querySelector(`.method[data-method="${method}"]`);
   const activeDoc = document.querySelector(`.doc-type[data-doc="${doc}"]`);
@@ -3012,7 +3026,7 @@ list.addEventListener("click", e => {
   if (e.target.closest(".drop-pick")) document.querySelector(".file-picker:not([capture])").click();
   else if (e.target.closest(".drop-camera")) openCamera();
 });
-// Web版は撮影ボタンを出さない（スマホのブラウザでも「画像を選ぶ」からカメラで撮れる）
+// Web版は撮影ボタンを出さない（スマホのブラウザでも「ファイルを選ぶ」からカメラで撮れる）
 document.body.classList.toggle("web", !NATIVE);
 // 標準カメラで撮った後はカメラ画面を閉じて一覧へ
 document.querySelector("#camMsg .file-picker").addEventListener("change", closeCamera);
