@@ -180,6 +180,7 @@
   .move-list { display: flex; flex-direction: column; gap: 6px; }
   .move-list .btn { justify-content: flex-start; height: 40px; }
   .row-actions { display: flex; gap: 2px; }
+  .act-label { display: none; }
   .icon-btn.move:hover { background: var(--primary-soft); color: var(--primary); }
   .tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
   .tab { font: inherit; font-size: 13px; font-weight: 500; border: none; background: none; color: var(--muted); padding: 5px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
@@ -610,7 +611,13 @@
     tbody tr.row-receipt td.s-credit::before { color: var(--credit-text); }
     tbody tr.row-receipt td.s-debit input, tbody tr.row-receipt td.s-debit select,
     tbody tr.row-receipt td.s-credit input, tbody tr.row-receipt td.s-credit select { background: #fff; }
-    td.c-del { position: absolute; right: 8px; top: 8px; }
+    /* 削除・移動は、各仕訳のいちばん下の右に、文字付きのボタンで出す */
+    td.c-del { grid-column: 1 / -1 !important; order: 3; margin-top: 10px; }
+    td.c-del .row-actions { justify-content: flex-end; gap: 8px; }
+    td.c-del .icon-btn { width: auto; height: 34px; padding: 0 12px; gap: 5px; display: inline-flex; align-items: center;
+      border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font: inherit; font-size: 13px; color: var(--text); }
+    td.c-del .icon-btn.del { color: var(--err); border-color: #f0c4c4; }
+    td.c-del .act-label { display: inline; }
     td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
     td input, td select { border-color: var(--line); height: 40px; font-size: 16px; }
     .code-box { --cw: 9.6px; } .code-box .code-name { font-size: 13px; left: calc(var(--len) * var(--cw) + 12px); right: 6px; }
@@ -1620,8 +1627,8 @@ function render() {
   }
 
   const actions = row => {
-    const move = companies.length > 1 ? `<button class="icon-btn move" data-move="${row.id}" title="別の会社へ移動"><svg><use href="#i-move"/></svg></button>` : "";
-    const del = `<button class="icon-btn" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg></button>`;
+    const move = companies.length > 1 ? `<button class="icon-btn move" data-move="${row.id}" title="別の会社へ移動"><svg><use href="#i-move"/></svg><span class="act-label">別の会社へ</span></button>` : "";
+    const del = `<button class="icon-btn del" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg><span class="act-label">削除</span></button>`;
     return `<td class="c-del"><div class="row-actions">${move}${del}</div></td>`;
   };
   const fields = visibleFields();
