@@ -1400,14 +1400,14 @@ const FIELDS = [
   { key: "debitAmount", label: "④借方金額", head: "④金額", side: "debit", num: true, cls: "c-amount" },
   { key: "debitTax", label: "⑤借方消費税", head: "⑤消費税", side: "debit", tax: true, options: TAX_TYPES, cls: "c-tax" },
   { key: "debitRate", label: "⑥借方税率", head: "⑥税率", side: "debit", tax: true, options: TAX_RATES, cls: "c-rate" },
-  { key: "debitBiz", label: "⑦借方事業者", head: "⑦事業者", side: "debit", tax: true, options: BIZ_TYPES, cls: "c-biz" },
+  { key: "debitBiz", label: "⑦借方事業者取引区分", head: "⑦事業者区分", side: "debit", tax: true, options: BIZ_TYPES, cls: "c-biz" },
   { key: "summary", label: "⑧借方摘要", head: "⑧摘要", side: "debit", cls: "c-summary" },
   { key: "creditCode", label: "⑨貸方科目", head: "⑨科目", side: "credit", code: true, cls: "c-code c-acct b-left" },
   { key: "creditSub", label: "⑩貸方補助", head: "⑩補助", side: "credit", sub: true, code: true, cls: "c-code" },
   { key: "creditAmount", label: "⑪貸方金額", head: "⑪金額", side: "credit", num: true, cls: "c-amount" },
   { key: "creditTax", label: "⑫貸方消費税", head: "⑫消費税", side: "credit", tax: true, options: TAX_TYPES, cls: "c-tax" },
   { key: "creditRate", label: "⑬貸方税率", head: "⑬税率", side: "credit", tax: true, options: TAX_RATES, cls: "c-rate" },
-  { key: "creditBiz", label: "⑭貸方事業者", head: "⑭事業者", side: "credit", tax: true, options: BIZ_TYPES, cls: "c-biz" },
+  { key: "creditBiz", label: "⑭貸方事業者取引区分", head: "⑭事業者区分", side: "credit", tax: true, options: BIZ_TYPES, cls: "c-biz" },
   { key: "creditSummary", label: "⑮貸方摘要", head: "⑮摘要", side: "credit", cls: "c-summary" },
 ];
 // 借方・貸方をのぞいた項目の種類（debitCode と creditCode は どちらも Code）
@@ -1947,9 +1947,15 @@ viewer.addEventListener("pointercancel", endPointer);
 
 // ---- CSV ----
 const CSV_HEADERS = {
-  date: "伝票日付", debitCode: "借方勘定科目コード", debitSub: "借方科目別補助コード", debitAmount: "借方金額", debitTax: "借方消費税区分", debitRate: "借方消費税率",
-  summary: "借方摘要", creditCode: "貸方勘定科目コード", creditSub: "貸方科目別補助コード", creditAmount: "貸方金額", creditTax: "貸方消費税区分", creditRate: "貸方消費税率", creditSummary: "貸方摘要",
-  debitBiz: "借方事業者区分", creditBiz: "貸方事業者区分",
+  date: "伝票日付", debitCode: "借方勘定科目コード", debitSub: "借方科目別補助コード", debitAmount: "借方金額", debitTax: "借方消費税コード", debitRate: "借方消費税率",
+  summary: "借方摘要", creditCode: "貸方勘定科目コード", creditSub: "貸方科目別補助コード", creditAmount: "貸方金額", creditTax: "貸方消費税コード", creditRate: "貸方消費税率", creditSummary: "貸方摘要",
+  debitBiz: "借方事業者取引区分", creditBiz: "貸方事業者取引区分",
+};
+// CSVでは、消費税・税率・事業者取引区分をミロクのコードにする（全社共通）
+const CSV_CODES = {
+  Tax: { 課税: "10", 非課税: "30", 対象外: "40" },
+  Rate: { "10%": "4", "8%軽": "5", "8%": "3", 非課税: "0", 対象外: "0" },
+  Biz: { 課税事業者: "0", 免税事業者: "1", "": "0" },
 };
 document.getElementById("download").onclick = async () => {
   const done = csvTargetRows();
@@ -1975,7 +1981,7 @@ document.getElementById("download").onclick = async () => {
       else if (Number(creditAmount) && !debitCode && !Number(debitAmount)) { debitCode = shokuchi; debitAmount = creditAmount; }
     }
     const v = { ...r, date: formatDate(r.date), debitCode, debitAmount, creditCode, creditAmount, creditSummary: creditSummaryOf(r) };
-    return fields.map(f => cell(v[f.key])).join(",");
+    return fields.map(f => { const codes = CSV_CODES[kindOf(f.key)]; return cell(codes ? codes[v[f.key] ?? ""] ?? "" : v[f.key]); }).join(",");
   });
   const isTrialCsv = currentSource() === TRIAL_SOURCE;
   if (settings.includeHeader) lines.unshift(fields.map(f => isTrialCsv && f.key === "summary" ? "摘要" : CSV_HEADERS[f.key]).join(","));
