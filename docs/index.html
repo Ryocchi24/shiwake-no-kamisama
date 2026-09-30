@@ -256,6 +256,8 @@
   .rc-credit b { font-size: 13px; }
   .rc-credit select { height: 32px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 6px; background: var(--surface); }
   .rc-credit input { height: 32px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; }
+  .rule-types { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .rule-types .doc-type { font-size: 12.5px; padding: 4px 12px; }
   .rc-head { font-size: 12px; color: var(--muted); padding: 8px 12px 4px; }
   .master-row.rule { grid-template-columns: 1fr 100px 1fr 36px; }
   .master-csv { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
@@ -777,7 +779,7 @@
     </div>
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">ミロク科目マスタ</button>
-      <button class="tab" data-mtab="receipt"><span class="nb">領収書の</span><span class="nb">自動入力</span></button>
+      <button class="tab" data-mtab="receipt"><span class="nb">自動入力</span><span class="nb">ルール</span></button>
       <button class="tab" data-mtab="mapping"><span class="nb">別会計ソフト</span><span class="nb">対応表</span></button>
     </div>
     <p class="dlg-help" id="masterHelp"></p>
@@ -1076,7 +1078,7 @@ async function readGroup(groupId) {
       date: r.date || "",
       debitCode: receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
-      creditCode: rc.creditCode || "", creditSub: "", creditAmount: r.amount || "",
+      creditCode: rc.fixedCode || "", creditSub: "", creditAmount: r.amount || "",
       note: r.note || "",
       ocrText: r.ocrText || "",
     }));
@@ -1900,9 +1902,23 @@ function saveMasters() {
   for (const [cid, list] of Object.entries(masters)) masterDiffs[cid] = masterDiffOf(list);
   try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masterDiffs)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {} }
 // レシートの設定（会社ごと）: 貸方のいつもの科目と、「店名・品目 → 借方の科目」のルール
-const RECEIPT_SETTINGS_KEY = "shiwake-receipt-settings"; // { 会社ID: { creditCode, rules: [{ keyword, code }] } }
+// 原始資料の自動入力ルール（会社ごと・書類の種類ごと）
+// 「いつも使う科目」1つと、「言葉 → 科目」のルールを持つ。領収書以外は、読み取りを作ったときに使う（先に登録しておける）
+const AUTO_RULE_TYPES = [
+  { id: "receipt",  name: "領収書",     ready: true,  fixed: "貸方の科目",     fixedEx: "例: 1101", rule: "店名 → 借方の科目",     ruleEx: "例: セブンイレブン" },
+  { id: "passbook", name: "通帳",       ready: false, fixed: "この通帳の科目", fixedEx: "例: 1107", rule: "摘要 → 相手の科目",     ruleEx: "例: NTT" },
+  { id: "payroll",  name: "給与台帳",   ready: false, fixed: "支払いの科目",   fixedEx: "例: 1107", rule: "項目名 → 科目",         ruleEx: "例: 源泉所得税" },
+  { id: "sales",    name: "売上請求書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1142", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
+  { id: "purchase", name: "仕入請求書", ready: false, fixed: "貸方の科目",     fixedEx: "例: 2103", rule: "取引先 → 借方の科目",   ruleEx: "例: 取引先の名前" },
+];
+const RECEIPT_SETTINGS_KEY = "shiwake-receipt-settings"; // { 会社ID: { 書類の種類: { fixedCode, rules: [{ keyword, code }] } } }
 let receiptSettings = load(RECEIPT_SETTINGS_KEY, {});
-const receiptSettingsOf = (cid = currentCompanyId) => (receiptSettings[cid] ||= { creditCode: "", rules: [] });
+// 以前の形（会社ID: { creditCode, rules }）は、領収書のルールとして引き継ぐ
+for (const [cid, v] of Object.entries(receiptSettings)) {
+  if (v && (Array.isArray(v.rules) || "creditCode" in v)) receiptSettings[cid] = { receipt: { fixedCode: v.creditCode || "", rules: v.rules || [] } };
+}
+const autoRulesOf = (cid = currentCompanyId, type = "receipt") => ((receiptSettings[cid] ||= {})[type] ||= { fixedCode: "", rules: [] });
+const receiptSettingsOf = (cid = currentCompanyId) => autoRulesOf(cid, "receipt");
 function saveReceiptSettings() { try { localStorage.setItem(RECEIPT_SETTINGS_KEY, JSON.stringify(receiptSettings)); } catch {} }
 // 店名・摘要にキーワードを含むルールのうち、一番長いキーワードのものを使う
 function receiptDebitCode(cid, store, summary) {
@@ -2518,6 +2534,7 @@ companyTypeSel.onchange = () => {
   renderMaster(); renderCompanyList();
 };
 // 会社の種類ごとに、出すタブ（原始資料 → レシートの自動入力、試算表 → 試算表の読み替え）
+let ruleType = "receipt"; // 自動入力ルールで表示している書類の種類
 const TABS_BY_TYPE = { receipt: ["master", "receipt"], format2: ["master"], format3: ["master", "mapping"] };
 function renderMaster() {
   const type = companies.find(x => x.id === masterCid)?.method || "receipt";
@@ -2544,18 +2561,20 @@ function renderMaster() {
         <button class="icon-btn" data-mdel="${m.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
       : `<div class="master-empty">「ファイルから読み込む」でミロクの科目マスタを入れてください</div>`;
   } else if (masterTab === "receipt") {
-    const rc = receiptSettingsOf(masterCid);
+    const cfg = AUTO_RULE_TYPES.find(t => t.id === ruleType) || AUTO_RULE_TYPES[0];
+    const rc = autoRulesOf(masterCid, cfg.id);
     document.getElementById("masterHelp").textContent = "";
     const rules = rc.rules.map((x, i) => ({ ...x, i })).filter(x => !q || normName(x.keyword + x.code + masterName(x.code, masterCid)).includes(q));
-    listEl.innerHTML = `<div class="rc-credit">
-        <b>貸方の科目</b>
-        <input value="${escapeHtml(rc.creditCode)}" data-rck="credit" data-code-suggest autocomplete="off" placeholder="例: 1101" aria-label="貸方の科目コード">
-        <span class="muted">${escapeHtml(rc.creditCode ? (masterName(rc.creditCode, masterCid) || "（マスタにない）") : "")}</span>
+    listEl.innerHTML = `<div class="rule-types">${AUTO_RULE_TYPES.map(t => `<button class="doc-type ${t.id === cfg.id ? "active" : ""}" data-ruletype="${t.id}">${escapeHtml(t.name)}${t.ready ? "" : `<span class="soon-tag">準備中</span>`}</button>`).join("")}</div>
+      <div class="rc-credit">
+        <b>${escapeHtml(cfg.fixed)}</b>
+        <input value="${escapeHtml(rc.fixedCode)}" data-rck="credit" data-code-suggest autocomplete="off" placeholder="${escapeHtml(cfg.fixedEx)}" aria-label="${escapeHtml(cfg.fixed)}">
+        <span class="muted">${escapeHtml(rc.fixedCode ? (masterName(rc.fixedCode, masterCid) || "（マスタにない）") : "")}</span>
       </div>
-      <div class="rc-head">店名 → 借方の科目</div>`
+      <div class="rc-head">${escapeHtml(cfg.rule)}</div>`
       + (rules.length ? rules.map(x => `<div class="master-row rule">
-        <input value="${escapeHtml(x.keyword)}" data-rri="${x.i}" data-rrk="keyword" placeholder="例: セブンイレブン" aria-label="店名・品目に含まれる言葉">
-        <input value="${escapeHtml(x.code)}" data-rri="${x.i}" data-rrk="code" data-code-suggest autocomplete="off" placeholder="コード" aria-label="借方の科目コード">
+        <input value="${escapeHtml(x.keyword)}" data-rri="${x.i}" data-rrk="keyword" placeholder="${escapeHtml(cfg.ruleEx)}" aria-label="言葉">
+        <input value="${escapeHtml(x.code)}" data-rri="${x.i}" data-rrk="code" data-code-suggest autocomplete="off" placeholder="コード" aria-label="科目コード">
         <span class="muted">${escapeHtml(x.code ? (masterName(x.code, masterCid) || "（マスタにない）") : "")}</span>
         <button class="icon-btn" data-rrdel="${x.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
       : `<div class="master-empty">ルールはまだありません</div>`);
@@ -2589,14 +2608,14 @@ document.getElementById("masterSearch").oninput = renderMaster;
 document.getElementById("masterClose").onclick = () => {
   // 「＋ 追加」で作ったまま空の行は、閉じるときに片付ける
   if (masters[masterCid]) { masters[masterCid] = masters[masterCid].filter(m => m.code || m.name); saveMasters(); }
-  const rc = receiptSettings[masterCid];
-  if (rc) { rc.rules = rc.rules.filter(x => x.keyword || x.code); saveReceiptSettings(); }
+  for (const rc of Object.values(receiptSettings[masterCid] || {})) rc.rules = (rc.rules || []).filter(x => x.keyword || x.code);
+  saveReceiptSettings();
   masterDlg.hidden = true; renderMasterCodes();
   if (currentView === "companies") renderCompanyList(); else render();
 };
 document.getElementById("masterAdd").onclick = () => {
   if (masterTab === "receipt") {
-    receiptSettingsOf(masterCid).rules.unshift({ keyword: "", code: "" });
+    autoRulesOf(masterCid, ruleType).rules.unshift({ keyword: "", code: "" });
     document.getElementById("masterSearch").value = "";
     saveReceiptSettings(); renderMaster();
     masterDlg.querySelector('[data-rrk="keyword"]')?.focus();
@@ -2613,8 +2632,8 @@ document.getElementById("masterAdd").onclick = () => {
 };
 document.getElementById("masterReset").onclick = () => {
   if (masterTab === "receipt") {
-    if (!confirm("この会社のレシートのルールをすべて消しますか？（貸方の科目の設定は残ります）")) return;
-    receiptSettingsOf(masterCid).rules = [];
+    if (!confirm(`この会社の「${(AUTO_RULE_TYPES.find(t => t.id === ruleType) || AUTO_RULE_TYPES[0]).name}」のルールをすべて消しますか？（いつも使う科目の設定は残ります）`)) return;
+    autoRulesOf(masterCid, ruleType).rules = [];
     saveReceiptSettings(); renderMaster();
     return;
   }
@@ -2630,8 +2649,8 @@ document.getElementById("masterReset").onclick = () => {
 document.getElementById("masterList").addEventListener("change", e => {
   if (isCodeSearch(e.target)) return; // 科目名で探している途中は、まだ反映しない
   const t = e.target;
-  const rc = receiptSettingsOf(masterCid);
-  if (t.dataset.rck === "credit") { rc.creditCode = (t.value.match(/^\s*(\d+)/) || [])[1] || ""; saveReceiptSettings(); renderMaster(); return; }
+  const rc = autoRulesOf(masterCid, ruleType);
+  if (t.dataset.rck === "credit") { rc.fixedCode = (t.value.match(/^\s*(\d+)/) || [])[1] || ""; saveReceiptSettings(); renderMaster(); return; }
   if (t.dataset.rri !== undefined) {
     const x = rc.rules[Number(t.dataset.rri)];
     if (x) x[t.dataset.rrk] = t.dataset.rrk === "code" ? ((t.value.match(/^\s*(\d+)/) || [])[1] || "") : t.value.trim();
@@ -2650,8 +2669,10 @@ document.getElementById("masterList").addEventListener("change", e => {
   }
 });
 document.getElementById("masterList").addEventListener("click", e => {
+  const rt = e.target.closest("[data-ruletype]");
+  if (rt) { ruleType = rt.dataset.ruletype; renderMaster(); return; }
   const rdel = e.target.closest("[data-rrdel]");
-  if (rdel) { receiptSettingsOf(masterCid).rules.splice(Number(rdel.dataset.rrdel), 1); saveReceiptSettings(); renderMaster(); return; }
+  if (rdel) { autoRulesOf(masterCid, ruleType).rules.splice(Number(rdel.dataset.rrdel), 1); saveReceiptSettings(); renderMaster(); return; }
   const del = e.target.closest("[data-mdel], [data-mapdel]"); if (!del) return;
   if (del.dataset.mdel !== undefined) { masterOf(masterCid).splice(Number(del.dataset.mdel), 1); }
   else { delete mappingOf(masterCid)[del.dataset.mapdel]; }
