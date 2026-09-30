@@ -131,7 +131,13 @@
 
   .modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .75); display: none; align-items: center; justify-content: center; z-index: 50; padding: 24px; }
   .modal.open { display: flex; }
-  .modal img { max-width: 100%; max-height: 100%; border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+  .modal { padding: 0; background: rgba(8, 12, 22, .92); }
+  .viewer { position: absolute; inset: 0 0 72px; overflow: hidden; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: zoom-in; }
+  .viewer.zoomed { cursor: grab; }
+  .viewer img { max-width: calc(100% - 32px); max-height: calc(100% - 32px); border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,.4); transform-origin: 0 0; user-select: none; -webkit-user-drag: none; }
+  .viewer-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 72px; padding-bottom: env(safe-area-inset-bottom); display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .viewer-btn { font: inherit; font-size: 16px; font-weight: 600; color: #fff; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); border-radius: 10px; min-width: 48px; height: 44px; padding: 0 14px; cursor: pointer; }
+  .viewer-close { background: var(--gold); color: var(--navy-deep); border-color: var(--gold); }
 
   .mobile-capture { display: none; }
   .topbar-gear { margin-left: auto; }
@@ -728,7 +734,16 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<div class="modal" id="modal"><img id="modalImg" alt=""></div>
+<!-- 写真を大きく見る（指で広げる・ダブルタップ・ホイール・＋−ボタンで拡大、指やマウスで動かす） -->
+<div class="modal" id="modal">
+  <div class="viewer" id="viewer"><img id="modalImg" alt="" draggable="false"></div>
+  <div class="viewer-bar">
+    <button class="viewer-btn" data-zoom="out" aria-label="縮小">−</button>
+    <button class="viewer-btn" data-zoom="fit">全体</button>
+    <button class="viewer-btn" data-zoom="in" aria-label="拡大">＋</button>
+    <button class="viewer-btn viewer-close" id="viewerClose">✕ 閉じる</button>
+  </div>
+</div>
 
 <!-- カメラ -->
 <div class="camera" id="camera" hidden>
@@ -1629,14 +1644,82 @@ list.addEventListener("click", async e => {
     queue.push(row.groupId);
     render(); pump();
   } else {
-    const modalImg = document.getElementById("modalImg");
-    modalImg.src = t.src;
-    document.getElementById("modal").classList.add("open");
+    openViewer(t.src);
     const full = await getFullImage(t.dataset.group);
-    if (full) modalImg.src = full;
+    if (full) document.getElementById("modalImg").src = full;
   }
 });
-document.getElementById("modal").onclick = () => document.getElementById("modal").classList.remove("open");
+// ---- 写真を大きく見る ----
+const viewer = document.getElementById("viewer"), viewerImg = document.getElementById("modalImg");
+let vz = { s: 1, x: 0, y: 0 };            // 拡大率と、ずらした量
+const pointers = new Map();               // 画面に触れている指（マウス）
+let pinch = null, drag = null, lastTap = 0;
+function applyZoom() {
+  viewerImg.style.transform = `translate(${vz.x}px, ${vz.y}px) scale(${vz.s})`;
+  viewer.classList.toggle("zoomed", vz.s > 1.01);
+}
+// 画面上の点(cx, cy)を中心に、拡大率を s にする
+function zoomAt(s, cx, cy) {
+  s = Math.min(8, Math.max(1, s));
+  const rc = viewerImg.getBoundingClientRect();
+  const ix = (cx - rc.left) / vz.s, iy = (cy - rc.top) / vz.s; // 画像の中のどこか
+  vz.x += (cx - rc.left) - ix * s; vz.y += (cy - rc.top) - iy * s;
+  vz.s = s;
+  if (s === 1) vz.x = vz.y = 0;
+  applyZoom();
+}
+function viewerCenter() { const rc = viewer.getBoundingClientRect(); return [rc.left + rc.width / 2, rc.top + rc.height / 2]; }
+function openViewer(src) {
+  viewerImg.src = src; vz = { s: 1, x: 0, y: 0 }; applyZoom();
+  document.getElementById("modal").classList.add("open");
+}
+function closeViewer() { document.getElementById("modal").classList.remove("open"); pointers.clear(); pinch = drag = null; }
+document.getElementById("viewerClose").onclick = closeViewer;
+document.querySelector(".viewer-bar").addEventListener("click", e => {
+  const b = e.target.closest("[data-zoom]"); if (!b) return;
+  const [cx, cy] = viewerCenter();
+  if (b.dataset.zoom === "fit") zoomAt(1, cx, cy);
+  else zoomAt(vz.s * (b.dataset.zoom === "in" ? 1.6 : 1 / 1.6), cx, cy);
+});
+addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("modal").classList.contains("open")) closeViewer(); });
+viewer.addEventListener("wheel", e => { e.preventDefault(); zoomAt(vz.s * Math.exp(-e.deltaY / 300), e.clientX, e.clientY); }, { passive: false });
+viewer.addEventListener("pointerdown", e => {
+  viewer.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: vz.s };
+    drag = null;
+  } else if (pointers.size === 1) {
+    drag = { x: e.clientX, y: e.clientY, vx: vz.x, vy: vz.y, moved: false, onImg: e.target === viewerImg };
+  }
+});
+viewer.addEventListener("pointermove", e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    zoomAt(pinch.s * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+  } else if (drag) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+    if (vz.s > 1.01) { vz.x = drag.vx + dx; vz.y = drag.vy + dy; applyZoom(); }
+  }
+});
+function endPointer(e) {
+  const wasDrag = drag && !drag.moved && pointers.size === 1, onImg = drag?.onImg;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (!wasDrag) { if (!pointers.size) drag = null; return; }
+  drag = null;
+  // タップ: 2回続けて押したら拡大／元に戻す。拡大していないときに画像の外を押したら閉じる
+  const now = Date.now();
+  if (now - lastTap < 320) { zoomAt(vz.s > 1.01 ? 1 : 2.5, e.clientX, e.clientY); lastTap = 0; return; }
+  lastTap = now;
+  if (vz.s <= 1.01 && !onImg) setTimeout(() => { if (lastTap === now) closeViewer(); }, 330);
+}
+viewer.addEventListener("pointerup", endPointer);
+viewer.addEventListener("pointercancel", endPointer);
 
 // ---- CSV ----
 const CSV_HEADERS = ["伝票日付", "借方勘定科目コード", "借方科目別補助コード", "借方金額", "摘要", "貸方勘定科目コード", "貸方科目別補助コード", "貸方金額"];
