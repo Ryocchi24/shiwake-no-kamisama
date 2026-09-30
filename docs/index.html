@@ -857,7 +857,6 @@
 </div>
 
 <script src="vendor/encoding.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
 <script type="module">
 // お客さんのデータ（画像・試算表・マスタ・仕訳）は、この端末の外へ送らない。読み取りも端末の中だけで行う
 // 以前の版で保存されたかもしれない外部AI用のAPIキーは消しておく
@@ -869,7 +868,7 @@ const SETTINGS_KEY = "receipt-settings-v1";
 const MAX_PARALLEL_OCR = 1; // 端末内OCRはスマホの負荷が高いので1枚ずつ
 // ---- 取り込めるファイルの形式（取り込むもの × Web版／iPhoneアプリ） ----
 // 画面の表示と「ファイルを選ぶ」で選べる種類は、すべてここから作る。
-// Web版の文字読み取りは、表の数字や手書きに弱いので、試算表はExcel・CSVだけ、日計表は読まない（iPhoneアプリで読む）
+// Web版の文字読み取りは精度が低いので、写真・PDFは読まない（iPhoneアプリで読む）。Web版で読めるのは試算表のExcel・CSVだけ
 const FILE_TYPES = {
   写真: "image/*",
   PDF: "application/pdf,.pdf",
@@ -877,7 +876,7 @@ const FILE_TYPES = {
   CSV: ".csv,text/csv",
 };
 const IMPORT_FORMATS = {
-  receipt: { name: "領収書", web: ["写真", "PDF"], app: ["写真", "PDF"] },
+  receipt: { name: "領収書", web: [], app: ["写真", "PDF"] },
   format2: { name: "日計表", web: [], app: ["写真", "PDF"] },
   format3: { name: "試算表", web: ["Excel", "CSV"], app: ["Excel", "CSV", "PDF", "写真"] },
 };
@@ -1097,7 +1096,9 @@ function getOcrWorker() {
     const banner = document.getElementById("ocrBanner");
     banner.textContent = "文字認識の準備をしています（初回のみ数MBのデータを読み込みます）…";
     banner.hidden = false;
-    ocrWorkerPromise = Tesseract.createWorker("jpn")
+    // ブラウザ内の文字読み取りの部品は、使うときだけ読み込む（今はWeb版で読み取りをしないので、ふだんは読み込まない）
+    ocrWorkerPromise = (window.Tesseract ? Promise.resolve() : loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"))
+      .then(() => Tesseract.createWorker("jpn"))
       .then(async worker => {
         await worker.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
         return worker;
@@ -2908,7 +2909,7 @@ function renderMethod() {
   const fmt = importFormat(method);
   const ready = (method === "receipt" ? doc === "receipt" : true) && fmt.types.length > 0;
   document.getElementById("methodSoon").hidden = ready;
-  document.getElementById("methodSoonNote").textContent = method !== "receipt" && !fmt.types.length ? `${fmt.name}は、iPhoneアプリで読み取れます` : "準備中";
+  document.getElementById("methodSoonNote").textContent = (method !== "receipt" || doc === "receipt") && !fmt.types.length ? `${fmt.name}は、iPhoneアプリで読み取れます` : "準備中";
   // 試算表はPDFでも読み込めるようにする
   for (const el of document.querySelectorAll(".pick-label")) {
     el.dataset.orig ||= el.textContent;
