@@ -106,6 +106,10 @@
   td input.missing { border-color: #f0b4b4; background: var(--err-soft); }
   td.c-date { width: 132px; } td.c-code { width: 68px; } td.c-amount { width: 112px; min-width: 104px; } td.c-summary { min-width: 170px; }
   td.c-amount input { padding: 0 4px; }
+  td.c-code { min-width: 68px; } td.c-tax { width: 84px; min-width: 84px; } td.c-rate { width: 112px; min-width: 112px; }
+  td select { width: 100%; font: inherit; font-size: 13px; height: 32px; border: 1px solid transparent; border-radius: 5px; padding: 0 2px; background: transparent; color: var(--text); }
+  td select:hover { border-color: var(--line); }
+  td select:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
   .thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 5px; cursor: zoom-in; border: 1px solid var(--line); display: block; }
   .note[hidden] { display: none; }
   .note { font-size: 11.5px; color: var(--warn); margin: 2px 7px 0; display: flex; gap: 4px; }
@@ -565,12 +569,12 @@
     td.c-thumb { position: absolute; left: 14px; top: 14px; }
     td.c-status { grid-column: 1 / 3; padding-right: 30px; }
     td.c-summary, td.c-msg { grid-column: 1 / 3; }
-    /* 領収書は ①〜⑧ を1項目ずつ縦に並べる */
+    /* 領収書は ①〜⑫ を1項目ずつ縦に並べる */
     tbody tr.row-receipt { grid-template-columns: minmax(0, 1fr); }
     tbody tr.row-receipt td:not(.c-thumb):not(.c-del) { grid-column: 1 !important; }
     td.c-del { position: absolute; right: 8px; top: 8px; }
     td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
-    td input { border-color: var(--line); height: 40px; font-size: 16px; }
+    td input, td select { border-color: var(--line); height: 40px; font-size: 16px; }
     tbody td { min-width: 0; }
     tfoot tr { display: flex; justify-content: space-between; padding: 12px 14px; }
     tfoot td { width: auto; padding: 0; }
@@ -1087,9 +1091,11 @@ async function readGroup(groupId) {
       debitCode: receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
       creditCode: rc.fixedCode || "", creditSub: "", creditAmount: r.amount || "",
-      note: r.note || "",
+      note: [r.note, receiptTaxHint(r.ocrText).mixed ? "8%と10%の品物が混ざっています" : "", receiptTaxHint(r.ocrText).noInvoice ? "登録番号（T＋13桁）が見つかりません" : ""].filter(Boolean).join("／"),
       ocrText: r.ocrText || "",
+      taxHint: receiptTaxHint(r.ocrText),
     }));
+    newRows.forEach(setAutoTaxBoth);
     rows.splice(idx, 1, ...newRows);
     ocrImages.delete(groupId);
   } catch (err) {
@@ -1345,23 +1351,69 @@ async function readReceiptFree(dataUrl) {
 }
 
 // ---- 表示 ----
-// 会社ごとに表示する列（補助コードを使わない会社は ③⑦ を出さない。CSVはミロクの形式のまま8列）
-const SUB_KEYS = ["debitSub", "creditSub"];
+// 確認画面の12項目。会社ごとに、使わない項目は出さない
+//   補助コードを使わない会社 → ③⑨ を出さない
+//   免税事業者の会社・試算表 → 消費税（⑤⑥⑪⑫）を出さない
+const TAX_TYPES = ["課税", "非課税", "対象外"];
+const TAX_RATES = ["10%", "8%軽", "8%", "非課税", "対象外", "免税事業者"];
+const FIELDS = [
+  { key: "date", label: "①伝票日付", type: "date", cls: "c-date" },
+  { key: "debitCode", label: "②借方科目", head: "②科目", side: "debit", code: true, cls: "c-code b-left" },
+  { key: "debitSub", label: "③借方補助", head: "③補助", side: "debit", sub: true, code: true, cls: "c-code" },
+  { key: "debitAmount", label: "④借方金額", head: "④金額", side: "debit", num: true, cls: "c-amount" },
+  { key: "debitTax", label: "⑤借方消費税", head: "⑤消費税", side: "debit", tax: true, options: TAX_TYPES, cls: "c-tax" },
+  { key: "debitRate", label: "⑥借方税率", head: "⑥税率", side: "debit", tax: true, options: TAX_RATES, cls: "c-rate" },
+  { key: "summary", label: "⑦摘要", cls: "c-summary b-left" },
+  { key: "creditCode", label: "⑧貸方科目", head: "⑧科目", side: "credit", code: true, cls: "c-code b-left" },
+  { key: "creditSub", label: "⑨貸方補助", head: "⑨補助", side: "credit", sub: true, code: true, cls: "c-code" },
+  { key: "creditAmount", label: "⑩貸方金額", head: "⑩金額", side: "credit", num: true, cls: "c-amount" },
+  { key: "creditTax", label: "⑪貸方消費税", head: "⑪消費税", side: "credit", tax: true, options: TAX_TYPES, cls: "c-tax" },
+  { key: "creditRate", label: "⑫貸方税率", head: "⑫税率", side: "credit", tax: true, options: TAX_RATES, cls: "c-rate" },
+];
+const usesTax = (c, source) => !!c && !c.taxExempt && source !== TRIAL_SOURCE;
 function visibleFields(items = rows) {
   const c = currentCompany();
   const useSub = !!c?.useSub || items.some(r => r.debitSub || r.creditSub); // 入力済みの補助コードは隠さない
-  return useSub ? FIELDS : FIELDS.filter(f => !SUB_KEYS.includes(f.key));
+  const useTax = usesTax(c, currentSource());
+  return FIELDS.filter(f => (!f.sub || useSub) && (!f.tax || useTax));
 }
-const FIELDS = [
-  { key: "date", label: "①伝票日付", type: "date", cls: "c-date" },
-  { key: "debitCode", label: "②借方科目", code: true, cls: "c-code b-left" },
-  { key: "debitSub", label: "③借方補助", code: true, cls: "c-code" },
-  { key: "debitAmount", label: "④借方金額", num: true, cls: "c-amount" },
-  { key: "summary", label: "⑤摘要", cls: "c-summary b-left" },
-  { key: "creditCode", label: "⑥貸方科目", code: true, cls: "c-code b-left" },
-  { key: "creditSub", label: "⑦貸方補助", code: true, cls: "c-code" },
-  { key: "creditAmount", label: "⑧貸方金額", num: true, cls: "c-amount" },
-];
+
+// ---- 消費税の自動判定 ----
+// 科目名・摘要から「課税／非課税／対象外」を決め、課税なら領収書の内容から税率を決める
+const TAX_WORDS = {
+  非課税: ["利息", "保険料", "割引料", "土地", "有価証券", "切手", "はがき", "ハガキ", "印紙", "レターパック", "商品券", "プリペイド", "住宅家賃"],
+  対象外: ["現金", "預金", "売掛", "買掛", "未払", "未収", "前払", "前受", "仮払", "仮受", "預り", "立替", "貸付", "借入", "手形", "給料", "給与", "賃金", "賞与",
+    "役員報酬", "法定福利", "租税公課", "寄付", "減価償却", "引当", "諸口", "事業主", "元入", "資本", "剰余", "繰越", "源泉", "法人税", "住民税", "事業税",
+    "貸倒", "配当", "出資", "保証金", "敷金", "差入", "香典", "祝儀", "御祝", "お祝", "見舞", "罰金", "反則金"],
+};
+function autoTaxType(code, summary, cid) {
+  if (!code) return "";
+  const name = masterName(code, cid), text = String(summary || "");
+  if (TAX_WORDS.対象外.some(w => name.includes(w))) return "対象外"; // 現金・預金・給料など
+  for (const type of ["非課税", "対象外"]) if (TAX_WORDS[type].some(w => text.includes(w))) return type; // 摘要（切手・香典など）
+  if (TAX_WORDS.非課税.some(w => name.includes(w))) return "非課税";
+  return name ? "課税" : ""; // マスタにないコードは判定しない
+}
+// 領収書の文字から、軽減税率（8%）と、インボイスの登録番号（T＋13桁）があるかを調べる
+function receiptTaxHint(text) {
+  const t = String(text || "").replace(/[\s　]/g, "");
+  const has8 = /軽減|8[%％]|8パーセント/.test(t), has10 = /10[%％]/.test(t);
+  const invoice = /T[-ー]?\d{13}|登録番号|適格請求書/.test(t);
+  return { reduced: has8 && !has10, mixed: has8 && has10, noInvoice: t.length > 20 && !invoice };
+}
+// 行の借方・貸方の消費税を自動で入れる（手で選び直した側はそのまま）
+function setAutoTax(row, side) {
+  if (row.source === TRIAL_SOURCE) return;
+  const c = companies.find(x => x.id === row.companyId);
+  if (!usesTax(c, row.source) || row.taxManual?.[side]) return;
+  const type = autoTaxType(row[side + "Code"], row.summary, row.companyId);
+  const h = row.taxHint || {};
+  row[side + "Tax"] = type;
+  row[side + "Rate"] = type !== "課税" ? type
+    : side === "debit" && h.noInvoice ? "免税事業者"
+    : h.reduced ? "8%軽" : "10%";
+}
+const setAutoTaxBoth = row => { setAutoTax(row, "debit"); setAutoTax(row, "credit"); };
 
 const isMissing = (key, v) => (key === "date" && !v) || ((key === "debitAmount" || key === "creditAmount") && !Number(v));
 // 入力欄の赤い印。試算表の行は片側（借方か貸方）だけを使うので、使っている側だけを確認する
@@ -1430,6 +1482,8 @@ function renderStats() {
 
 function inputHtml(row, f) {
   const v = row[f.key] ?? "";
+  if (f.options) return `<select data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">
+    <option value="">—</option>${f.options.map(o => `<option${o === v ? " selected" : ""}>${o}</option>`).join("")}</select>`;
   const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
   const attrs = f.type === "date" ? 'type="date"' : f.num ? 'inputmode="numeric"' : "";
   const cls = [f.num ? "num" : "", f.code ? "code" : "", fieldMissing(row, f.key, v) ? "missing" : ""].join(" ");
@@ -1470,7 +1524,9 @@ function render() {
     return `<td class="c-del"><div class="row-actions">${move}${del}</div></td>`;
   };
   const fields = visibleFields(items);
-  const sideSpan = fields.includes(FIELDS[2]) ? 3 : 2;
+  // 消費税の項目ができる前に読み取った行にも、自動で入れる
+  for (const r of items) if (r.status === "done" && r.debitTax === undefined && r.debitRate === undefined) setAutoTaxBoth(r);
+  const sideCount = side => fields.filter(f => f.side === side).length;
   let body = "";
   items.forEach((row, i) => {
     const thumb = row.source === TRIAL_SOURCE ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
@@ -1500,16 +1556,13 @@ function render() {
     <thead>
       <tr class="group">
         <th colspan="4"></th>
-        <th class="debit b-left" colspan="${sideSpan}">借方</th>
+        <th class="debit b-left" colspan="${sideCount("debit")}">借方</th>
         <th class="b-left"></th>
-        <th class="credit b-left" colspan="${sideSpan}">貸方</th>
+        <th class="credit b-left" colspan="${sideCount("credit")}">貸方</th>
         <th></th>
       </tr>
       <tr>
-        <th>No.</th><th>状態</th><th>画像</th><th>①伝票日付</th>
-        <th class="b-left" title="勘定科目コード">②科目</th>${sideSpan === 3 ? `<th title="科目別補助コード">③補助</th>` : ""}<th class="num">④金額</th>
-        <th class="b-left">⑤摘要</th>
-        <th class="b-left" title="勘定科目コード">⑥科目</th>${sideSpan === 3 ? `<th title="科目別補助コード">⑦補助</th>` : ""}<th class="num">⑧金額</th>
+        <th>No.</th><th>状態</th><th>画像</th>${fields.map(f => `<th class="${[f.num ? "num" : "", f.cls.includes("b-left") ? "b-left" : ""].join(" ")}">${f.head || f.label}</th>`).join("")}
         <th></th>
       </tr>
     </thead>
@@ -1653,6 +1706,18 @@ list.addEventListener("change", e => {
   const { id, key } = e.target.dataset;
   const row = rows.find(r => r.id === id);
   if (!row) return;
+  const side = key.startsWith("debit") ? "debit" : "credit";
+  if (/Tax$|Rate$/.test(key)) {
+    // 区分と税率の組み合わせをそろえる（非課税・対象外は両方同じ、税率を選んだら課税）
+    const v = row[key];
+    if (key.endsWith("Tax")) row[side + "Rate"] = v === "課税" ? (TAX_TYPES.includes(row[side + "Rate"]) || !row[side + "Rate"] ? "10%" : row[side + "Rate"]) : v;
+    else row[side + "Tax"] = TAX_TYPES.includes(v) ? v : v ? "課税" : "";
+    row.taxManual = { ...row.taxManual, [side]: true };
+    save(); render(); return;
+  }
+  if (row.source !== TRIAL_SOURCE && (key === "debitCode" || key === "creditCode" || key === "summary")) {
+    if (key === "summary") setAutoTaxBoth(row); else setAutoTax(row, side);
+  }
   if (key === "date") render();
   else if (row.source === TRIAL_SOURCE && (key === "debitCode" || key === "creditCode")) {
     // 選んだコードを対応表に覚え、同じ元の科目の行すべてに反映する
@@ -1665,10 +1730,11 @@ list.addEventListener("change", e => {
     const ex = rc.rules.find(x => normName(x.keyword) === normName(row.store));
     if (row.debitCode) { if (ex) ex.code = row.debitCode; else rc.rules.push({ keyword: row.store, code: row.debitCode }); }
     else if (ex) rc.rules = rc.rules.filter(x => x !== ex);
-    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.source !== TRIAL_SOURCE && o.review !== "exported" && !o.debitCode && normName(o.store) === normName(row.store)) o.debitCode = row.debitCode;
+    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.source !== TRIAL_SOURCE && o.review !== "exported" && !o.debitCode && normName(o.store) === normName(row.store)) { o.debitCode = row.debitCode; setAutoTax(o, "debit"); }
     saveReceiptSettings(); save(); render();
   }
   else if (FIELDS.find(f => f.key === key)?.num && row[key] !== "") e.target.value = Number(row[key]).toLocaleString();
+  else if (key === "debitCode" || key === "creditCode" || key === "summary") { save(); render(); }
 });
 
 list.addEventListener("click", async e => {
@@ -1771,6 +1837,8 @@ viewer.addEventListener("pointercancel", endPointer);
 
 // ---- CSV ----
 const CSV_HEADERS = ["伝票日付", "借方勘定科目コード", "借方科目別補助コード", "借方金額", "摘要", "貸方勘定科目コード", "貸方科目別補助コード", "貸方金額"];
+const CSV_HEADERS_12 = ["伝票日付", "借方勘定科目コード", "借方科目別補助コード", "借方金額", "借方消費税区分", "借方消費税率", "摘要",
+  "貸方勘定科目コード", "貸方科目別補助コード", "貸方金額", "貸方消費税区分", "貸方消費税率"];
 document.getElementById("download").onclick = async () => {
   const done = csvTargetRows();
   if (!done.length) return;
@@ -1793,9 +1861,12 @@ document.getElementById("download").onclick = async () => {
       if (Number(debitAmount) && !creditCode && !Number(creditAmount)) { creditCode = shokuchi; creditAmount = debitAmount; }
       else if (Number(creditAmount) && !debitCode && !Number(debitAmount)) { debitCode = shokuchi; debitAmount = creditAmount; }
     }
-    return [formatDate(r.date), debitCode, r.debitSub, debitAmount, r.summary, creditCode, r.creditSub, creditAmount].map(cell).join(",");
+    if (r.source === TRIAL_SOURCE) return [formatDate(r.date), debitCode, r.debitSub, debitAmount, r.summary, creditCode, r.creditSub, creditAmount].map(cell).join(",");
+    const tax = usesTax(currentCompany(), r.source);
+    return [formatDate(r.date), debitCode, r.debitSub, debitAmount, tax ? r.debitTax : "", tax ? r.debitRate : "", r.summary,
+      creditCode, r.creditSub, creditAmount, tax ? r.creditTax : "", tax ? r.creditRate : ""].map(cell).join(",");
   });
-  if (settings.includeHeader) lines.unshift(CSV_HEADERS.join(","));
+  if (settings.includeHeader) lines.unshift((currentSource() === TRIAL_SOURCE ? CSV_HEADERS : CSV_HEADERS_12).join(","));
   const csv = lines.join("\r\n") + "\r\n";
 
   const bytes = settings.encoding === "utf8"
@@ -2098,6 +2169,7 @@ function checkNikkei(p) {
   return notes;
 }
 async function dataUrlToBlob(dataUrl) { return (await fetch(dataUrl)).blob(); }
+const withTax = row => (setAutoTaxBoth(row), row);
 async function importNikkei(files) {
   if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
   if (!NATIVE) { alert("日計表は、iPhoneアプリで読み取れます。"); return; }
@@ -2128,12 +2200,12 @@ async function importNikkei(files) {
           debitSub: "", creditSub: "", summary: [e.party, e.content].filter(Boolean).join(" "), note: k === 0 && notes.length ? notes.join("／") : "" };
         if (e.side === "transfer") {
           const d = nikkeiAccount(e.dAcct, cid), c = nikkeiAccount(e.cAcct, cid);
-          rows.push({ ...base, debitCode: d.code, debitAmount: e.dAmount, creditCode: c.code, creditAmount: e.cAmount, codeHow: d.how || c.how });
+          rows.push(withTax({ ...base, debitCode: d.code, debitAmount: e.dAmount, creditCode: c.code, creditAmount: e.cAmount, codeHow: d.how || c.how }));
         } else {
           const a = nikkeiAccount(e.acct, cid);
-          rows.push(e.side === "income"
+          rows.push(withTax(e.side === "income"
             ? { ...base, debitCode: cash, debitAmount: e.amount, creditCode: a.code, creditAmount: e.amount, codeHow: a.how }
-            : { ...base, debitCode: a.code, debitAmount: e.amount, creditCode: cash, creditAmount: e.amount, codeHow: a.how });
+            : { ...base, debitCode: a.code, debitAmount: e.amount, creditCode: cash, creditAmount: e.amount, codeHow: a.how }));
         }
         made++;
       });
@@ -2548,6 +2620,7 @@ for (const [id, key] of [["companyUseSub", "useSub"], ["companyTaxExempt", "taxE
   document.getElementById(id).onchange = e => {
     const c = companies.find(x => x.id === masterCid);
     if (c) { c[key] = e.target.checked; saveCompanies(); }
+    if (c && key === "taxExempt" && !c.taxExempt) { rows.filter(r => r.companyId === c.id && !r.debitTax && !r.creditTax).forEach(setAutoTaxBoth); save(); }
     renderCompanyList(); render();
   };
 }
