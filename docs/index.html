@@ -1125,16 +1125,20 @@ async function readGroup(groupId) {
       //   借方 科目（10%の対象額）／ 貸方 諸口
       //   借方 諸口（合計）       ／ 貸方 現金など
       // 対象額が読めなかった時も3行に分け、8%と10%の金額は空にしておく（手で入れる）
+      // 金額はすべて税込。8%と10%の合計が、領収書の合計と必ず一致するようにする
       const hint = receiptTaxHint(r.ocrText);
       if (!hint.mixed) return [r];
-      const split = splitByRate(r.ocrText) || { r8: "", r10: "" };
-      const total = split.r8 !== "" ? split.r8 + split.r10 : Number(r.amount) || "";
-      const off = split.r8 === "" ? "8%と10%の金額を入れてください"
-        : r.amount && total !== Number(r.amount) ? "8%と10%の対象額の合計が、合計金額と合いません" : "";
+      const sp = splitByRate(r.ocrText);
+      let total = Number(r.amount) || 0, r8 = "", r10 = "", off = "";
+      if (sp && !total) { r8 = sp.r8; r10 = sp.r10; total = r8 + r10; }
+      else if (sp && sp.r8 + sp.r10 === total) { r8 = sp.r8; r10 = sp.r10; }
+      else if (sp && Math.abs(Math.round(sp.r8 * 1.08) + Math.round(sp.r10 * 1.1) - total) <= 2) { r8 = Math.round(sp.r8 * 1.08); r10 = total - r8; } // 税抜で書かれていた
+      else if (sp && sp.r8 < total) { r8 = sp.r8; r10 = total - r8; off = "8%と10%の金額を確かめてください"; }
+      else off = "8%の金額を入れてください（10%は合計との差で入ります）";
       return [
-        { ...r, amount: split.r8, reduced: true, split: true, creditShokuchi: true, note: [r.note, off].filter(Boolean).join("／") },
-        { ...r, amount: split.r10, reduced: false, split: true, creditShokuchi: true },
-        { ...r, amount: total, split: true, debitShokuchi: true },
+        { ...r, amount: r8, reduced: true, split: true, splitRole: "r8", creditShokuchi: true, note: [r.note, off].filter(Boolean).join("／") },
+        { ...r, amount: r10, reduced: false, split: true, splitRole: "r10", creditShokuchi: true },
+        { ...r, amount: total || "", split: true, splitRole: "total", debitShokuchi: true },
       ];
     }).map(r => ({
       id: uid(), groupId, companyId: placeholder.companyId, source: placeholder.source || "receipt", thumb: placeholder.thumb, status: "done", review: "pending",
@@ -1142,9 +1146,11 @@ async function readGroup(groupId) {
       date: r.date || "",
       debitCode: r.debitShokuchi ? shokuchiOf(placeholder.companyId) : receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
-      creditCode: r.creditShokuchi ? shokuchiOf(placeholder.companyId) : rc.fixedCode || "", creditSub: "", creditAmount: r.amount || "",
-      note: [r.note, receiptTaxHint(r.ocrText).mixed && !r.split ? "8%と10%の品物が混ざっています" : "", receiptTaxHint(r.ocrText).noInvoice && !r.debitShokuchi ? "登録番号（T＋13桁）が見つかりません" : ""].filter(Boolean).join("／"),
+      creditCode: r.creditShokuchi ? shokuchiOf(placeholder.companyId) : payCodeOf(placeholder.companyId, r.ocrText, rc), creditSub: "", creditAmount: r.amount || "",
+      note: [r.note, receiptTaxHint(r.ocrText).mixed && !r.split ? "8%と10%の品物が混ざっています" : "", receiptTaxHint(r.ocrText).noInvoice && !r.debitShokuchi ? "登録番号（T＋13桁）が見つかりません" : "",
+        !r.creditShokuchi && paidByCard(r.ocrText) ? "クレジット払い（貸方は未払金）" : ""].filter(Boolean).join("／"),
       ocrText: r.ocrText || "",
+      ...(r.splitRole ? { splitRole: r.splitRole } : {}),
       taxHint: r.reduced === undefined ? receiptTaxHint(r.ocrText) : { ...receiptTaxHint(r.ocrText), reduced: r.reduced, split: true },
     }));
     newRows.forEach(setAutoTaxBoth);
@@ -1414,14 +1420,14 @@ const FIELDS = [
   { key: "debitAmount", label: "④借方金額", head: "④金額", side: "debit", num: true, cls: "c-amount" },
   { key: "debitTax", label: "⑤借方消費税", head: "⑤消費税", side: "debit", tax: true, options: TAX_TYPES, cls: "c-tax" },
   { key: "debitRate", label: "⑥借方税率", head: "⑥税率", side: "debit", tax: true, options: TAX_RATES, cls: "c-rate" },
-  { key: "debitBiz", label: "⑦借方事業者取引区分", head: "⑦事業者区分", side: "debit", tax: true, options: BIZ_TYPES, cls: "c-biz" },
+  { key: "debitBiz", label: "⑦借方事業者区分", head: "⑦事業者区分", side: "debit", tax: true, options: BIZ_TYPES, cls: "c-biz" },
   { key: "summary", label: "⑧借方摘要", head: "⑧摘要", side: "debit", cls: "c-summary" },
   { key: "creditCode", label: "⑨貸方科目", head: "⑨科目", side: "credit", code: true, cls: "c-code c-acct b-left" },
   { key: "creditSub", label: "⑩貸方補助", head: "⑩補助", side: "credit", sub: true, code: true, cls: "c-code" },
   { key: "creditAmount", label: "⑪貸方金額", head: "⑪金額", side: "credit", num: true, cls: "c-amount" },
   { key: "creditTax", label: "⑫貸方消費税", head: "⑫消費税", side: "credit", tax: true, options: TAX_TYPES, cls: "c-tax" },
   { key: "creditRate", label: "⑬貸方税率", head: "⑬税率", side: "credit", tax: true, options: TAX_RATES, cls: "c-rate" },
-  { key: "creditBiz", label: "⑭貸方事業者取引区分", head: "⑭事業者区分", side: "credit", tax: true, options: BIZ_TYPES, cls: "c-biz" },
+  { key: "creditBiz", label: "⑭貸方事業者区分", head: "⑭事業者区分", side: "credit", tax: true, options: BIZ_TYPES, cls: "c-biz" },
   { key: "creditSummary", label: "⑮貸方摘要", head: "⑮摘要", side: "credit", cls: "c-summary" },
 ];
 // 借方・貸方をのぞいた項目の種類（debitCode と creditCode は どちらも Code）
@@ -1474,6 +1480,18 @@ function autoTaxType(code, summary, cid) {
   return name ? "課税" : ""; // マスタにないコードは判定しない
 }
 // 領収書の文字から、軽減税率（8%）と、インボイスの登録番号（T＋13桁）があるかを調べる
+// 出金領収書の貸方（全社共通）：ふだんは現金、クレジット払いの領収書は未払金
+// 科目はその会社のミロク科目マスタから名前で探す。見つからなければ、自動入力ルールの「いつも使う貸方の科目」
+function paidByCard(text) {
+  return String(text || "").split("\n").some(line => {
+    const t = line.replace(/[\s　]/g, "").toUpperCase().replace(/ポイントカード|POINTCARD|カード会員|会員カード/g, "");
+    return /クレジット|VISA|MASTERCARD|JCB|AMEX|AMERICANEXPRESS|DINERS|CREDIT/.test(t) || (/カード/.test(t) && /支払|払|預|決済|売上/.test(t));
+  });
+}
+function payCodeOf(cid, text, rc) {
+  const byName = (...names) => masterOf(cid).find(m => names.some(n => normName(m.name) === normName(n)))?.code;
+  return (paidByCard(text) ? byName("未払金", "未払い金") : byName("現金")) || rc.fixedCode || "";
+}
 // 諸口のコード（その会社のミロク科目マスタの「諸口」。なければミロクで基本の 3999）
 const shokuchiOf = (cid = currentCompanyId) => masterOf(cid).find(m => normName(m.name) === "諸口")?.code || "3999";
 // 8%と10%が混ざった領収書の、それぞれの対象額（「8%対象 ¥1,080」のような行から読む）。読めなければ null
@@ -1557,6 +1575,11 @@ function warningsOf(r) {
   if (!Number(r.debitAmount)) w.push("金額が空です");
   else if (Number(r.debitAmount) !== Number(r.creditAmount)) w.push("借方と貸方の金額が違います");
   if (!String(r.summary || "").trim()) w.push("摘要が空です");
+  if (r.splitRole && r.splitRole !== "total") {
+    const grp = rows.filter(o => o.groupId === r.groupId && o.splitRole);
+    const sum = grp.filter(o => o.splitRole !== "total").reduce((a, o) => a + Number(o.debitAmount || 0), 0), tot = grp.find(o => o.splitRole === "total");
+    if (tot && sum !== Number(tot.debitAmount || 0)) w.push("8%と10%の合計が、合計金額と合いません");
+  }
   if (r.note) w.push(r.note);
   return w;
 }
@@ -1811,6 +1834,22 @@ list.addEventListener("input", e => {
     row.creditAmount = value;
     const credit = list.querySelector(`input[data-id="${id}"][data-key="creditAmount"]`);
     if (credit) { credit.value = value ? Number(value).toLocaleString() : ""; credit.classList.toggle("missing", isMissing("creditAmount", value)); }
+  }
+  // 8%と10%に分けた行：片方の金額を直したら、もう片方を「合計（諸口の行）との差」にして、合計が変わらないようにする
+  if (row.splitRole && key === "debitAmount") {
+    const grp = rows.filter(o => o.groupId === row.groupId && o.splitRole);
+    const tot = grp.find(o => o.splitRole === "total"), r8 = grp.find(o => o.splitRole === "r8"), r10 = grp.find(o => o.splitRole === "r10");
+    const setAmt = (o, v) => {
+      o.debitAmount = o.creditAmount = v;
+      for (const k of ["debitAmount", "creditAmount"]) {
+        const el = list.querySelector(`input[data-id="${o.id}"][data-key="${k}"]`);
+        if (el) { el.value = v !== "" ? Number(v).toLocaleString() : ""; el.classList.toggle("missing", isMissing(k, v)); }
+      }
+    };
+    if (tot && r8 && r10) {
+      if (row === tot) { if (r8.debitAmount !== "" && value !== "") setAmt(r10, Math.max(0, Number(value) - Number(r8.debitAmount))); }
+      else if (value !== "" && tot.debitAmount !== "") setAmt(row === r8 ? r10 : r8, Math.max(0, Number(tot.debitAmount) - Number(value)));
+    }
   }
   // 借方摘要と貸方摘要が同じ（単一仕訳）なら、貸方摘要も一緒に変える
   if (row.source !== TRIAL_SOURCE && key === "summary" && creditSummaryOf(row) === (row.summary ?? "")) {
