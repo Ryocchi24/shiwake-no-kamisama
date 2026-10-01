@@ -1547,7 +1547,8 @@ function setAutoTax(row, side) {
     || (side === "debit" && h.split ? "課税" : ""); // 8%と10%に分けた行は、科目がまだ空でも課税
   row[side + "Tax"] = type;
   row[side + "Rate"] = type !== "課税" ? type : h.reduced ? "8%軽" : "10%";
-  row[side + "Biz"] = type !== "課税" ? "" : side === "debit" && h.noInvoice ? "免税事業者" : "課税事業者";
+  // 事業者区分は取引の相手で決まる（品物が対象外・非課税でも、相手は課税事業者のことがある）
+  row[side + "Biz"] = side === "debit" && h.noInvoice ? "免税事業者" : "課税事業者";
 }
 // 以前は税率の中に「免税事業者」があったので、事業者の項目に移す
 function moveBiz(r) {
@@ -1555,7 +1556,7 @@ function moveBiz(r) {
     if (r[side + "Biz"] !== undefined) continue;
     const exempt = r[side + "Rate"] === "免税事業者";
     if (exempt) { r[side + "Rate"] = r.taxHint?.reduced ? "8%軽" : "10%"; r[side + "Tax"] = "課税"; }
-    r[side + "Biz"] = exempt ? "免税事業者" : r[side + "Tax"] === "課税" ? "課税事業者" : "";
+    r[side + "Biz"] = exempt ? "免税事業者" : "課税事業者";
   }
 }
 const setAutoTaxBoth = row => { setAutoTax(row, "debit"); setAutoTax(row, "credit"); };
@@ -1707,6 +1708,8 @@ function render() {
   // 消費税の項目ができる前に読み取った行にも、自動で入れる
   for (const r of items) if (r.status === "done" && r.source !== TRIAL_SOURCE) {
     if (r.debitTax === undefined && r.debitRate === undefined) setAutoTaxBoth(r); else moveBiz(r);
+    // 以前は対象外・非課税のとき事業者区分を空にしていたので、一度だけ課税事業者を入れる
+    if (!r.bizV2) { for (const side of ["debit", "credit"]) if (!r[side + "Biz"]) r[side + "Biz"] = "課税事業者"; r.bizV2 = true; }
   }
   // 見出しの上の段：続いている借方・貸方の項目をまとめる
   const groupHead = fields.reduce((a, f) => {
@@ -1966,12 +1969,12 @@ list.addEventListener("change", e => {
   if (!row) return;
   const side = key.startsWith("debit") ? "debit" : "credit";
   if (/Tax$|Rate$|Biz$/.test(key)) {
-    // 区分・税率・事業者の組み合わせをそろえる（非課税・対象外は区分と税率が同じで事業者は空、税率を選んだら課税）
+    // 区分と税率の組み合わせをそろえる（非課税・対象外は区分と税率が同じ、税率を選んだら課税）
+    // 事業者区分は相手で決まるので、区分・税率とは別に選べる（空なら課税事業者を入れる）
     const v = row[key];
     if (key.endsWith("Tax")) row[side + "Rate"] = v === "課税" ? (TAX_TYPES.includes(row[side + "Rate"]) || !row[side + "Rate"] ? "10%" : row[side + "Rate"]) : v;
     else if (key.endsWith("Rate")) row[side + "Tax"] = TAX_TYPES.includes(v) ? v : v ? "課税" : "";
-    else if (v) row[side + "Tax"] = "課税", row[side + "Rate"] = TAX_TYPES.includes(row[side + "Rate"]) || !row[side + "Rate"] ? "10%" : row[side + "Rate"];
-    if (!key.endsWith("Biz")) row[side + "Biz"] = row[side + "Tax"] === "課税" ? row[side + "Biz"] || "課税事業者" : "";
+    if (!key.endsWith("Biz") && !row[side + "Biz"]) row[side + "Biz"] = "課税事業者";
     row.taxManual = { ...row.taxManual, [side]: true };
     save(); render(); return;
   }
