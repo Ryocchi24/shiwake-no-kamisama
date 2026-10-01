@@ -194,11 +194,12 @@
   .add-line.debit { color: var(--debit-text); }
   .add-line.credit { color: var(--credit-text); }
   .act-spacer { flex: 1; }
+  .add-wrap { display: flex; gap: 6px; margin-top: 8px; }
+  .add-wrap.credit { justify-content: flex-end; }
   .v-actions { align-items: center; gap: 6px; flex-wrap: wrap; }
-  td.has-minus { position: relative; }
-  .line-del { position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--surface);
-    color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; z-index: 1; }
-  .line-del svg { width: 14px; height: 14px; }
+  /* －：＋と同じ角丸のボタン（灰色の線、押すと赤） */
+  .btn.line-del { width: 34px; min-width: 34px; padding: 0; justify-content: center; color: var(--muted); }
+  .btn.line-del svg { width: 17px; height: 17px; flex: none; }
   .line-del:hover, .line-del:active { color: var(--err); border-color: #f0c4c4; background: var(--err-soft); }
   tr.locked td.s-debit, tr.locked td.s-credit, tr.locked td.c-date { opacity: .7; }
   td input:disabled, td select:disabled, td textarea:disabled { color: var(--text); -webkit-text-fill-color: var(--text); opacity: 1; }
@@ -1736,15 +1737,16 @@ function render() {
     return;
   }
 
+  // ＋：借方か貸方に塊を足す（それぞれの側の一番下の塊のすぐ下に出す）
+  const addBtn = (side, v) => `<button class="btn btn-sm add-line ${side}" data-addline="${side}" data-vid="${escapeHtml(v)}" aria-label="${side === "debit" ? "借方" : "貸方"}を増やす" title="${side === "debit" ? "借方" : "貸方"}を増やす"><svg><use href="#i-plus"/></svg></button>`;
   // 行の右（スマホでは仕訳の下）のボタン
   //   試算表：削除だけ
-  //   それ以外：＋借方（左）・完了・削除・＋貸方（右）。完了した仕訳は「完了解除」だけ
+  //   それ以外：完了・削除。完了した仕訳は「完了解除」だけ（＋・－は、それぞれの塊の下に出す）
   const actions = (row, v, locked) => {
     const del = `<button class="icon-btn del" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg><span class="act-label">削除</span></button>`;
     if (row.source === TRIAL_SOURCE || row.status !== "done") return `<td class="c-del"><div class="row-actions">${del}</div></td>`;
-    const add = side => `<button class="btn btn-sm add-line ${side}" data-addline="${side}" data-vid="${escapeHtml(v)}" aria-label="${side === "debit" ? "借方" : "貸方"}を増やす" title="${side === "debit" ? "借方" : "貸方"}を増やす"><svg><use href="#i-plus"/></svg></button>`;
     const lock = `<button class="btn btn-sm lock-btn ${locked ? "" : "btn-primary"}" data-lock="${escapeHtml(v)}">${locked ? "完了解除" : "完了"}</button>`;
-    return `<td class="c-del"><div class="row-actions v-actions">${locked ? "" : add("debit")}<span class="act-spacer"></span>${lock}${locked ? "" : del}${locked ? "" : add("credit")}</div></td>`;
+    return `<td class="c-del"><div class="row-actions v-actions"><span class="act-spacer"></span>${lock}${locked ? "" : del}</div></td>`;
   };
   const fields = visibleFields();
   // 消費税の項目ができる前に読み取った行にも、自動で入れる
@@ -1765,7 +1767,7 @@ function render() {
     const code = String(r[f.key] || ""), name = code ? masterName(code) : "";
     return `<div class="code-box" style="--len:${code.length}">${inputHtml(r, f)}<span class="code-name ${code && !name ? "unknown" : ""}" data-code-name-for="${r.id}-${f.key}">${escapeHtml(code ? name || "マスタにない" : "")}</span></div>`;
   };
-  const firstOfSide = { debit: fields.find(f => f.side === "debit"), credit: fields.find(f => f.side === "credit") };
+  const lastOfSide = { debit: fields.filter(f => f.side === "debit").at(-1), credit: fields.filter(f => f.side === "credit").at(-1) };
   let body = "", no = 0;
   const seen = new Set();
   for (const row0 of items) {
@@ -1805,10 +1807,14 @@ function render() {
         const src = srcOf(f);
         if (!src) return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""} c-none"></td>`;
         // 借方・貸方が2つ以上あるときは、それぞれの塊に「－」（その塊を消す）を出す
-        const minus = compound && !locked && f.side && f === firstOfSide[f.side] && sideCount[f.side] > 1
-          ? `<button class="line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す"><svg><use href="#i-minus"/></svg></button>` : "";
-        return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(anchor).ok ? " unbalanced" : ""}${minus ? " has-minus" : ""}" data-label="${f.label}">
-        ${cellInput(src, f)}${minus}
+        // 塊の一番下に、－（その塊を消す）と、その側の一番下の塊なら＋（塊を足す）を並べる
+        const bottom = !isTrial && !locked && f.side && f === lastOfSide[f.side];
+        const minus = bottom && compound && sideCount[f.side] > 1
+          ? `<button class="btn btn-sm line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す"><svg><use href="#i-minus"/></svg></button>` : "";
+        const plus = bottom && src === (f.side === "debit" ? D : C).at(-1) ? addBtn(f.side, v) : "";
+        return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(anchor).ok ? " unbalanced" : ""}" data-label="${f.label}">
+        ${cellInput(src, f)}
+        ${minus || plus ? `<div class="add-wrap ${f.side}">${minus}${plus}</div>` : ""}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の会計ソフト科目名: ${escapeHtml(anchor.srcName)}${anchor.srcCode ? ` [${escapeHtml(anchor.srcCode)}]` : ""}</div>` : ""}
         ${f.key === "date" ? balanceHtml(anchor) : ""}
         ${f.key === (isTrial ? "summary" : "date") ? noteHtml(anchor) : ""}
