@@ -3087,12 +3087,16 @@ async function readCsvFile(file) {
   let text;
   try { text = new TextDecoder("utf-8", { fatal: true }).decode(buf); } catch { text = new TextDecoder("shift_jis").decode(buf); }
   text = text.replace(/^﻿/, "");
-  return text.split(/\r?\n/).filter(l => l.trim()).map(line => {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  // 区切りはカンマのほか、タブ区切りで書き出す会計ソフトもあるので、多い方を使う
+  const count = ch => lines.slice(0, 30).reduce((n, l) => n + l.split(ch).length - 1, 0);
+  const sep = count("\t") > count(",") ? "\t" : ",";
+  return lines.map(line => {
     const cells = []; let cur = "", q = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
       if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
-      else if (ch === '"') q = true; else if (ch === ",") { cells.push(cur); cur = ""; } else cur += ch;
+      else if (ch === '"') q = true; else if (ch === sep) { cells.push(cur); cur = ""; } else cur += ch;
     }
     cells.push(cur);
     return cells.map(c => c.trim());
