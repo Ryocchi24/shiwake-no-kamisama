@@ -3018,7 +3018,7 @@ function renderMaster() {
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
     const sys = systemOf(masterCid);
     document.getElementById("masterHelp").textContent = "";
-    listEl.innerHTML = `<div class="rc-head">この会社の対応（${Object.keys(map).length}件）${sys.mapping.length ? `。ここにない科目は${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）を使います` : ""}</div>`
+    listEl.innerHTML = `<div class="rc-head">別会計ソフト対応表（${Object.keys(map).length}件）${sys.mapping.length ? `。ここにない科目は${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）を使います` : ""}</div>`
       + (entries.length ? `<div class="master-row mapping map-head"><span>元コード</span><span>元の会計ソフト科目名</span><span>→ ミロク</span><span>ミロク科目名</span><span></span></div>` : "")
       + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
@@ -3075,7 +3075,7 @@ document.getElementById("masterReset").onclick = () => {
     if (!confirm("この会社のミロク科目マスタをすべて消しますか？")) return;
     masters[masterCid] = [];
   } else {
-    if (!confirm("この会社の対応表をすべて消しますか？（次に試算表を読み込むと、科目名から推測し直します）")) return;
+    if (!confirm("この会社の別会計ソフト対応表をすべて消しますか？（次に試算表を読み込むと、科目名から推測し直します）")) return;
     mappings[masterCid] = {};
   }
   saveMasters(); renderMaster();
