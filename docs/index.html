@@ -98,8 +98,8 @@
   tbody tr:hover td { background: #fafbfd; }
   tbody tr.is-error td, tbody tr.is-reading td { background: var(--surface-2); }
   td.rowno { color: var(--muted); font-size: 12px; text-align: center; width: 36px; }
-  td textarea.summary-box { width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px; line-height: 1.4; height: calc(2 * 1.4em + 10px);
-    border: 1px solid transparent; border-radius: 5px; padding: 4px 7px; background: transparent; color: var(--text); resize: none; overflow-y: auto; display: block; }
+  td textarea.summary-box { width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px; line-height: 1.4; height: 32px; min-height: 32px;
+    border: 1px solid transparent; border-radius: 5px; padding: 4px 7px; background: transparent; color: var(--text); resize: none; overflow: hidden; display: block; }
   td textarea.summary-box:hover { border-color: var(--line); }
   td textarea.summary-box:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
   td input { width: 100%; font: inherit; font-size: 13.5px; height: 32px; border: 1px solid transparent; border-radius: 5px; padding: 0 7px; background: transparent; color: var(--text); }
@@ -636,7 +636,7 @@
     td.c-del .act-label { display: inline; }
     td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
     td input, td select { border-color: var(--line); height: 40px; font-size: 16px; }
-    td textarea.summary-box { border-color: var(--line); font-size: 16px; background: #fff; }
+    td textarea.summary-box { border-color: var(--line); font-size: 16px; background: #fff; min-height: 40px; padding-top: 8px; padding-bottom: 8px; }
     .code-box { --cw: 9.6px; } .code-box .code-name { font-size: 13px; left: calc(var(--len) * var(--cw) + 12px); right: 6px; }
     .code-box::after { display: none; } .code-box input { padding-right: 7px; }
     td input[type="date"] { line-height: 38px; }
@@ -1662,7 +1662,7 @@ function inputHtml(row, f) {
   const v = f.key === "creditSummary" ? creditSummaryOf(row) : row[f.key] ?? "";
   // 摘要は横幅はそのままで2行分の高さにし、長い文は折り返して全部見えるようにする
   if (f.key === "summary" || f.key === "creditSummary")
-    return `<textarea class="summary-box" rows="2" data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">${escapeHtml(v)}</textarea>`;
+    return `<textarea class="summary-box" rows="1" data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">${escapeHtml(v)}</textarea>`;
   if (f.options) return `<select data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">
     <option value="">—</option>${f.options.map(o => `<option${o === v ? " selected" : ""}>${o}</option>`).join("")}</select>`;
   const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
@@ -1765,6 +1765,7 @@ function render() {
     </thead>
     <tbody>${body}</tbody>
   </table></div>`;
+  fitSummaries();
   renderStats();
   renderTrialBar();
 }
@@ -1942,6 +1943,17 @@ list.addEventListener("input", e => {
   renderStats();
   save();
 });
+// 摘要の欄は、中身が入りきる高さにする（短ければ1行、長ければ行が増える）
+function fitSummary(el) { el.style.height = "auto"; el.style.height = el.scrollHeight + 2 + "px"; }
+function fitSummaries() { for (const el of document.querySelectorAll("textarea.summary-box")) fitSummary(el); }
+list.addEventListener("input", e => {
+  if (!e.target.matches?.("textarea.summary-box")) return;
+  fitSummary(e.target);
+  // 借方摘要と一緒に変わった貸方摘要の欄も合わせる
+  const cs = list.querySelector(`textarea.summary-box[data-id="${e.target.dataset.id}"][data-key="creditSummary"]`);
+  if (cs && cs !== e.target) fitSummary(cs);
+});
+addEventListener("resize", fitSummaries);
 // 摘要の欄は折り返して見せるだけで、改行は入れない（Enterで入力を終える）
 list.addEventListener("keydown", e => {
   if (e.target.matches?.("textarea.summary-box") && e.key === "Enter" && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); e.target.blur(); }
