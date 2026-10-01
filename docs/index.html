@@ -2693,7 +2693,21 @@ function dropUncoded(accounts) {
   const coded = accounts.filter(a => a.srcCode).length;
   return coded >= 5 && coded >= accounts.length * 0.5 ? accounts.filter(a => a.srcCode) : accounts;
 }
+// 見出しの行（「借方」と「貸方」を含む行）か
+const isTrialHeader = r => r.some(c => /借方/.test(c)) && r.some(c => /貸方/.test(c)) && !r.some(c => AMOUNT_RE.test(String(c).replace(/[,\s]/g, "")) && /\d{3,}/.test(c));
+// 試算表がいくつかの表（貸借対照表と損益計算書のシートなど）に分かれていて、表ごとに列の並びが違うこともあるので、
+// 見出しの行ごとに区切って、それぞれの表の見出しから列の位置を決めて読む
 function parseTrialSheet(rows) {
+  const starts = rows.map((r, i) => isTrialHeader(r) ? i : -1).filter(i => i >= 0);
+  if (starts.length > 1) {
+    const parts = starts.map((s, k) => parseTrialSheetPart(rows.slice(s, starts[k + 1] ?? rows.length)));
+    const accounts = dropUncoded(parts.flatMap(p => p.accounts));
+    const { date } = parseTrialTable(rows.slice(0, 12).map(r => r.filter(c => c !== "")));
+    return { accounts, date };
+  }
+  return parseTrialSheetPart(rows);
+}
+function parseTrialSheetPart(rows) {
   const headerIdx = rows.findIndex((r, i) => i < 30 && r.some(c => /借方/.test(c)) && r.some(c => /貸方/.test(c)));
   if (headerIdx < 0) return parseTrialTable(rows.map(r => r.filter(c => c !== "")));
   // 見出しが2段になっている表にも対応するため、見出し行と次の行の文字をつなげて列ごとに見る
