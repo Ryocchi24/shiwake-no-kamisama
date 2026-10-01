@@ -1990,13 +1990,12 @@ list.addEventListener("change", e => {
     applyMapping(row, row[key], key === "debitCode" ? "debit" : "credit");
     render();
   }
-  else if (row.source !== TRIAL_SOURCE && key === "debitCode" && row.store) {
-    // レシート: 借方のコードを、そのお店のルールとして覚え、同じお店でコードが空の行にも入れる
-    const rc = receiptSettingsOf(row.companyId);
-    const ex = rc.rules.find(x => normName(x.keyword) === normName(row.store));
-    if (row.debitCode) { if (ex) ex.code = row.debitCode; else rc.rules.push({ keyword: row.store, code: row.debitCode }); }
-    else if (ex) rc.rules = rc.rules.filter(x => x !== ex);
-    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.source !== TRIAL_SOURCE && o.review !== "exported" && !o.debitCode && normName(o.store) === normName(row.store)) { o.debitCode = row.debitCode; setAutoTax(o, "debit"); }
+  else if (row.source === "receipt" && key === "debitCode" && ruleKeywordOf(row)) {
+    // 領収書: 借方のコードを、そのお店（店名が読めなければ摘要）のルールとして覚え、同じお店でコードが空の行にも入れる
+    const kw = ruleKeywordOf(row);
+    if (row.debitCode) learnReceiptRule(row);
+    else { const rc = receiptSettingsOf(row.companyId); rc.rules = rc.rules.filter(x => normName(x.keyword) !== normName(kw)); }
+    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.source === "receipt" && o.review !== "exported" && !o.debitCode && normName(ruleKeywordOf(o)) === normName(kw)) { o.debitCode = row.debitCode; setAutoTax(o, "debit"); }
     saveReceiptSettings(); save(); render();
   }
   else if (FIELDS.find(f => f.key === key)?.num && row[key] !== "") e.target.value = Number(row[key]).toLocaleString();
@@ -2167,6 +2166,9 @@ document.getElementById("download").onclick = async () => {
   const name = `${company}_仕訳_${stamp}.csv`;
   if (!(await saveFile(blob, name))) return; // 保存をキャンセルした場合は一覧に残す
 
+  // 書き出した（完成した）領収書の仕訳は、自動入力ルールに覚える（次から同じお店に同じ科目が入る）
+  for (const r of done) learnReceiptRule(r);
+  saveReceiptSettings();
   // 出力した仕訳は「出力済み」の印を付けて、一覧に残す
   setReview(done.map(r => r.id), "exported", `${done.filter(r => !isHiddenRow(r)).length}件を保存しました`);
 };
@@ -2299,6 +2301,16 @@ const autoRulesOf = (cid = currentCompanyId, type = "receipt") => ((receiptSetti
 const receiptSettingsOf = (cid = currentCompanyId) => autoRulesOf(cid, "receipt");
 function saveReceiptSettings() { try { localStorage.setItem(RECEIPT_SETTINGS_KEY, JSON.stringify(receiptSettings)); } catch {} }
 // 店名・摘要にキーワードを含むルールのうち、一番長いキーワードのものを使う
+// 自動入力ルールの言葉: 店名。読めなかったときは摘要
+const ruleKeywordOf = r => String(r.store || r.summary || "").trim().slice(0, 30);
+// 領収書の仕訳から「店名（または摘要） → 借方の科目」を覚える（すでにあれば科目を上書き）
+function learnReceiptRule(r) {
+  const kw = ruleKeywordOf(r);
+  if (r.source !== "receipt" || !kw || !r.debitCode || r.splitRole === "total") return;
+  const rc = receiptSettingsOf(r.companyId);
+  const ex = rc.rules.find(x => normName(x.keyword) === normName(kw));
+  if (ex) ex.code = r.debitCode; else rc.rules.push({ keyword: kw, code: r.debitCode });
+}
 function receiptDebitCode(cid, store, summary) {
   const text = normName(`${store || ""} ${summary || ""}`);
   const hit = receiptSettingsOf(cid).rules.filter(r => r.keyword && r.code && text.includes(normName(r.keyword)))
