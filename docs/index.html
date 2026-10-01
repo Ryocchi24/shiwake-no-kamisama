@@ -98,6 +98,10 @@
   tbody tr:hover td { background: #fafbfd; }
   tbody tr.is-error td, tbody tr.is-reading td { background: var(--surface-2); }
   td.rowno { color: var(--muted); font-size: 12px; text-align: center; width: 36px; }
+  td textarea.summary-box { width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px; line-height: 1.4; height: calc(2 * 1.4em + 10px);
+    border: 1px solid transparent; border-radius: 5px; padding: 4px 7px; background: transparent; color: var(--text); resize: none; overflow-y: auto; display: block; }
+  td textarea.summary-box:hover { border-color: var(--line); }
+  td textarea.summary-box:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
   td input { width: 100%; font: inherit; font-size: 13.5px; height: 32px; border: 1px solid transparent; border-radius: 5px; padding: 0 7px; background: transparent; color: var(--text); }
   td input:hover { border-color: var(--line); }
   td input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
@@ -629,6 +633,7 @@
     td.c-del .act-label { display: inline; }
     td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
     td input, td select { border-color: var(--line); height: 40px; font-size: 16px; }
+    td textarea.summary-box { border-color: var(--line); font-size: 16px; background: #fff; }
     .code-box { --cw: 9.6px; } .code-box .code-name { font-size: 13px; left: calc(var(--len) * var(--cw) + 12px); right: 6px; }
     .code-box::after { display: none; } .code-box input { padding-right: 7px; }
     td input[type="date"] { line-height: 38px; }
@@ -1653,6 +1658,9 @@ function renderStats() {
 
 function inputHtml(row, f) {
   const v = f.key === "creditSummary" ? creditSummaryOf(row) : row[f.key] ?? "";
+  // 摘要は横幅はそのままで2行分の高さにし、長い文は折り返して全部見えるようにする
+  if (f.key === "summary" || f.key === "creditSummary")
+    return `<textarea class="summary-box" rows="2" data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">${escapeHtml(v)}</textarea>`;
   if (f.options) return `<select data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">
     <option value="">—</option>${f.options.map(o => `<option${o === v ? " selected" : ""}>${o}</option>`).join("")}</select>`;
   const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
@@ -1904,18 +1912,18 @@ list.addEventListener("input", e => {
     for (const o of rows.filter(o => o !== row && o.groupId === row.groupId && o.splitRole)) {
       if (key === "summary" && creditSummaryOf(o) === (o.summary ?? "")) {
         o.creditSummary = value;
-        const cs = list.querySelector(`input[data-id="${o.id}"][data-key="creditSummary"]`);
+        const cs = list.querySelector(`[data-id="${o.id}"][data-key="creditSummary"]`);
         if (cs) cs.value = value;
       }
       o[key] = value;
-      const el = list.querySelector(`input[data-id="${o.id}"][data-key="${key}"]`);
+      const el = list.querySelector(`[data-id="${o.id}"][data-key="${key}"]`);
       if (el) el.value = value;
     }
   }
   // 借方摘要と貸方摘要が同じ（単一仕訳）なら、貸方摘要も一緒に変える
   if (row.source !== TRIAL_SOURCE && key === "summary" && creditSummaryOf(row) === (row.summary ?? "")) {
     row.creditSummary = value;
-    const cs = list.querySelector(`input[data-id="${id}"][data-key="creditSummary"]`);
+    const cs = list.querySelector(`[data-id="${id}"][data-key="creditSummary"]`);
     if (cs) cs.value = value;
   }
   row[key] = value;
@@ -1931,6 +1939,10 @@ list.addEventListener("input", e => {
   }
   renderStats();
   save();
+});
+// 摘要の欄は折り返して見せるだけで、改行は入れない（Enterで入力を終える）
+list.addEventListener("keydown", e => {
+  if (e.target.matches?.("textarea.summary-box") && e.key === "Enter" && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); e.target.blur(); }
 });
 // 金額はフォーカスが外れたらカンマ区切りで表示、日付変更時は並び替え
 list.addEventListener("change", e => {
