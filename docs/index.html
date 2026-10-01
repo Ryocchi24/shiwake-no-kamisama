@@ -197,9 +197,11 @@
   .add-wrap { display: flex; gap: 6px; margin-top: 8px; }
   .add-wrap.credit { justify-content: flex-end; }
   .v-actions { align-items: center; gap: 6px; flex-wrap: wrap; }
-  /* －：＋と同じ角丸のボタン（灰色の線、押すと赤） */
-  .btn.line-del { width: 34px; min-width: 34px; padding: 0; justify-content: center; color: var(--muted); }
-  .btn.line-del svg { width: 17px; height: 17px; flex: none; }
+  /* －：塊の右上の、項目名と同じ行に置く（枠にも入力欄にもかからない） */
+  td.has-minus { position: relative; }
+  .line-del { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--surface);
+    color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; z-index: 1; }
+  .line-del svg { width: 13px; height: 13px; }
   .line-del:hover, .line-del:active { color: var(--err); border-color: #f0c4c4; background: var(--err-soft); }
   tr.locked td.s-debit, tr.locked td.s-credit, tr.locked td.c-date { opacity: .7; }
   td input:disabled, td select:disabled, td textarea:disabled { color: var(--text); -webkit-text-fill-color: var(--text); opacity: 1; }
@@ -641,6 +643,10 @@
     /* 借方・貸方それぞれを1枚の枠に見せる */
     tbody tr.row-receipt td.s-debit, tbody tr.row-receipt td.s-credit { padding: 5px 10px; border-radius: 0; }
     tbody tr.row-receipt td.c-date + td.s-debit, tbody tr.row-receipt td.s-debit + td.s-credit { border-radius: 10px 10px 0 0; padding-top: 10px; }
+    /* －は、項目名の行の右に収める（項目名の行を少し高くして、入力欄と重ならないようにする） */
+    tbody tr.row-receipt td.has-minus { padding-top: 10px; }
+    tbody tr.row-receipt td.has-minus::before { line-height: 30px; padding-right: 30px; }
+    tbody tr.row-receipt td.has-minus .line-del { top: 10px; right: 10px; width: 24px; height: 24px; }
     tbody tr.row-receipt td.s-debit:has(+ td.s-credit), tbody tr.row-receipt td.s-credit:has(+ td.c-del) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
     tbody tr.row-receipt td.s-debit { background: var(--debit); }
     tbody tr.row-receipt td.s-credit { background: var(--credit); }
@@ -1767,6 +1773,7 @@ function render() {
     const code = String(r[f.key] || ""), name = code ? masterName(code) : "";
     return `<div class="code-box" style="--len:${code.length}">${inputHtml(r, f)}<span class="code-name ${code && !name ? "unknown" : ""}" data-code-name-for="${r.id}-${f.key}">${escapeHtml(code ? name || "マスタにない" : "")}</span></div>`;
   };
+  const firstOfSide = { debit: fields.find(f => f.side === "debit"), credit: fields.find(f => f.side === "credit") };
   const lastOfSide = { debit: fields.filter(f => f.side === "debit").at(-1), credit: fields.filter(f => f.side === "credit").at(-1) };
   let body = "", no = 0;
   const seen = new Set();
@@ -1807,14 +1814,14 @@ function render() {
         const src = srcOf(f);
         if (!src) return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""} c-none"></td>`;
         // 借方・貸方が2つ以上あるときは、それぞれの塊に「－」（その塊を消す）を出す
-        // 塊の一番下に、－（その塊を消す）と、その側の一番下の塊なら＋（塊を足す）を並べる
+        // －（その塊を消す）は塊の右上（項目名の行）、＋（塊を足す）はその側の一番下の塊の下に出す（並べると押し間違えるため離す）
         const bottom = !isTrial && !locked && f.side && f === lastOfSide[f.side];
-        const minus = bottom && compound && sideCount[f.side] > 1
-          ? `<button class="btn btn-sm line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す"><svg><use href="#i-minus"/></svg></button>` : "";
+        const minus = !isTrial && !locked && f.side && f === firstOfSide[f.side] && compound && sideCount[f.side] > 1
+          ? `<button class="line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す"><svg><use href="#i-minus"/></svg></button>` : "";
         const plus = bottom && src === (f.side === "debit" ? D : C).at(-1) ? addBtn(f.side, v) : "";
-        return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(anchor).ok ? " unbalanced" : ""}" data-label="${f.label}">
-        ${cellInput(src, f)}
-        ${minus || plus ? `<div class="add-wrap ${f.side}">${minus}${plus}</div>` : ""}
+        return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(anchor).ok ? " unbalanced" : ""}${minus ? " has-minus" : ""}" data-label="${f.label}">
+        ${cellInput(src, f)}${minus}
+        ${plus ? `<div class="add-wrap ${f.side}">${plus}</div>` : ""}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の会計ソフト科目名: ${escapeHtml(anchor.srcName)}${anchor.srcCode ? ` [${escapeHtml(anchor.srcCode)}]` : ""}</div>` : ""}
         ${f.key === "date" ? balanceHtml(anchor) : ""}
         ${f.key === (isTrial ? "summary" : "date") ? noteHtml(anchor) : ""}
