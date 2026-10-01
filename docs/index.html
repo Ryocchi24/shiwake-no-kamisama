@@ -839,7 +839,7 @@
   </div>
 </div>
 
-<!-- 科目マスタ・対応表（会社ごと） -->
+<!-- ミロク科目マスタ・別会計ソフト科目マスタ（読み込んだ一覧が対応表）（会社ごと） -->
 <div class="dialog-back" id="masterDlg" hidden>
   <div class="dialog dialog-wide">
     <h2>会社設定 <span class="dlg-sub" id="masterCompany"></span></h2>
@@ -853,7 +853,7 @@
     <div class="tabs" id="masterTabs">
       <button class="tab active" data-mtab="master">ミロク科目マスタ</button>
       <button class="tab" data-mtab="receipt"><span class="nb">自動入力</span><span class="nb">ルール</span></button>
-      <button class="tab" data-mtab="mapping"><span class="nb">別会計ソフト</span><span class="nb">対応表</span></button>
+      <button class="tab" data-mtab="mapping"><span class="nb">別会計ソフト</span><span class="nb">科目マスタ</span></button>
     </div>
     <p class="dlg-help" id="masterHelp"></p>
     <div class="master-tools">
@@ -1746,7 +1746,7 @@ function render() {
     const splitCls = row.splitRole === "r8" ? " split-head" : row.splitRole === "r10" ? " split-cont" : "";
     body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}${splitCls}">${head}` + cells.map(f => f.blank ? `<td class="c-blank s-${f.side}"></td>` : !srcOf(f) ? `<td class="${f.cls} s-credit c-none"></td>` : `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(row).ok ? " unbalanced" : ""}" data-label="${f.label}">
         ${cellInput(srcOf(f), f)}
-        ${f.key === "summary" && isTrial ? `<div class="src-line">元の科目: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
+        ${f.key === "summary" && isTrial ? `<div class="src-line">元の会計ソフト科目名: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
         ${f.key === "date" ? balanceHtml(row) : ""}
         ${f.key === (isTrial ? "summary" : "date") ? noteHtml(row) : ""}
       </td>`).join("") + `${actions(row)}</tr>`;
@@ -3019,7 +3019,7 @@ function renderMaster() {
     const sys = systemOf(masterCid);
     document.getElementById("masterHelp").textContent = "";
     listEl.innerHTML = `<div class="rc-head">この会社の対応（${Object.keys(map).length}件）${sys.mapping.length ? `。ここにない科目は${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）を使います` : ""}</div>`
-      + (entries.length ? `<div class="master-row mapping map-head"><span>元コード</span><span>元の科目名</span><span>→ ミロク</span><span>ミロク科目名</span><span></span></div>` : "")
+      + (entries.length ? `<div class="master-row mapping map-head"><span>元コード</span><span>元の会計ソフト科目名</span><span>→ ミロク</span><span>ミロク科目名</span><span></span></div>` : "")
       + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
         <span>${escapeHtml(v.srcName || "")}</span>
@@ -3057,7 +3057,7 @@ document.getElementById("masterAdd").onclick = () => {
   }
   if (masterTab === "master") { masterOf(masterCid).unshift({ code: "", name: "" }); document.getElementById("masterSearch").value = ""; }
   else {
-    const name = prompt("元の科目名（試算表に書かれている名前）"); if (!name) return;
+    const name = prompt("元の会計ソフト科目名（試算表に書かれている名前）"); if (!name) return;
     const no = prompt("元の科目番号（なければ空欄）") || "";
     mappingOf(masterCid)[srcKeyOf(no.trim(), name.trim())] = { code: "", srcName: name.trim(), srcCode: no.trim() };
   }
@@ -3158,7 +3158,7 @@ document.getElementById("masterExport").onclick = async () => {
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   const lines = masterTab === "master"
     ? [["コード", "科目名"], ...masterOf(masterCid).map(m => [m.code, m.name])]
-    : [["元の番号", "元の科目名", "ミロクコード", "ミロク科目名"], ...Object.values(mappingOf(masterCid)).map(v => [v.srcCode, v.srcName, v.code, masterName(v.code, masterCid)])];
+    : [["元の番号", "元の会計ソフト科目名", "ミロクコード", "ミロク科目名"], ...Object.values(mappingOf(masterCid)).map(v => [v.srcCode, v.srcName, v.code, masterName(v.code, masterCid)])];
   const csv = lines.map(l => l.map(cell).join(",")).join("\r\n") + "\r\n";
   const bytes = new Uint8Array(Encoding.convert(Encoding.stringToCode(csv), { to: "SJIS", from: "UNICODE" }));
   const company = (companies.find(c => c.id === masterCid)?.name || "会社").replace(/[\\/:*?"<>|]/g, "_");
