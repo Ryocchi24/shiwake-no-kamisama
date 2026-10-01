@@ -187,6 +187,17 @@
   .add-row input { flex: 1; }
   .row-actions { display: flex; gap: 2px; }
   .act-label { display: none; }
+  /* 複合仕訳の＋・－と、完了 */
+  .add-line { width: 32px; height: 32px; flex: none; border-radius: 50%; border: 1.5px solid var(--primary); background: var(--surface); color: var(--primary);
+    font: inherit; font-size: 19px; font-weight: 700; line-height: 1; display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
+  .add-line:active { background: var(--primary-soft); }
+  .act-spacer { flex: 1; }
+  .v-actions { align-items: center; gap: 6px; flex-wrap: wrap; }
+  td.has-minus { position: relative; }
+  .line-del { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--err); background: var(--surface);
+    color: var(--err); font: inherit; font-size: 15px; font-weight: 700; line-height: 1; display: grid; place-items: center; cursor: pointer; padding: 0; z-index: 1; }
+  tr.locked td.s-debit, tr.locked td.s-credit, tr.locked td.c-date { opacity: .7; }
+  td input:disabled, td select:disabled, td textarea:disabled { color: var(--text); -webkit-text-fill-color: var(--text); opacity: 1; }
   .tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
   .tab { font: inherit; font-size: 13px; font-weight: 500; border: none; background: none; color: var(--muted); padding: 5px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
   .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(15,23,42,.1); }
@@ -608,10 +619,12 @@
     tbody tr.row-receipt td.c-blank { display: block; }
     tbody tr.row-receipt td.c-none { display: none; }
     /* 8%と10%に分けた仕訳は、2つ目（10%）を1つ目の続きとして見せる（間の線・日付・画像を出さない） */
-    tbody tr.split-head { border-bottom: none; padding-bottom: 4px; }
-    tbody tr.split-cont { padding-top: 0; }
-    tbody tr.split-cont td.c-date, tbody tr.split-cont td.c-thumb, tbody tr.split-cont td.c-status { display: none; }
-    tbody tr.split-head td.c-del { display: none; }
+    /* 借方・貸方が複数ある仕訳は、2行目からを1行目の続きとして見せる（間の線・日付・画像を出さない） */
+    tbody tr.v-mid { border-bottom: none; padding-bottom: 4px; }
+    tbody tr.v-cont { padding-top: 0; }
+    tbody tr.v-cont td.c-date, tbody tr.v-cont td.c-thumb, tbody tr.v-cont td.c-status { display: none; }
+    tbody tr.v-mid td.c-del { display: none; }
+    td.c-del .v-actions { justify-content: flex-start; align-items: center; }
     tbody tr.row-receipt td.c-status { margin-bottom: 6px; }
     tbody tr.row-receipt td.c-date { margin-bottom: 8px; }
     /* 伝票日付は薄い緑の枠（借方と貸方が合っていなければ赤） */
@@ -1512,12 +1525,14 @@ function paidByCard(text) {
 }
 function payCodeOf(cid, text, rc) {
   const byName = (...names) => masterOf(cid).find(m => names.some(n => normName(m.name) === normName(n)))?.code;
-  return (paidByCard(text) ? byName("未払金", "未払い金") : byName("現金")) || rc.fixedCode || "";
+  // 自動入力ルールで決めた科目があればそれを使い、なければマスタの「現金」「未払金」
+  return paidByCard(text) ? rc.cardCode || byName("未払金", "未払い金") || "" : rc.fixedCode || byName("現金") || "";
 }
 // 諸口のコード（その会社のミロク科目マスタの「諸口」。なければミロクで基本の 3999）
 const shokuchiOf = (cid = currentCompanyId) => masterOf(cid).find(m => normName(m.name) === "諸口")?.code || "3999";
 // 8%と10%が混ざった領収書の、それぞれの対象額（「8%対象 ¥1,080」のような行から読む）。読めなければ null
-function splitByRate(text) {
+// 税率ごとの対象額（「8%対象 ¥1,080」「(内 10%対象 ¥1,190)」のような行から読む）: { "8": 金額, "10": 金額 }
+function rateAmounts(text) {
   const lines = String(text || "").split("\n").map(l => l.replace(/[\s　]/g, "").replace(/％/g, "%").replace(/[￥\\]/g, "¥"));
   const got = {};
   const amountIn = t => {
@@ -1532,11 +1547,20 @@ function splitByRate(text) {
     const amount = amountIn(t) || (lines[i + 1] && !/%/.test(lines[i + 1]) ? amountIn(lines[i + 1]) : 0); // 金額が次の行に分かれていることもある
     if (amount) got[rate] = amount;
   });
+  return got;
+}
+function splitByRate(text) {
+  const got = rateAmounts(text);
   return got["8"] > 0 && got["10"] > 0 ? { r8: got["8"], r10: got["10"] } : null;
 }
 function receiptTaxHint(text) {
   const t = String(text || "").replace(/[\s　]/g, "");
-  const has8 = /軽減|8[%％]|8パーセント/.test(t), has10 = /10[%％]/.test(t);
+  // 8%・10%の対象額の行があれば、それで決める（「※印は軽減税率(8%)適用商品」のような説明があっても、8%の品物がなければ10%だけ）
+  const got = rateAmounts(text);
+  const known = got["8"] > 0 || got["10"] > 0;
+  // 対象額の行がなければ、説明の行（※印〜）を除いた文字で決める
+  const body = String(text || "").split("\n").filter(l => !/※|印は/.test(l)).join("").replace(/[\s　]/g, "");
+  const has8 = known ? got["8"] > 0 : /軽減|8[%％]|8パーセント/.test(body), has10 = known ? got["10"] > 0 : /10[%％]/.test(body);
   const invoice = /T[-ー]?\d{13}|登録番号|適格請求書/.test(t);
   return { reduced: has8 && !has10, mixed: has8 && has10, noInvoice: t.length > 20 && !invoice };
 }
@@ -1590,13 +1614,14 @@ function warningsOf(r) {
   }
   const w = [];
   if (!r.date) w.push("日付が空です");
+  const ln = lineOf(r), codes = ln === "d" ? [r.debitCode] : ln === "c" ? [r.creditCode] : [r.debitCode, r.creditCode];
   if (r.source === NIKKEI_SOURCE) {
-    if (!r.debitCode || !r.creditCode) w.push("コードが未設定です");
-    for (const c of [r.debitCode, r.creditCode]) if (c && masterOf(r.companyId).length && !masterOf(r.companyId).some(m => m.code === String(c))) { w.push("マスタにないコードです"); break; }
+    if (codes.some(c => !c)) w.push("コードが未設定です");
+    for (const c of codes) if (c && masterOf(r.companyId).length && !masterOf(r.companyId).some(m => m.code === String(c))) { w.push("マスタにないコードです"); break; }
     if (r.codeHow === "推測") w.push("科目名から推測したコードです");
   }
-  if (!Number(r.debitAmount)) w.push("金額が空です");
-  if (!String(r.summary || "").trim()) w.push("摘要が空です");
+  if (!Number(ln === "c" ? r.creditAmount : r.debitAmount)) w.push("金額が空です");
+  if (!String(ln === "c" ? creditSummaryOf(r) : r.summary || "").trim()) w.push("摘要が空です");
   if (r.note) w.push(r.note);
   return w;
 }
@@ -1605,37 +1630,30 @@ function warningsOf(r) {
 //   8%と10%に分けた仕訳：2行の借方の合計と、領収書の合計（貸方の現金など）
 function balanceOf(r) {
   if (r.source === TRIAL_SOURCE) return { ok: true };
-  if (r.splitRole) {
-    const grp = rows.filter(o => o.groupId === r.groupId && o.splitRole), tot = grp.find(o => o.splitRole === "total");
-    if (tot) {
-      const d = grp.filter(o => o !== tot).reduce((a, o) => a + Number(o.debitAmount || 0), 0), c = Number(tot.creditAmount || 0);
-      return { d, c, ok: d === c && d > 0 };
-    }
-  }
-  const d = Number(r.debitAmount || 0), c = Number(r.creditAmount || 0);
+  const vr = voucherRows(r);
+  const d = vr.filter(o => lineOf(o) !== "c").reduce((a, o) => a + Number(o.debitAmount || 0), 0);
+  const c = vr.filter(o => lineOf(o) !== "d").reduce((a, o) => a + Number(o.creditAmount || 0), 0);
   return { d, c, ok: d === c && d > 0 };
 }
 const balanceHtml = r => {
   const b = balanceOf(r);
   if (r.source === TRIAL_SOURCE) return "";
-  return `<div class="balance ${b.ok ? "ok" : "ng"}" data-bal-for="${r.id}">${b.ok ? `✓ 一致 ${b.d.toLocaleString()}円`
+  return `<div class="balance ${b.ok ? "ok" : "ng"}" data-bal-for="${vidOf(r)}">${b.ok ? `✓ 一致 ${b.d.toLocaleString()}円`
     : `⚠ 借方 ${b.d.toLocaleString()} ／ 貸方 ${b.c.toLocaleString()}（差額 ${Math.abs(b.d - b.c).toLocaleString()}円）`}</div>`;
 };
 // 金額を直したら、そのレシートの一致の表示（伝票日付の枠の色）を更新する
 function refreshBalance(row) {
-  const group = row.splitRole ? rows.filter(o => o.groupId === row.groupId && o.splitRole && !isHiddenRow(o)) : [row];
-  for (const o of group) {
-    const el = list.querySelector(`[data-bal-for="${o.id}"]`);
-    if (el) el.outerHTML = balanceHtml(o);
-    const tr = list.querySelector(`tr[data-row="${o.id}"]`);
-    tr?.querySelector("td.c-date")?.classList.toggle("unbalanced", !balanceOf(o).ok);
-    const badge = tr?.querySelector(".c-status");
-    if (badge) badge.innerHTML = statusBadge(o);
-  }
+  const v = vidOf(row);
+  const el = list.querySelector(`[data-bal-for="${v}"]`);
+  if (el) el.outerHTML = balanceHtml(row);
+  const head = list.querySelector(`tr[data-vid-head="${v}"]`);
+  head?.querySelector("td.c-date")?.classList.toggle("unbalanced", !balanceOf(row).ok);
+  const badge = head?.querySelector(".c-status");
+  if (badge) badge.innerHTML = statusBadge(row);
 }
 const noteHtml = r => {
-  const w = warningsOf(r);
-  return `<div class="note" data-note-for="${r.id}" ${w.length ? "" : "hidden"}>⚠ ${escapeHtml(w.join("／"))}</div>`;
+  const w = voucherWarnings(r);
+  return `<div class="note" data-note-for="${vidOf(r)}" ${w.length ? "" : "hidden"}>⚠ ${escapeHtml(w.join("／"))}</div>`;
 };
 
 // 一覧に出すのは、この会社・この取り込み方法の仕訳（CSVに出力した後も「一覧を空にする」まで残す）
@@ -1643,37 +1661,45 @@ function sortedRows() {
   // 撮影・読み込みをした順（並べ替えない）
   return companyRows();
 }
-// 8%と10%に分けた時の「借方 諸口／貸方 現金など」の行は、確認画面には出さない（CSVには出す）
-const isHiddenRow = r => r.splitRole === "total";
-const shownRows = () => sortedRows().filter(r => !isHiddenRow(r));
+// ---- 仕訳のまとまり（1枚の領収書など） ----
+// 借方・貸方それぞれ複数の行を持てる（複合仕訳）。CSVでは相手科目を諸口にして1行ずつ書く
+//   line: "d" 借方だけの行／"c" 貸方だけの行／なし（"pair"）借方と貸方が1つずつの仕訳
+//   8%と10%に分けた仕訳（splitRole）は、r8・r10 が借方の行、total が貸方の行
+const lineOf = r => r.line || (r.splitRole === "total" ? "c" : r.splitRole ? "d" : "pair");
+const vidOf = r => r.vid || (r.splitRole ? "g:" + r.groupId : r.id);
+const voucherRows = r => { const v = vidOf(r); return rows.filter(o => o.companyId === r.companyId && vidOf(o) === v); };
+const voucherCount = list => new Set(list.map(vidOf)).size;
+const voucherWarnings = r => [...new Set(voucherRows(r).flatMap(warningsOf))];
+const shownRows = () => sortedRows();
 const csvTargetRows = () => sortedRows().filter(r => r.status === "done");
 
 function statusBadge(row) {
   if (row.status === "reading") return `<span class="badge info"><span class="spinner"></span>読取中</span>`;
   if (row.status === "error") return `<span class="badge err">エラー</span>`;
-  if (warningsOf(row).length || (row.status === "done" && !balanceOf(row).ok)) return `<span class="badge warn">要確認</span>`;
+  if (row.locked) return `<span class="badge ok">完了</span>`;
+  if (voucherWarnings(row).length || (row.status === "done" && !balanceOf(row).ok)) return `<span class="badge warn">要確認</span>`;
   return row.review === "exported" ? `<span class="badge ok">出力済み</span>` : "";
 }
 
 function renderStats() {
-  const target = csvTargetRows().filter(r => !isHiddenRow(r));
+  const target = csvTargetRows();
   const dl = document.getElementById("download");
   dl.disabled = target.length === 0;
-  dl.querySelector("span").textContent = `CSVダウンロード（${target.length}件）`;
+  dl.querySelector("span").textContent = `CSVダウンロード（${voucherCount(target)}件）`;
 }
 
 function inputHtml(row, f) {
   const v = f.key === "creditSummary" ? creditSummaryOf(row) : row[f.key] ?? "";
   // 摘要は横幅はそのままで2行分の高さにし、長い文は折り返して全部見えるようにする
   if (f.key === "summary" || f.key === "creditSummary")
-    return `<textarea class="summary-box" rows="1" data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">${escapeHtml(v)}</textarea>`;
-  if (f.options) return `<select data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">
+    return `<textarea class="summary-box" rows="1" ${row.locked ? "disabled" : ""} data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">${escapeHtml(v)}</textarea>`;
+  if (f.options) return `<select ${row.locked ? "disabled" : ""} data-id="${row.id}" data-key="${f.key}" aria-label="${f.label}">
     <option value="">—</option>${f.options.map(o => `<option${o === v ? " selected" : ""}>${o}</option>`).join("")}</select>`;
   const shown = f.num && v !== "" ? Number(v).toLocaleString() : v;
   const attrs = f.type === "date" ? 'type="date"' : f.num ? 'inputmode="numeric"' : "";
   const cls = [f.num ? "num" : "", f.code ? "code" : "", fieldMissing(row, f.key, v) ? "missing" : ""].join(" ");
   const list = f.key === "debitCode" || f.key === "creditCode" ? 'data-code-suggest autocomplete="off"' : "";
-  return `<input ${attrs} ${list} class="${cls}" ${f.code ? 'placeholder="—"' : ""} data-id="${row.id}" data-key="${f.key}" value="${escapeHtml(shown)}">`;
+  return `<input ${attrs} ${list} ${row.locked ? "disabled" : ""} class="${cls}" ${f.code ? 'placeholder="—"' : ""} data-id="${row.id}" data-key="${f.key}" value="${escapeHtml(shown)}">`;
 }
 
 function render() {
@@ -1703,9 +1729,15 @@ function render() {
     return;
   }
 
-  const actions = row => {
+  // 行の右（スマホでは仕訳の下）のボタン
+  //   試算表：削除だけ
+  //   それ以外：＋借方（左）・完了・削除・＋貸方（右）。完了した仕訳は「完了解除」だけ
+  const actions = (row, v, locked) => {
     const del = `<button class="icon-btn del" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg><span class="act-label">削除</span></button>`;
-    return `<td class="c-del"><div class="row-actions">${del}</div></td>`;
+    if (row.source === TRIAL_SOURCE || row.status !== "done") return `<td class="c-del"><div class="row-actions">${del}</div></td>`;
+    const add = side => `<button class="add-line" data-addline="${side}" data-vid="${escapeHtml(v)}" title="${side === "debit" ? "借方" : "貸方"}を増やす" aria-label="${side === "debit" ? "借方" : "貸方"}を増やす">＋</button>`;
+    const lock = `<button class="btn btn-sm lock-btn ${locked ? "" : "btn-primary"}" data-lock="${escapeHtml(v)}">${locked ? "完了解除" : "完了"}</button>`;
+    return `<td class="c-del"><div class="row-actions v-actions">${locked ? "" : add("debit")}<span class="act-spacer"></span>${lock}${locked ? "" : del}${locked ? "" : add("credit")}</div></td>`;
   };
   const fields = visibleFields();
   // 消費税の項目ができる前に読み取った行にも、自動で入れる
@@ -1720,43 +1752,63 @@ function render() {
     if (f.side && last?.side === f.side) last.n++; else a.push({ side: f.side, n: 1, left: f.cls.includes("b-left") });
     return a;
   }, []).map(g => g.side ? `<th class="${g.side} b-left" colspan="${g.n}">${g.side === "debit" ? "借方" : "貸方"}</th>` : `<th class="${g.left ? "b-left" : ""}" colspan="${g.n}"></th>`).join("");
-  let body = "";
-  items.forEach((row, i) => {
-    const thumb = row.source === TRIAL_SOURCE ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
-      : row.splitRole === "r10" ? `<td class="c-thumb"></td>` // 8%と10%に分けた仕訳は、写真を1つ目の行にだけ出す
+  // 科目コードの欄は、コードのすぐ右に科目名を出す
+  const cellInput = (r, f) => {
+    if (f.key !== "debitCode" && f.key !== "creditCode") return inputHtml(r, f);
+    const code = String(r[f.key] || ""), name = code ? masterName(code) : "";
+    return `<div class="code-box" style="--len:${code.length}">${inputHtml(r, f)}<span class="code-name ${code && !name ? "unknown" : ""}" data-code-name-for="${r.id}-${f.key}">${escapeHtml(code ? name || "マスタにない" : "")}</span></div>`;
+  };
+  const firstOfSide = { debit: fields.find(f => f.side === "debit"), credit: fields.find(f => f.side === "credit") };
+  let body = "", no = 0;
+  const seen = new Set();
+  for (const row0 of items) {
+    // 仕訳のまとまりごとに描く（借方・貸方が複数あるときは、何行かに分けて並べる）
+    const v = vidOf(row0);
+    if (seen.has(v)) continue;
+    seen.add(v); no++;
+    const vr = items.filter(o => vidOf(o) === v), anchor = vr[0];
+    const isTrial = anchor.source === TRIAL_SOURCE;
+    const thumbOf = row => isTrial ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
       : row.thumb
       ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="${row.source === NIKKEI_SOURCE ? "日計表" : "領収書"}"></td>`
       : `<td class="c-thumb"><span class="no-img">画像なし</span></td>`;
-    const head = `<td class="rowno">${i + 1}</td><td class="c-status">${statusBadge(row)}</td>${thumb}`;
-    if (row.status !== "done") {
-      const msg = row.status === "reading"
+    if (anchor.status !== "done") {
+      const msg = anchor.status === "reading"
         ? `<span class="status-msg">読み取っています…</span>`
-        : `<span class="status-msg error">${escapeHtml(row.error)}<button class="btn" data-retry="${row.id}">再読み取り</button></span>`;
-      body += `<tr class="is-${row.status}" data-row="${row.id}">${head}<td colspan="${fields.length}" class="c-msg">${msg}</td>${actions(row)}</tr>`;
-      return;
+        : `<span class="status-msg error">${escapeHtml(anchor.error)}<button class="btn" data-retry="${anchor.id}">再読み取り</button></span>`;
+      body += `<tr class="is-${anchor.status}" data-row="${anchor.id}" data-vid-head="${escapeHtml(v)}"><td class="rowno">${no}</td><td class="c-status">${statusBadge(anchor)}</td>${thumbOf(anchor)}<td colspan="${fields.length}" class="c-msg">${msg}</td>${actions(anchor, v, false)}</tr>`;
+      continue;
     }
-    const isTrial = row.source === TRIAL_SOURCE;
-    // 科目コードの欄は、コードのすぐ右に科目名を出す
-    const cellInput = (r, f) => {
-      if (f.key !== "debitCode" && f.key !== "creditCode") return inputHtml(r, f);
-      const code = String(r[f.key] || ""), name = code ? masterName(code) : "";
-      return `<div class="code-box" style="--len:${code.length}">${inputHtml(r, f)}<span class="code-name ${code && !name ? "unknown" : ""}" data-code-name-for="${r.id}-${f.key}">${escapeHtml(code ? name || "マスタにない" : "")}</span></div>`;
-    };
-    // 8%と10%に分けた仕訳は、諸口を出さずに「借方2つ・貸方1つ」で見せる
-    //   8%の行の貸方の欄に、隠している行の貸方（現金など・合計）を出し、10%の行の貸方は空にする
-    const tot = row.splitRole ? rows.find(o => o.groupId === row.groupId && o.splitRole === "total") : null;
-    const srcOf = f => f.side !== "credit" || !tot ? row : row.splitRole === "r8" ? tot : null;
-    // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
-    const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
-      [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(k => fields.find(f => f.side === side && kindOf(f.key) === k) || { blank: true, side }))];
-    const splitCls = row.splitRole === "r8" ? " split-head" : row.splitRole === "r10" ? " split-cont" : "";
-    body += `<tr data-row="${row.id}" class="${row.source === TRIAL_SOURCE ? "" : "row-receipt"}${splitCls}">${head}` + cells.map(f => f.blank ? `<td class="c-blank s-${f.side}"></td>` : !srcOf(f) ? `<td class="${f.cls} s-credit c-none"></td>` : `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(row).ok ? " unbalanced" : ""}" data-label="${f.label}">
-        ${cellInput(srcOf(f), f)}
-        ${f.key === "summary" && isTrial ? `<div class="src-line">元の会計ソフト科目名: ${escapeHtml(row.srcName)}${row.srcCode ? ` [${escapeHtml(row.srcCode)}]` : ""}</div>` : ""}
-        ${f.key === "date" ? balanceHtml(row) : ""}
-        ${f.key === (isTrial ? "summary" : "date") ? noteHtml(row) : ""}
-      </td>`).join("") + `${actions(row)}</tr>`;
-  });
+    const compound = vr.length > 1 || lineOf(anchor) !== "pair";
+    const D = compound ? vr.filter(o => lineOf(o) !== "c") : [anchor];
+    const C = compound ? vr.filter(o => lineOf(o) !== "d") : [anchor];
+    const k = Math.max(D.length, C.length, 1);
+    const locked = vr.some(o => o.locked);
+    const sideCount = { debit: D.length, credit: C.length };
+    for (let i = 0; i < k; i++) {
+      const first = i === 0, last = i === k - 1, dRow = D[i] || null, cRow = C[i] || null;
+      const srcOf = f => !f.side ? (first ? anchor : null) : f.side === "debit" ? dRow : cRow;
+      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? statusBadge(anchor) : ""}</td>${first ? thumbOf(anchor) : `<td class="c-thumb"></td>`}`;
+      // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
+      const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
+        [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(kd => fields.find(f => f.side === side && kindOf(f.key) === kd) || { blank: true, side }))];
+      const trCls = [isTrial ? "" : "row-receipt", k > 1 && !last ? "v-mid" : "", first ? "" : "v-cont", locked ? "locked" : ""].filter(Boolean).join(" ");
+      body += `<tr data-row="${(dRow || cRow || anchor).id}" ${first ? `data-vid-head="${escapeHtml(v)}"` : ""} class="${trCls}">${head}` + cells.map(f => {
+        if (f.blank) return `<td class="c-blank s-${f.side}"></td>`;
+        const src = srcOf(f);
+        if (!src) return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""} c-none"></td>`;
+        // 借方・貸方が2つ以上あるときは、それぞれの塊に「－」（その塊を消す）を出す
+        const minus = compound && !locked && f.side && f === firstOfSide[f.side] && sideCount[f.side] > 1
+          ? `<button class="line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す">－</button>` : "";
+        return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(anchor).ok ? " unbalanced" : ""}${minus ? " has-minus" : ""}" data-label="${f.label}">
+        ${cellInput(src, f)}${minus}
+        ${f.key === "summary" && isTrial ? `<div class="src-line">元の会計ソフト科目名: ${escapeHtml(anchor.srcName)}${anchor.srcCode ? ` [${escapeHtml(anchor.srcCode)}]` : ""}</div>` : ""}
+        ${f.key === "date" ? balanceHtml(anchor) : ""}
+        ${f.key === (isTrial ? "summary" : "date") ? noteHtml(anchor) : ""}
+      </td>`;
+      }).join("") + (last ? actions(anchor, v, locked) : `<td class="c-del"></td>`) + `</tr>`;
+    }
+  }
 
   list.innerHTML = `<div class="table-wrap"><table>
     <thead>
@@ -1937,12 +1989,14 @@ list.addEventListener("input", e => {
   }
   row[key] = value;
   e.target.classList.toggle("missing", fieldMissing(row, key, value));
-  const badge = e.target.closest("[data-row]")?.querySelector(".c-status");
+  // 複合仕訳は、日付を同じまとまりの行すべてにそろえる
+  if (key === "date" && lineOf(row) !== "pair") for (const o of voucherRows(row)) o.date = value;
+  const badge = list.querySelector(`tr[data-vid-head="${vidOf(row)}"] .c-status`);
   if (badge) badge.innerHTML = statusBadge(row);
   if (/Amount$/.test(key)) refreshBalance(row);
-  const noteEl = list.querySelector(`[data-note-for="${row.id}"]`);
+  const noteEl = list.querySelector(`[data-note-for="${vidOf(row)}"]`);
   if (noteEl) {
-    const w = warningsOf(row);
+    const w = voucherWarnings(row);
     noteEl.hidden = !w.length;
     noteEl.textContent = `⚠ ${w.join("／")}`;
   }
@@ -2002,24 +2056,59 @@ list.addEventListener("change", e => {
   else if (key === "debitCode" || key === "creditCode" || key === "summary" || key === "creditSummary") { save(); render(); }
 });
 
+// ＋：借方か貸方に、空の塊を1つ足す（1つずつの仕訳は、借方の行と貸方の行に分けてから足す）
+function addLine(v, side) {
+  const vr = rows.filter(r => r.companyId === currentCompanyId && vidOf(r) === v);
+  const anchor = vr[0];
+  if (!anchor) return;
+  const blank = { debitCode: "", debitSub: "", debitAmount: "", debitTax: "", debitRate: "", debitBiz: "課税事業者",
+    creditCode: "", creditSub: "", creditAmount: "", creditTax: "", creditRate: "", creditBiz: "課税事業者", summary: "", creditSummary: "", store: "", note: "" };
+  const base = { groupId: anchor.groupId, companyId: anchor.companyId, source: anchor.source, thumb: "", status: "done", review: "pending", date: anchor.date, taxHint: {}, bizV2: true, vid: v };
+  if (vr.length === 1 && lineOf(anchor) === "pair") {
+    // 今の貸方を、貸方だけの行に移す
+    const c = { ...base, ...blank, id: uid(), line: "c", creditCode: anchor.creditCode, creditSub: anchor.creditSub, creditAmount: anchor.creditAmount,
+      creditTax: anchor.creditTax, creditRate: anchor.creditRate, creditBiz: anchor.creditBiz, creditSummary: creditSummaryOf(anchor),
+      taxManual: anchor.taxManual?.credit ? { credit: true } : undefined };
+    anchor.line = "d"; anchor.vid = v;
+    rows.splice(rows.indexOf(anchor) + 1, 0, c);
+    vr.push(c);
+  } else for (const r of vr) { r.line = lineOf(r); r.vid = v; delete r.splitRole; } // 8%と10%に分けた仕訳も、ふつうの複合仕訳として扱う
+  const nb = { ...base, ...blank, id: uid(), line: side === "debit" ? "d" : "c" };
+  rows.splice(rows.indexOf(vr[vr.length - 1]) + 1, 0, nb);
+  save(); render();
+}
+// －：借方か貸方の塊を1つ消す。借方・貸方が1つずつに戻ったら、ふつうの仕訳（1行）にまとめる
+function removeLine(id) {
+  const row = rows.find(r => r.id === id);
+  if (!row) return;
+  const vr = voucherRows(row).filter(r => r !== row);
+  rows = rows.filter(r => r !== row);
+  const D = vr.filter(r => lineOf(r) !== "c"), C = vr.filter(r => lineOf(r) !== "d");
+  if (D.length === 1 && C.length === 1 && D[0] !== C[0]) {
+    const d = D[0], c = C[0];
+    Object.assign(d, { creditCode: c.creditCode, creditSub: c.creditSub, creditAmount: c.creditAmount, creditTax: c.creditTax, creditRate: c.creditRate,
+      creditBiz: c.creditBiz, creditSummary: creditSummaryOf(c), taxManual: { ...d.taxManual, credit: !!c.taxManual?.credit } });
+    delete d.line; delete d.vid; delete d.splitRole;
+    rows = rows.filter(r => r !== c);
+  }
+  save(); render();
+}
 list.addEventListener("click", async e => {
-  const t = e.target.closest("[data-del], [data-retry], .thumb");
+  const t = e.target.closest("[data-del], [data-retry], [data-addline], [data-linedel], [data-lock], .thumb");
   if (!t) return;
-  if (t.dataset.del) {
+  if (t.dataset.addline) addLine(t.dataset.vid, t.dataset.addline);
+  else if (t.dataset.linedel) removeLine(t.dataset.linedel);
+  else if (t.dataset.lock) {
+    // 完了：その仕訳を触っても変わらないようにする（完了解除で戻す）
+    const vr = rows.filter(r => r.companyId === currentCompanyId && vidOf(r) === t.dataset.lock);
+    const lock = !vr.some(r => r.locked);
+    for (const r of vr) r.locked = lock;
+    save(); render();
+  } else if (t.dataset.del) {
     const row = rows.find(r => r.id === t.dataset.del);
     if (row && (row.status !== "done" || confirm("この仕訳を削除しますか？"))) {
-      rows = rows.filter(r => r !== row);
-      // 8%と10%に分けた片方を消したら、残った方をふつうの仕訳に戻す（貸方は諸口から現金などへ）
-      if (row.splitRole) {
-        const tot = rows.find(r => r.groupId === row.groupId && r.splitRole === "total");
-        const rest = rows.filter(r => r.groupId === row.groupId && r.splitRole && r !== tot);
-        if (tot && rest.length === 1) {
-          const o = rest[0];
-          o.creditCode = tot.creditCode; delete o.splitRole;
-          if (!o.taxManual?.credit) setAutoTax(o, "credit");
-        }
-        if (tot && rest.length < 2) rows = rows.filter(r => r !== tot);
-      }
+      const vr = voucherRows(row);
+      rows = rows.filter(r => !vr.includes(r));
       save(); render(); pruneImages();
     }
   } else if (t.dataset.retry) {
@@ -2122,11 +2211,13 @@ const CSV_CODES = {
   Biz: { 課税事業者: "0", 免税事業者: "1", "": "0" },
 };
 document.getElementById("download").onclick = async () => {
-  const done = csvTargetRows();
+  // 複合仕訳の塊で、金額もコードも空のもの（使わなかった8%の行など）は書き出さない
+  const emptyLine = r => lineOf(r) !== "pair" && !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount) && !(lineOf(r) === "c" ? r.creditCode : r.debitCode);
+  const done = csvTargetRows().filter(r => !emptyLine(r));
   if (!done.length) return;
   const incomplete = done.filter(r => r.source === TRIAL_SOURCE
     ? !r.date || !(Number(r.debitAmount) ? r.debitCode : r.creditCode)
-    : !r.date || !Number(r.debitAmount));
+    : !r.date || !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount));
   if (incomplete.length && !confirm(`日付・金額・コードが空の行が ${incomplete.length} 件あります。このままダウンロードしますか？`)) return;
   if (done.some(r => r.source === TRIAL_SOURCE)) {
     const d = done.reduce((s, r) => s + Number(r.debitAmount || 0), 0), c = done.reduce((s, r) => s + Number(r.creditAmount || 0), 0);
@@ -2138,13 +2229,15 @@ document.getElementById("download").onclick = async () => {
   // 試算表の行は片側だけなので、反対側を諸口にする（その会社のミロク科目マスタの「諸口」。なければミロクで基本の 3999）
   const shokuchi = shokuchiOf();
   const fields = visibleFields(); // CSVは確認画面と同じ項目
-  // 画面に出していない「借方 諸口／貸方 現金など」の行：借方の金額は貸方（領収書の合計）と同じ、日付・摘要は1行目と同じにする
-  for (const tot of done.filter(isHiddenRow)) {
-    const parts = done.filter(r => r.groupId === tot.groupId && r.splitRole && r !== tot);
-    if (!parts.length) continue;
-    Object.assign(tot, { debitAmount: tot.creditAmount, date: parts[0].date, summary: parts[0].summary });
-  }
-  const lines = done.map(r => {
+  // 複合仕訳（借方か貸方が2つ以上）は、相手科目を諸口にして1行ずつ書く
+  //   借方だけの行：借方 科目 ／ 貸方 諸口　　貸方だけの行：借方 諸口 ／ 貸方 科目
+  const lineCsv = r => {
+    const ln = lineOf(r);
+    if (ln === "d") return { ...r, creditCode: shokuchi, creditSub: "", creditAmount: r.debitAmount, creditTax: "対象外", creditRate: "対象外", creditBiz: "課税事業者", creditSummary: r.summary };
+    if (ln === "c") return { ...r, date: voucherRows(r)[0].date, debitCode: shokuchi, debitSub: "", debitAmount: r.creditAmount, debitTax: "対象外", debitRate: "対象外", debitBiz: "課税事業者", summary: creditSummaryOf(r) };
+    return r;
+  };
+  const lines = done.map(lineCsv).map(r => {
     let { debitCode, debitAmount, creditCode, creditAmount } = r;
     if (r.source === TRIAL_SOURCE && shokuchi) {
       if (Number(debitAmount) && !creditCode && !Number(creditAmount)) { creditCode = shokuchi; creditAmount = debitAmount; }
@@ -2170,7 +2263,7 @@ document.getElementById("download").onclick = async () => {
   for (const r of done) learnReceiptRule(r);
   saveReceiptSettings();
   // 出力した仕訳は「出力済み」の印を付けて、一覧に残す
-  setReview(done.map(r => r.id), "exported", `${done.filter(r => !isHiddenRow(r)).length}件を保存しました`);
+  setReview(done.map(r => r.id), "exported", `${voucherCount(done)}件を保存しました`);
 };
 
 // ファイルの保存。スマホはリンクからのダウンロードが不安定（特にiPhone）なので、
@@ -2284,7 +2377,7 @@ function saveMasters() {
 // 原始資料の自動入力ルール（会社ごと・書類の種類ごと）
 // 「いつも使う科目」1つと、「言葉 → 科目」のルールを持つ。領収書以外は、読み取りを作ったときに使う（先に登録しておける）
 const AUTO_RULE_TYPES = [
-  { id: "receipt",  name: "出金領収書", ready: true,  fixed: "貸方の科目",     fixedEx: "例: 1101", rule: "店名 → 借方の科目",     ruleEx: "例: セブンイレブン" },
+  { id: "receipt",  name: "出金領収書", ready: true,  fixed: "貸方の科目（現金）",     fixedEx: "例: 1101", rule: "店名 → 借方の科目",     ruleEx: "例: セブンイレブン" },
   { id: "income",   name: "入金領収書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1101", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "passbook", name: "通帳",       ready: false, fixed: "この通帳の科目", fixedEx: "例: 1107", rule: "摘要 → 相手の科目",     ruleEx: "例: NTT" },
   { id: "purchase", name: "仕入請求書", ready: false, fixed: "貸方の科目",     fixedEx: "例: 2103", rule: "取引先 → 借方の科目",   ruleEx: "例: 取引先の名前" },
@@ -2306,7 +2399,7 @@ const ruleKeywordOf = r => String(r.store || r.summary || "").trim().slice(0, 30
 // 領収書の仕訳から「店名（または摘要） → 借方の科目」を覚える（すでにあれば科目を上書き）
 function learnReceiptRule(r) {
   const kw = ruleKeywordOf(r);
-  if (r.source !== "receipt" || !kw || !r.debitCode || r.splitRole === "total") return;
+  if (r.source !== "receipt" || !kw || !r.debitCode || lineOf(r) === "c") return;
   const rc = receiptSettingsOf(r.companyId);
   const ex = rc.rules.find(x => normName(x.keyword) === normName(kw));
   if (ex) ex.code = r.debitCode; else rc.rules.push({ keyword: kw, code: r.debitCode });
@@ -2928,7 +3021,7 @@ document.getElementById("trialDate").addEventListener("change", e => {
 });
 document.getElementById("listClear").onclick = () => {
   const items = sortedRows();
-  if (!items.length || !confirm(`一覧の ${shownRows().length} 行を消しますか？`)) return;
+  if (!items.length || !confirm(`一覧の ${voucherCount(sortedRows())} 件を消しますか？`)) return;
   const ids = new Set(items.map(r => r.id));
   rows = rows.filter(r => !ids.has(r.id));
   save(); render(); pruneImages();
@@ -3022,7 +3115,12 @@ function renderMaster() {
         <b>${escapeHtml(cfg.fixed)}</b>
         <input value="${escapeHtml(rc.fixedCode)}" data-rck="credit" data-code-suggest autocomplete="off" placeholder="${escapeHtml(cfg.fixedEx)}" aria-label="${escapeHtml(cfg.fixed)}">
         <span class="muted">${escapeHtml(rc.fixedCode ? (masterName(rc.fixedCode, masterCid) || "（マスタにない）") : "")}</span>
-      </div>
+      </div>${cfg.id === "receipt" ? `
+      <div class="rc-credit">
+        <b>貸方の科目（クレジット）</b>
+        <input value="${escapeHtml(rc.cardCode || "")}" data-rck="card" data-code-suggest autocomplete="off" placeholder="例: 2115" aria-label="貸方の科目（クレジット）">
+        <span class="muted">${escapeHtml(rc.cardCode ? (masterName(rc.cardCode, masterCid) || "（マスタにない）") : "")}</span>
+      </div>` : ""}
       <div class="rc-head rc-title">${escapeHtml(cfg.rule)}</div>`
       + (rules.length ? rules.map(x => `<div class="master-row rule">
         <input value="${escapeHtml(x.keyword)}" data-rri="${x.i}" data-rrk="keyword" placeholder="${escapeHtml(cfg.ruleEx)}" aria-label="言葉">
@@ -3103,6 +3201,7 @@ document.getElementById("masterList").addEventListener("change", e => {
   const t = e.target;
   const rc = autoRulesOf(masterCid, ruleType);
   if (t.dataset.rck === "credit") { rc.fixedCode = (t.value.match(/^\s*(\d+)/) || [])[1] || ""; saveReceiptSettings(); renderMaster(); return; }
+  if (t.dataset.rck === "card") { rc.cardCode = (t.value.match(/^\s*(\d+)/) || [])[1] || ""; saveReceiptSettings(); renderMaster(); return; }
   if (t.dataset.rri !== undefined) {
     const x = rc.rules[Number(t.dataset.rri)];
     if (x) x[t.dataset.rrk] = t.dataset.rrk === "code" ? ((t.value.match(/^\s*(\d+)/) || [])[1] || "") : t.value.trim();
