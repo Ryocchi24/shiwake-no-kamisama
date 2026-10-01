@@ -302,6 +302,7 @@
   .map-head { font-size: 11.5px; color: var(--muted); background: var(--surface-2); padding-top: 6px !important; padding-bottom: 6px !important; }
   .code-suggest { position: fixed; z-index: 120; width: 260px; max-height: 300px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px rgba(17,24,39,.18); padding: 4px; }
   .code-suggest[hidden] { display: none; }
+  .code-suggest .cs-empty { padding: 10px 12px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
   .cs-item { display: flex; gap: 10px; padding: 8px 10px; border-radius: 7px; font-size: 14px; cursor: pointer; color: var(--text); }
   .cs-item.active, .cs-item:hover { background: var(--primary-soft); }
   .cs-code { font-family: "Roboto Mono", monospace; color: var(--muted); min-width: 40px; }
@@ -1805,6 +1806,12 @@ function showSuggest(input, showAll) {
   const q = showAll ? "" : input.value.trim(), n = normName(q), all = suggestList(input);
   // 空なら全部、数字ならそのコードで始まるもの、文字なら科目名に含むもの
   const items = (!q ? all : /^\d+$/.test(q) ? all.filter(m => m.code.startsWith(q)) : all.filter(m => normName(m.name).includes(n))).slice(0, 200);
+  if (!all.length) {
+    // その会社にミロク科目マスタがまだないときは、候補が出ない理由を出す
+    suggestInput = input; suggestItems = [];
+    suggestEl.innerHTML = `<div class="cs-empty">ミロク科目マスタがまだありません</div>`;
+    suggestEl.hidden = false; placeSuggest(); return;
+  }
   if (!items.length) return hideSuggest();
   suggestInput = input; suggestItems = items;
   suggestIdx = Math.max(0, items.findIndex(m => m.code === input.value.trim())); // 今のコードを選んだ状態にする
