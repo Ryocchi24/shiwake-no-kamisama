@@ -189,8 +189,8 @@
   .act-label { display: none; }
   /* 複合仕訳の＋・－と、完了 */
   /* ＋：ほかのボタンと同じ白い角丸に、線のアイコン（借方は紺、貸方は茶） */
-  .btn.add-line { width: 34px; min-width: 34px; padding: 0; justify-content: center; }
-  .btn.add-line svg { width: 17px; height: 17px; flex: none; }
+  .btn.add-line { width: 30px; min-width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 7px; }
+  .btn.add-line svg { width: 15px; height: 15px; flex: none; }
   .add-line.debit { color: var(--debit-text); }
   .add-line.credit { color: var(--credit-text); }
   .act-spacer { flex: 1; }
@@ -199,9 +199,10 @@
   .v-actions { align-items: center; gap: 6px; flex-wrap: wrap; }
   /* －：塊の右上の、項目名と同じ行に置く（枠にも入力欄にもかからない） */
   td.has-minus { position: relative; }
-  .line-del { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--surface);
+  /* ＋と同じ大きさ（30px） */
+  .line-del { position: absolute; top: 2px; right: 2px; width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--surface);
     color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; z-index: 1; }
-  .line-del svg { width: 13px; height: 13px; }
+  .line-del svg { width: 15px; height: 15px; }
   .line-del:hover, .line-del:active { color: var(--err); border-color: #f0c4c4; background: var(--err-soft); }
   tr.locked td.s-debit, tr.locked td.s-credit, tr.locked td.c-date { opacity: .7; }
   td input:disabled, td select:disabled, td textarea:disabled { color: var(--text); -webkit-text-fill-color: var(--text); opacity: 1; }
@@ -645,8 +646,8 @@
     tbody tr.row-receipt td.c-date + td.s-debit, tbody tr.row-receipt td.s-debit + td.s-credit { border-radius: 10px 10px 0 0; padding-top: 10px; }
     /* －は、項目名の行の右に収める（項目名の行を少し高くして、入力欄と重ならないようにする） */
     tbody tr.row-receipt td.has-minus { padding-top: 10px; }
-    tbody tr.row-receipt td.has-minus::before { line-height: 30px; padding-right: 30px; }
-    tbody tr.row-receipt td.has-minus .line-del { top: 10px; right: 10px; width: 24px; height: 24px; }
+    tbody tr.row-receipt td.has-minus::before { line-height: 36px; padding-right: 36px; }
+    tbody tr.row-receipt td.has-minus .line-del { top: 10px; right: 10px; }
     tbody tr.row-receipt td.s-debit:has(+ td.s-credit), tbody tr.row-receipt td.s-credit:has(+ td.c-del) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
     tbody tr.row-receipt td.s-debit { background: var(--debit); }
     tbody tr.row-receipt td.s-credit { background: var(--credit); }
@@ -2101,6 +2102,11 @@ function addLine(v, side) {
 function removeLine(id) {
   const row = rows.find(r => r.id === id);
   if (!row) return;
+  // 何か入っている塊は、消してよいか確かめる（空の塊はそのまま消す）
+  const side = lineOf(row) === "c" ? "credit" : "debit";
+  const filled = side === "debit" ? row.debitCode || Number(row.debitAmount) || String(row.summary || "").trim()
+    : row.creditCode || Number(row.creditAmount) || String(creditSummaryOf(row)).trim();
+  if (filled && !confirm(`この${side === "debit" ? "借方" : "貸方"}を消しますか？`)) return;
   const vr = voucherRows(row).filter(r => r !== row);
   rows = rows.filter(r => r !== row);
   const D = vr.filter(r => lineOf(r) !== "c"), C = vr.filter(r => lineOf(r) !== "d");
