@@ -2667,11 +2667,26 @@ function parseSourceRows(rows) {
     return rows.slice(h3.row + 1).map(r => ({ srcCode: isCodeCell(r[sc]) ? String(r[sc]).trim() : "", srcName: String(r[nc] ?? "").trim(), code: isCodeCell(r[mc]) ? String(r[mc]).trim() : "" }))
       .filter(x => x.srcName);
   }
+  // 試算表のファイル（「借方」「貸方」の見出しがある）なら、そこから科目を取り出す（弥生会計のようにコードがなく科目名だけでもよい）
+  if (rows.slice(0, 30).some(r => r.some(c => /借[\s　]*方/.test(c)) && r.some(c => /貸[\s　]*方/.test(c)))) {
+    const fromTrial = parseTrialSheet(rows).accounts;
+    if (fromTrial.length) return uniqueSources(fromTrial.map(a => ({ srcCode: a.srcCode || "", srcName: a.srcName, code: "" })));
+  }
   // 見出しなし: 「番号, 科目名, ミロクコード」または「番号, 科目名」
   const at = guessCodeName(rows);
-  if (at < 0) return [];
-  return rows.filter(r => isCodeCell(r[at]) && r[at + 1] && !isCodeCell(r[at + 1]))
+  if (at >= 0) return rows.filter(r => isCodeCell(r[at]) && r[at + 1] && !isCodeCell(r[at + 1]))
     .map(r => ({ srcCode: String(r[at]).trim(), srcName: String(r[at + 1]).trim(), code: isCodeCell(r[at + 2] ?? "") ? String(r[at + 2]).trim() : "" }));
+  // 科目名の列（見出しが「勘定科目」「科目名」「名称」など）だけの一覧。右にミロクのコードの列があれば使う
+  const hn = findHeader(rows, [/科目|勘定|名称/]);
+  if (!hn) return [];
+  const nc = hn.cols[0], mc = rows[hn.row].findIndex((c, k) => k !== nc && /ミロク/.test(c));
+  return uniqueSources(rows.slice(hn.row + 1).map(r => ({ srcCode: "", srcName: String(r[nc] ?? "").replace(/[\s　]+/g, ""), code: mc >= 0 && isCodeCell(r[mc]) ? String(r[mc]).trim() : "" }))
+    .filter(x => x.srcName && !isCodeCell(x.srcName) && !isSubtotalName(x.srcName)));
+}
+// 同じ科目（コードか科目名が同じもの）は1つにする
+function uniqueSources(items) {
+  const seen = new Set();
+  return items.filter(x => { const k = srcKeyOf(x.srcCode, x.srcName); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 // 会社にマスタを入れる（置き換え）
 function setCompanyMaster(cid, items) { masters[cid] = items.map(m => ({ ...m })); saveMasters(); }
@@ -2737,6 +2752,7 @@ function parseTrialSheetPart(rows) {
   if (codeCol < 0) {
     const body = rows.slice(headerIdx + 1).filter(r => r.some(c => String(c).trim()));
     for (let c = 0; c < Math.min(debitCol, creditCol); c++) {
+      if (/繰越|残高|金額|借方|貸方|前月|前期|期首|合計|構成|比率/.test(head[c] || "")) continue; // 金額の列は科目コードの列ではない
       const hits = body.filter(r => /^\s*\d{2,6}\s*$/.test(String(r[c] ?? ""))).length;
       if (body.length && hits >= body.length * 0.4) { codeCol = c; break; }
     }
@@ -3115,7 +3131,7 @@ document.getElementById("masterImport").addEventListener("change", async e => {
     showToast(`${items.length}科目を読み込みました`);
   } else {
     const items = parseSourceRows(table);
-    if (!items.length) { alert("別会計ソフトのコードと科目名の列が見つかりませんでした。"); return; }
+    if (!items.length) { alert("別会計ソフトの科目名の列が見つかりませんでした。"); return; }
     const replace = Object.keys(mappingOf(masterCid)).length ? confirm(`${items.length}科目を読み込みます。\n今の対応表を置き換えますか？\n［キャンセル］を押すと、今の対応表に追加・上書きします。`) : true;
     const res = setCompanySource(masterCid, items, replace);
     showToast(`${res.total}科目を読み込みました` + (res.unset ? `（ミロクのコード未設定 ${res.unset}件）` : ""));
