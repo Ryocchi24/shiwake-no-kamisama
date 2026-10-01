@@ -2698,6 +2698,8 @@ const isTrialHeader = r => r.some(c => /借方/.test(c)) && r.some(c => /貸方/
 // 試算表がいくつかの表（貸借対照表と損益計算書のシートなど）に分かれていて、表ごとに列の並びが違うこともあるので、
 // 見出しの行ごとに区切って、それぞれの表の見出しから列の位置を決めて読む
 function parseTrialSheet(rows) {
+  // 「借　方」「勘 定 科 目」のように間に空白が入った見出しも読めるよう、セルの空白を取る
+  rows = rows.map(r => r.map(c => String(c ?? "").replace(/[\s　]+/g, "")));
   const starts = rows.map((r, i) => isTrialHeader(r) ? i : -1).filter(i => i >= 0);
   if (starts.length > 1) {
     const parts = starts.map((s, k) => parseTrialSheetPart(rows.slice(s, starts[k + 1] ?? rows.length)));
