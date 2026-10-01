@@ -289,6 +289,9 @@
   .rule-types { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
   .rule-types .doc-type { font-size: 12.5px; padding: 4px 12px; }
   .rc-head { font-size: 12px; color: var(--muted); padding: 8px 12px 4px; }
+  /* 一覧の見出し（別会計ソフト対応表・自動入力ルール） */
+  .rc-head.rc-title { font-size: 14px; font-weight: 700; color: var(--text); padding: 11px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  .rc-head.rc-title .rc-count { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 4px; }
   .master-row.rule { grid-template-columns: 1fr 100px 1fr 36px; }
   .master-csv { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
   .master-csv summary { cursor: pointer; }
@@ -3008,7 +3011,7 @@ function renderMaster() {
         <input value="${escapeHtml(rc.fixedCode)}" data-rck="credit" data-code-suggest autocomplete="off" placeholder="${escapeHtml(cfg.fixedEx)}" aria-label="${escapeHtml(cfg.fixed)}">
         <span class="muted">${escapeHtml(rc.fixedCode ? (masterName(rc.fixedCode, masterCid) || "（マスタにない）") : "")}</span>
       </div>
-      <div class="rc-head">${escapeHtml(cfg.rule)}</div>`
+      <div class="rc-head rc-title">${escapeHtml(cfg.rule)}</div>`
       + (rules.length ? rules.map(x => `<div class="master-row rule">
         <input value="${escapeHtml(x.keyword)}" data-rri="${x.i}" data-rrk="keyword" placeholder="${escapeHtml(cfg.ruleEx)}" aria-label="言葉">
         <input value="${escapeHtml(x.code)}" data-rri="${x.i}" data-rrk="code" data-code-suggest autocomplete="off" placeholder="コード" aria-label="科目コード">
@@ -3021,7 +3024,7 @@ function renderMaster() {
       .sort((a, b) => (a[1].srcCode || a[1].srcName).localeCompare(b[1].srcCode || b[1].srcName, "ja", { numeric: true }));
     const sys = systemOf(masterCid);
     document.getElementById("masterHelp").textContent = "";
-    listEl.innerHTML = `<div class="rc-head">別会計ソフト対応表（${Object.keys(map).length}件）${sys.mapping.length ? `。ここにない科目は${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）を使います` : ""}</div>`
+    listEl.innerHTML = `<div class="rc-head rc-title">別会計ソフト対応表<span class="rc-count">${Object.keys(map).length}件</span>${sys.mapping.length ? `。ここにない科目は${escapeHtml(sys.name)}の標準（${sys.mapping.length}件）を使います` : ""}</div>`
       + (entries.length ? `<div class="master-row mapping map-head"><span>元コード</span><span>元の会計ソフト科目名</span><span>→ ミロク</span><span>ミロク科目名</span><span></span></div>` : "")
       + (entries.length ? entries.map(([k, v]) => `<div class="master-row mapping">
         <span class="muted src-no">${escapeHtml(v.srcCode || "")}</span>
