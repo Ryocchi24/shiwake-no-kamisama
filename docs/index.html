@@ -663,8 +663,7 @@
     #companiesView .company-item { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 10px 8px; padding: 14px 16px; }
     #companiesView .co-main { grid-column: 1 / 3; padding-left: 6px; }
     #companiesView .company-item .btn-sm { grid-row: 2; height: 38px; justify-content: center; }
-    #companiesView .company-item .open-master { grid-column: 1 / 2; }
-    #companiesView .company-item [data-use] { grid-column: 2 / 4; }
+    #companiesView .company-item .open-master { grid-column: 1 / 4; }
     #companiesView .company-item .icon-btn { grid-column: 3; grid-row: 1; }
     #companiesView .co-main input { max-width: none; font-size: 16px; }
     .mobile-capture .btn { border-radius: 12px; }
@@ -3184,7 +3183,6 @@ function renderCompanyList() {
         <span class="method-tag t-${c.method || "receipt"}">${escapeHtml(methodLabel(c))}</span>
       </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社設定</button>
-      <button class="btn btn-sm" data-use="${c.id}">この会社で取り込む</button>
       <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
     </div>`).join("");
 }
@@ -3259,8 +3257,6 @@ document.getElementById("newCompany").addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) document.getElementById("addCompany").click();
 });
 document.getElementById("companyList").addEventListener("click", e => {
-  const use = e.target.closest("[data-use]");
-  if (use) { switchCompany(use.dataset.use); showView("import"); return; }
   const t = e.target.closest("[data-remove]");
   if (!t) return;
   const c = companies.find(x => x.id === t.dataset.remove);
