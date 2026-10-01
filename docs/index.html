@@ -1707,6 +1707,7 @@ function render() {
   let body = "";
   items.forEach((row, i) => {
     const thumb = row.source === TRIAL_SOURCE ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
+      : row.splitRole === "r10" ? `<td class="c-thumb"></td>` // 8%と10%に分けた仕訳は、写真を1つ目の行にだけ出す
       : row.thumb
       ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="${row.source === NIKKEI_SOURCE ? "日計表" : "領収書"}"></td>`
       : `<td class="c-thumb"><span class="no-img">画像なし</span></td>`;
