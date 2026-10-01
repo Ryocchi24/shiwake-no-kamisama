@@ -2661,6 +2661,14 @@ function parseMasterRows(rows) {
 }
 // 別会計ソフトの科目: [{ srcCode, srcName, code }]。ミロクのコードの列がなければ code は空（あとで科目名から推測する）
 function parseSourceRows(rows) {
+  // 「勘　定　科　目」のように間に空白が入った見出しも読めるよう、セルの空白を取る
+  rows = rows.map(r => r.map(c => String(c ?? "").replace(/[\s　]+/g, "")));
+  // 弥生会計の仕訳データ（見出しなし。1列目が識別フラグ 2000/2110/2111 など、5列目が借方科目、11列目が貸方科目）
+  const yayoi = rows.filter(r => /^2[01]\d\d$/.test(r[0]) && r.length >= 11);
+  if (yayoi.length >= 3 && yayoi.length >= rows.length * 0.5) {
+    const names = yayoi.flatMap(r => [r[4], r[10]]).filter(n => n && !isCodeCell(n) && !/^諸口$/.test(n));
+    return uniqueSources(names.map(n => ({ srcCode: "", srcName: n, code: "" })));
+  }
   const h3 = findHeader(rows, [/(元|別|旧).*(コード|番号)|^(コード|番号|科目コード)$/, /(元|別|旧)?.*科目名?$|名称/, /ミロク/]);
   if (h3) {
     const [sc, nc, mc] = h3.cols;
