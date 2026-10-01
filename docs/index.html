@@ -188,14 +188,18 @@
   .row-actions { display: flex; gap: 2px; }
   .act-label { display: none; }
   /* 複合仕訳の＋・－と、完了 */
-  .add-line { width: 32px; height: 32px; flex: none; border-radius: 50%; border: 1.5px solid var(--primary); background: var(--surface); color: var(--primary);
-    font: inherit; font-size: 19px; font-weight: 700; line-height: 1; display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
-  .add-line:active { background: var(--primary-soft); }
+  /* ＋：ほかのボタンと同じ白い角丸に、線のアイコン（借方は紺、貸方は茶） */
+  .btn.add-line { width: 34px; min-width: 34px; padding: 0; justify-content: center; }
+  .btn.add-line svg { width: 17px; height: 17px; flex: none; }
+  .add-line.debit { color: var(--debit-text); }
+  .add-line.credit { color: var(--credit-text); }
   .act-spacer { flex: 1; }
   .v-actions { align-items: center; gap: 6px; flex-wrap: wrap; }
   td.has-minus { position: relative; }
-  .line-del { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--err); background: var(--surface);
-    color: var(--err); font: inherit; font-size: 15px; font-weight: 700; line-height: 1; display: grid; place-items: center; cursor: pointer; padding: 0; z-index: 1; }
+  .line-del { position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--surface);
+    color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; z-index: 1; }
+  .line-del svg { width: 14px; height: 14px; }
+  .line-del:hover, .line-del:active { color: var(--err); border-color: #f0c4c4; background: var(--err-soft); }
   tr.locked td.s-debit, tr.locked td.s-credit, tr.locked td.c-date { opacity: .7; }
   td input:disabled, td select:disabled, td textarea:disabled { color: var(--text); -webkit-text-fill-color: var(--text); opacity: 1; }
   .tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
@@ -473,7 +477,7 @@
   #companiesView .company-item:hover { background: var(--surface-2); }
   /* 会社ごとに、はっきりした枠で囲む */
   #companiesView .company-list { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
-  #companiesView .company-item, #companiesView .company-item:last-child { border: 1.5px solid var(--primary); border-radius: 12px; background: var(--surface); box-shadow: 0 1px 2px rgba(17, 24, 39, .06); padding: 12px 14px; }
+  #companiesView .company-item, #companiesView .company-item:last-child { border: 1px solid var(--line-strong); border-left: 4px solid var(--primary); border-radius: 10px; background: var(--surface); box-shadow: 0 1px 3px rgba(17, 24, 39, .06); padding: 12px 14px; }
   .co-main { min-width: 0; display: flex; align-items: center; gap: 8px; }
   #companiesView .co-main input { flex: 0 1 auto; min-width: 4em; max-width: 100%; height: 30px; font: inherit; font-size: 15px; font-weight: 600; color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: 0 6px; margin-left: -7px; background: transparent; text-overflow: ellipsis; }
   #companiesView .co-main input:hover { border-color: var(--line); }
@@ -646,6 +650,7 @@
     /* 削除・移動は、各仕訳のいちばん下の右に、文字付きのボタンで出す */
     td.c-del { grid-column: 1 / -1 !important; order: 3; margin-top: 10px; }
     td.c-del .row-actions { justify-content: flex-end; gap: 8px; }
+    td.c-del .btn-sm { height: 34px; border-radius: 8px; font-size: 13px; }
     td.c-del .icon-btn { width: auto; height: 34px; padding: 0 12px; gap: 5px; display: inline-flex; align-items: center;
       border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font: inherit; font-size: 13px; color: var(--text); }
     td.c-del .icon-btn.del { color: var(--err); border-color: #f0c4c4; }
@@ -708,6 +713,8 @@
   <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></symbol>
   <symbol id="i-receipt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2z"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
   <symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/></symbol>
@@ -1735,7 +1742,7 @@ function render() {
   const actions = (row, v, locked) => {
     const del = `<button class="icon-btn del" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg><span class="act-label">削除</span></button>`;
     if (row.source === TRIAL_SOURCE || row.status !== "done") return `<td class="c-del"><div class="row-actions">${del}</div></td>`;
-    const add = side => `<button class="add-line" data-addline="${side}" data-vid="${escapeHtml(v)}" title="${side === "debit" ? "借方" : "貸方"}を増やす" aria-label="${side === "debit" ? "借方" : "貸方"}を増やす">＋</button>`;
+    const add = side => `<button class="btn btn-sm add-line ${side}" data-addline="${side}" data-vid="${escapeHtml(v)}" aria-label="${side === "debit" ? "借方" : "貸方"}を増やす" title="${side === "debit" ? "借方" : "貸方"}を増やす"><svg><use href="#i-plus"/></svg></button>`;
     const lock = `<button class="btn btn-sm lock-btn ${locked ? "" : "btn-primary"}" data-lock="${escapeHtml(v)}">${locked ? "完了解除" : "完了"}</button>`;
     return `<td class="c-del"><div class="row-actions v-actions">${locked ? "" : add("debit")}<span class="act-spacer"></span>${lock}${locked ? "" : del}${locked ? "" : add("credit")}</div></td>`;
   };
@@ -1799,7 +1806,7 @@ function render() {
         if (!src) return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""} c-none"></td>`;
         // 借方・貸方が2つ以上あるときは、それぞれの塊に「－」（その塊を消す）を出す
         const minus = compound && !locked && f.side && f === firstOfSide[f.side] && sideCount[f.side] > 1
-          ? `<button class="line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す">－</button>` : "";
+          ? `<button class="line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す"><svg><use href="#i-minus"/></svg></button>` : "";
         return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(anchor).ok ? " unbalanced" : ""}${minus ? " has-minus" : ""}" data-label="${f.label}">
         ${cellInput(src, f)}${minus}
         ${f.key === "summary" && isTrial ? `<div class="src-line">元の会計ソフト科目名: ${escapeHtml(anchor.srcName)}${anchor.srcCode ? ` [${escapeHtml(anchor.srcCode)}]` : ""}</div>` : ""}
