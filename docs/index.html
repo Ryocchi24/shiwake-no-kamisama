@@ -2686,7 +2686,15 @@ function parseSourceRows(rows) {
     .map(r => ({ srcCode: String(r[at]).trim(), srcName: String(r[at + 1]).trim(), code: isCodeCell(r[at + 2] ?? "") ? String(r[at + 2]).trim() : "" }));
   // 科目名の列（見出しが「勘定科目」「科目名」「名称」など）だけの一覧。右にミロクのコードの列があれば使う
   const hn = findHeader(rows, [/科目|勘定|名称/]);
-  if (!hn) return [];
+  if (!hn) {
+    // 見出しもコードもなく、科目名だけが並んでいる一覧（弥生会計の科目の書き出しなど）: 科目名の多い列を使う
+    const isName = c => c && !isCodeCell(c) && !AMOUNT_RE.test(c) && /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(c);
+    const width = Math.max(0, ...rows.map(r => r.length));
+    let best = -1, hits = 0;
+    for (let c = 0; c < width; c++) { const n = rows.filter(r => isName(r[c])).length; if (n > hits) { best = c; hits = n; } }
+    if (hits < 3) return [];
+    return uniqueSources(rows.map(r => r[best]).filter(isName).filter(n => !/合計|小計/.test(n)).map(n => ({ srcCode: "", srcName: n, code: "" })));
+  }
   const nc = hn.cols[0], mc = rows[hn.row].findIndex((c, k) => k !== nc && /ミロク/.test(c));
   return uniqueSources(rows.slice(hn.row + 1).map(r => ({ srcCode: "", srcName: String(r[nc] ?? "").replace(/[\s　]+/g, ""), code: mc >= 0 && isCodeCell(r[mc]) ? String(r[mc]).trim() : "" }))
     .filter(x => x.srcName && !isCodeCell(x.srcName) && !isSubtotalName(x.srcName)));
