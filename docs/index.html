@@ -618,7 +618,8 @@
     td.b-left { border: none; }
     td.rowno { display: none; }
     td.c-thumb { position: absolute; left: 14px; top: 14px; }
-    .v-no { display: block; margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; white-space: nowrap; }
+    .v-no { display: inline-block; margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line);
+      font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; vertical-align: middle; }
     .add-wrap { display: none; }
     tbody tr.row-receipt td.c-add { display: flex; padding-top: 6px; background: none; }
     tbody tr.row-receipt td.c-add-debit { grid-column: 1; }
@@ -1670,7 +1671,7 @@ function refreshBalance(row) {
   if (el) el.outerHTML = balanceHtml(row);
   const head = list.querySelector(`tr[data-vid-head="${v}"]`);
   head?.querySelector("td.c-date")?.classList.toggle("unbalanced", !balanceOf(row).ok);
-  const badge = head?.querySelector(".c-status");
+  const badge = head?.querySelector(".c-status .st");
   if (badge) badge.innerHTML = statusBadge(row);
 }
 const noteHtml = r => {
@@ -1813,8 +1814,8 @@ function render() {
     for (let i = 0; i < k; i++) {
       const first = i === 0, last = i === k - 1, dRow = D[i] || null, cRow = C[i] || null;
       const srcOf = f => !f.side ? (first ? anchor : null) : f.side === "debit" ? dRow : cRow;
-      // スマホでは、写真の下に「何件目 / 全部で何件」を出す（たくさん読み込んだ時に、今どこを見ているか分かるように）
-      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? statusBadge(anchor) : ""}</td>${first ? thumbOf(anchor).replace(/<\/td>$/, `<div class="v-no">${no} / ${totalV}</div></td>`) : `<td class="c-thumb"></td>`}`;
+      // スマホでは、仕訳の枠の一番上に「何件目 / 全部で何件」を出す（たくさん読み込んだ時に、今どこを見ているか分かるように）
+      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? `<span class="v-no">${no} / ${totalV}</span><span class="st">${statusBadge(anchor)}</span>` : ""}</td>${first ? thumbOf(anchor) : `<td class="c-thumb"></td>`}`;
       // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
       const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
         [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(kd => fields.find(f => f.side === side && kindOf(f.key) === kd) || { blank: true, side }))];
@@ -2025,7 +2026,7 @@ list.addEventListener("input", e => {
   e.target.classList.toggle("missing", fieldMissing(row, key, value));
   // 複合仕訳は、日付を同じまとまりの行すべてにそろえる
   if (key === "date" && lineOf(row) !== "pair") for (const o of voucherRows(row)) o.date = value;
-  const badge = list.querySelector(`tr[data-vid-head="${vidOf(row)}"] .c-status`);
+  const badge = list.querySelector(`tr[data-vid-head="${vidOf(row)}"] .c-status .st`);
   if (badge) badge.innerHTML = statusBadge(row);
   if (/Amount$/.test(key)) refreshBalance(row);
   const noteEl = list.querySelector(`[data-note-for="${vidOf(row)}"]`);
