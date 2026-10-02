@@ -638,7 +638,8 @@
     /* 借方・貸方が複数ある仕訳は、2行目からを1行目の続きとして見せる（間の線・日付・画像を出さない） */
     tbody tr.v-mid { border-bottom: none; padding-bottom: 4px; }
     tbody tr.v-cont { padding-top: 0; }
-    tbody tr.v-cont td.c-date, tbody tr.v-cont td.c-thumb, tbody tr.v-cont td.c-status { display: none; }
+    tbody tr.v-cont td.c-date, tbody tr.v-cont td.c-thumb { display: none; }
+    tbody tr.v-cont td.c-status { margin: 8px 0 2px; } /* 足した塊の上にも、同じ仕訳の番号を出す */
     tbody tr.v-mid td.c-del { display: none; }
     td.c-del .v-actions { justify-content: flex-start; align-items: center; }
     tbody tr.row-receipt td.c-status { margin-bottom: 6px; }
@@ -1815,7 +1816,7 @@ function render() {
       const first = i === 0, last = i === k - 1, dRow = D[i] || null, cRow = C[i] || null;
       const srcOf = f => !f.side ? (first ? anchor : null) : f.side === "debit" ? dRow : cRow;
       // スマホでは、仕訳の枠の一番上に「何件目 / 全部で何件」を出す（たくさん読み込んだ時に、今どこを見ているか分かるように）
-      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? `<span class="v-no">${no} / ${totalV}</span><span class="st">${statusBadge(anchor)}</span>` : ""}</td>${first ? thumbOf(anchor) : `<td class="c-thumb"></td>`}`;
+      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? `<span class="v-no">${no} / ${totalV}</span><span class="st">${statusBadge(anchor)}</span>` : `<span class="v-no">${no} / ${totalV}</span>`}</td>${first ? thumbOf(anchor) : `<td class="c-thumb"></td>`}`;
       // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
       const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
         [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(kd => fields.find(f => f.side === side && kindOf(f.key) === kd) || { blank: true, side }))];
