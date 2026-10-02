@@ -196,6 +196,8 @@
   .act-spacer { flex: 1; }
   .add-wrap { display: flex; gap: 6px; margin-top: 8px; }
   .add-wrap.credit { justify-content: flex-end; }
+  td.c-add { display: none; }
+  .v-no { display: none; }
   .v-actions { align-items: center; gap: 6px; flex-wrap: wrap; }
   /* －：塊の右上の、項目名と同じ行に置く（枠にも入力欄にもかからない） */
   td.has-minus { position: relative; }
@@ -616,6 +618,11 @@
     td.b-left { border: none; }
     td.rowno { display: none; }
     td.c-thumb { position: absolute; left: 14px; top: 14px; }
+    .v-no { display: block; margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; white-space: nowrap; }
+    .add-wrap { display: none; }
+    tbody tr.row-receipt td.c-add { display: flex; padding-top: 6px; background: none; }
+    tbody tr.row-receipt td.c-add-debit { grid-column: 1; }
+    tbody tr.row-receipt td.c-add-credit { grid-column: 2; justify-content: flex-end; }
     td.c-status { grid-column: 1 / 3; padding-right: 30px; }
     td.c-summary, td.c-msg { grid-column: 1 / 3; }
     /* 領収書・日計表は、借方を左、貸方を右に並べる（日付は上、摘要は下） */
@@ -648,7 +655,7 @@
     tbody tr.row-receipt td.has-minus { padding-top: 10px; }
     tbody tr.row-receipt td.has-minus::before { line-height: 36px; padding-right: 36px; }
     tbody tr.row-receipt td.has-minus .line-del { top: 10px; right: 10px; }
-    tbody tr.row-receipt td.s-debit:has(+ td.s-credit), tbody tr.row-receipt td.s-credit:has(+ td.c-del) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
+    tbody tr.row-receipt td.s-debit:has(+ td.s-credit), tbody tr.row-receipt td.s-credit:has(+ td.c-del), tbody tr.row-receipt td.s-credit:has(+ td.c-add) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
     tbody tr.row-receipt td.s-debit { background: var(--debit); }
     tbody tr.row-receipt td.s-credit { background: var(--credit); }
     tbody tr.row-receipt td.s-debit::before { color: var(--debit-text); }
@@ -1777,6 +1784,7 @@ function render() {
   const firstOfSide = { debit: fields.find(f => f.side === "debit"), credit: fields.find(f => f.side === "credit") };
   const lastOfSide = { debit: fields.filter(f => f.side === "debit").at(-1), credit: fields.filter(f => f.side === "credit").at(-1) };
   let body = "", no = 0;
+  const totalV = voucherCount(items);
   const seen = new Set();
   for (const row0 of items) {
     // 仕訳のまとまりごとに描く（借方・貸方が複数あるときは、何行かに分けて並べる）
@@ -1805,7 +1813,8 @@ function render() {
     for (let i = 0; i < k; i++) {
       const first = i === 0, last = i === k - 1, dRow = D[i] || null, cRow = C[i] || null;
       const srcOf = f => !f.side ? (first ? anchor : null) : f.side === "debit" ? dRow : cRow;
-      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? statusBadge(anchor) : ""}</td>${first ? thumbOf(anchor) : `<td class="c-thumb"></td>`}`;
+      // スマホでは、写真の下に「何件目 / 全部で何件」を出す（たくさん読み込んだ時に、今どこを見ているか分かるように）
+      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? statusBadge(anchor) : ""}</td>${first ? thumbOf(anchor).replace(/<\/td>$/, `<div class="v-no">${no} / ${totalV}</div></td>`) : `<td class="c-thumb"></td>`}`;
       // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
       const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
         [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(kd => fields.find(f => f.side === side && kindOf(f.key) === kd) || { blank: true, side }))];
@@ -1827,7 +1836,11 @@ function render() {
         ${f.key === "date" ? balanceHtml(anchor) : ""}
         ${f.key === (isTrial ? "summary" : "date") ? noteHtml(anchor) : ""}
       </td>`;
-      }).join("") + (last ? actions(anchor, v, locked) : `<td class="c-del"></td>`) + `</tr>`;
+      }).join("")
+        // スマホでは＋を、借方・貸方の枠の外（その側の一番下の塊のすぐ下）に出す（PCでは枠の中に出す）
+        + (!isTrial && !locked ? ["debit", "credit"].filter(side => (side === "debit" ? dRow === D.at(-1) : cRow === C.at(-1)) && (side === "debit" ? dRow : cRow))
+          .map(side => `<td class="c-add c-add-${side}">${addBtn(side, v)}</td>`).join("") : "")
+        + (last ? actions(anchor, v, locked) : `<td class="c-del"></td>`) + `</tr>`;
     }
   }
 
