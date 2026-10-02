@@ -601,6 +601,7 @@
     .master-row.mapping > span:nth-of-type(3) { grid-column: 2 / 4; grid-row: 2; font-size: 11px; padding-left: 6px; }
     .master-row.mapping > button { grid-column: 3; grid-row: 1; }
     .doc-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: -4px 0 14px; }
+    .doc-types .doc-type[data-doc="card"] { grid-column: span 2; } /* 名前が長いので2つ分の幅 */
     .doc-type { justify-content: center; gap: 4px; font-size: 12px; padding: 7px 4px; white-space: nowrap; }
     .doc-type .soon-tag { font-size: 9.5px; padding: 0 3px; }
     .method { flex-direction: column; gap: 2px; white-space: normal; text-align: center; font-size: 12px; line-height: 1.35; padding: 8px 4px; justify-content: center; }
@@ -793,6 +794,7 @@
         <button class="doc-type" data-doc="purchase">仕入請求書<span class="soon-tag">準備中</span></button>
         <button class="doc-type" data-doc="sales">売上請求書<span class="soon-tag">準備中</span></button>
         <button class="doc-type" data-doc="payroll">給与台帳<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="card">クレジット明細<span class="soon-tag">準備中</span></button>
       </div>
       <section class="method-soon" id="methodSoon" hidden>
         <h2 id="methodSoonTitle"></h2>
@@ -2426,6 +2428,7 @@ const AUTO_RULE_TYPES = [
   { id: "purchase", name: "仕入請求書", ready: false, fixed: "貸方の科目",     fixedEx: "例: 2103", rule: "取引先 → 借方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "sales",    name: "売上請求書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1142", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "payroll",  name: "給与台帳",   ready: false, fixed: "支払いの科目",   fixedEx: "例: 1107", rule: "項目名 → 科目",         ruleEx: "例: 源泉所得税" },
+  { id: "card",     name: "クレジット明細", ready: false, fixed: "貸方の科目",   fixedEx: "例: 2106", rule: "利用店名 → 借方の科目", ruleEx: "例: 利用店の名前" },
 ];
 const RECEIPT_SETTINGS_KEY = "shiwake-receipt-settings"; // { 会社ID: { 書類の種類: { fixedCode, rules: [{ keyword, code }] } } }
 let receiptSettings = load(RECEIPT_SETTINGS_KEY, {});
