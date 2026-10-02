@@ -601,7 +601,9 @@
     .master-row.mapping > span:nth-of-type(3) { grid-column: 2 / 4; grid-row: 2; font-size: 11px; padding-left: 6px; }
     .master-row.mapping > button { grid-column: 3; grid-row: 1; }
     .doc-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: -4px 0 14px; }
-    .doc-types .doc-type[data-doc="card"] { grid-column: span 2; } /* 名前が長いので2つ分の幅 */
+    /* ボタンは全部同じ幅。名前が長くても収まるよう、「準備中」は名前の下に置く */
+    .doc-types .doc-type { flex-direction: column; justify-content: center; gap: 2px; line-height: 1.25; min-height: 44px; padding: 5px 4px; white-space: nowrap; }
+    .doc-types .doc-type .soon-tag { margin: 0; }
     .doc-type { justify-content: center; gap: 4px; font-size: 12px; padding: 7px 4px; white-space: nowrap; }
     .doc-type .soon-tag { font-size: 9.5px; padding: 0 3px; }
     .method { flex-direction: column; gap: 2px; white-space: normal; text-align: center; font-size: 12px; line-height: 1.35; padding: 8px 4px; justify-content: center; }
