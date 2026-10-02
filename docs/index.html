@@ -1512,14 +1512,14 @@ function fieldKeysOf(c) {
   return FIELDS.map(f => f.key);
 }
 // 確認画面とCSVに出す項目（どちらも同じ）
-// 番号は、画面に出す順（＝CSVの列の順）に①から振り直す
+// 確認画面の項目名には番号を付けない（番号はCSVの列の順のためのもので、会社設定の「使う項目」にだけ出す）
 function visibleFields() {
   const keys = currentSource() === TRIAL_SOURCE ? TRIAL_KEYS : fieldKeysOf(currentCompany());
-  const num = i => String.fromCharCode(0x2460 + i), plain = t => t.replace(/^[\u2460-\u2473]/, "");
+  const plain = t => t.replace(/^[\u2460-\u2473]/, "");
   // 試算表は片側だけの仕訳なので、摘要は1つ（借方と貸方の間）
   const trialSummary = { key: "summary", label: "摘要", cls: "c-summary b-left" };
   return FIELDS.filter(f => keys.includes(f.key)).map(f => currentSource() === TRIAL_SOURCE && f.key === "summary" ? trialSummary : f)
-    .map((f, i) => ({ ...f, label: num(i) + plain(f.label), head: f.head && num(i) + plain(f.head) }));
+    .map(f => ({ ...f, label: plain(f.label), head: f.head && plain(f.head) }));
 }
 
 // ---- 消費税の自動判定 ----
