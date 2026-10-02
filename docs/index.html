@@ -3168,14 +3168,15 @@ function renderMaster() {
   const q = normName(document.getElementById("masterSearch").value);
   const listEl = document.getElementById("masterList");
   if (masterTab === "master") {
-    document.getElementById("masterHelp").textContent = `ミロクの科目コードの一覧（${masterOf(masterCid).length}科目）`;
+    document.getElementById("masterHelp").textContent = "";
     const items = masterOf(masterCid).map((m, i) => ({ ...m, i })).filter(m => !q || normName(m.code + m.name).includes(q))
       .sort((a, b) => (a.code === "" ? -1 : 0) - (b.code === "" ? -1 : 0) || Number(a.code) - Number(b.code) || a.code.localeCompare(b.code)); // コード順（追加したばかりの空の行は先頭）
-    listEl.innerHTML = items.length ? items.map(m => `<div class="master-row">
+    // 一覧の見出し（別会計ソフト対応表と同じ形）
+    listEl.innerHTML = `<div class="rc-head rc-title">ミロク科目マスタ<span class="rc-count">${masterOf(masterCid).length}件</span></div>` + (items.length ? items.map(m => `<div class="master-row">
         <input value="${escapeHtml(m.code)}" data-mi="${m.i}" data-mk="code" inputmode="numeric" aria-label="コード">
         <input value="${escapeHtml(m.name)}" data-mi="${m.i}" data-mk="name" aria-label="科目名">
         <button class="icon-btn" data-mdel="${m.i}" title="削除"><svg><use href="#i-trash"/></svg></button></div>`).join("")
-      : `<div class="master-empty">「ファイルから読み込む」でミロクの科目マスタを入れてください</div>`;
+      : `<div class="master-empty">「ファイルから読み込む」でミロクの科目マスタを入れてください</div>`);
   } else if (masterTab === "receipt") {
     const cfg = AUTO_RULE_TYPES.find(t => t.id === ruleType) || AUTO_RULE_TYPES[0];
     const rc = autoRulesOf(masterCid, cfg.id);
