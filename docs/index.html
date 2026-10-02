@@ -338,10 +338,9 @@
   #docTypes { display: block !important; }
   #docTypes[hidden] { display: none !important; }
   #docTypes .doc-type { display: none !important; }
-  .doc-select-wrap { position: relative; display: inline-flex; min-width: 240px; max-width: 100%; }
-  .doc-select { appearance: none; -webkit-appearance: none; width: 100%; height: 38px; padding: 0 38px 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text);
-    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px; box-shadow: var(--shadow); cursor: pointer; }
-  .doc-select-wrap svg { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
+  .doc-picker { margin-top: 0; }
+  .doc-picker .co-picker-list { max-height: none; } /* 種類は7つだけなので、全部をスクロールなしで出す */
+  .co-picker-item .soon-tag { flex: none; }
   .doc-type { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface);
     color: var(--muted); border-radius: 999px; padding: 5px 14px; cursor: pointer; }
   .doc-type.active { background: var(--text); border-color: var(--text); color: #fff; }
@@ -576,8 +575,6 @@
     #importView .page-head > div { width: 100%; }
     .co-picker, .co-picker-btn { display: flex; width: 100%; }
     .co-picker-btn { font-size: 16px; }
-    .doc-select-wrap { display: flex; width: 100%; }
-    .doc-select { font-size: 16px; }
     .co-picker-menu { width: 100%; max-width: none; }
     .co-picker-menu input { font-size: 16px; height: 40px; }
     .co-picker-item { padding: 12px 10px; font-size: 15px; }
@@ -800,18 +797,10 @@
       </div>
       <!-- ①原始資料の種類（レシート・領収書／給与台帳／通帳） -->
       <div class="doc-types" id="docTypes" role="tablist" aria-label="原始資料の種類">
-        <!-- 種類は、会社を選ぶ欄と同じ形のプルダウンで選ぶ（下のボタンは使わないが、選んでいる種類の名前を取るために残す） -->
-        <div class="doc-select-wrap">
-          <select id="docSelect" class="doc-select" aria-label="原始資料の種類">
-            <option value="receipt">出金領収書</option>
-            <option value="income">入金領収書（準備中）</option>
-            <option value="passbook">通帳（準備中）</option>
-            <option value="purchase">仕入請求書（準備中）</option>
-            <option value="sales">売上請求書（準備中）</option>
-            <option value="payroll">給与台帳（準備中）</option>
-            <option value="card">クレジット明細（準備中）</option>
-          </select>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <!-- 種類は、会社を選ぶ欄と同じ形で選ぶ（下のボタンは使わないが、選んでいる種類の名前を取るために残す） -->
+        <div class="co-picker doc-picker" id="docPicker">
+          <button class="co-picker-btn" id="docPickerBtn" aria-haspopup="listbox"><span id="docPickerName"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+          <div class="co-picker-menu" id="docPickerMenu" hidden><div class="co-picker-list" id="docPickerList" role="listbox"></div></div>
         </div>
         <button class="doc-type" data-doc="receipt">出金領収書</button>
         <button class="doc-type" data-doc="income">入金領収書<span class="soon-tag">準備中</span></button>
@@ -3533,7 +3522,7 @@ function renderMethod() {
   const doc = settings.docType || "receipt";
   for (const b of document.querySelectorAll(".method")) b.classList.toggle("active", b.dataset.method === method);
   for (const b of document.querySelectorAll(".doc-type")) b.classList.toggle("active", b.dataset.doc === doc);
-  document.getElementById("docSelect").value = doc;
+  renderDocPicker(doc);
   document.getElementById("docTypes").hidden = method !== "receipt";
   const fmt = importFormat(method);
   const ready = (method === "receipt" ? doc === "receipt" : true) && fmt.types.length > 0;
@@ -3553,11 +3542,23 @@ function renderMethod() {
     method === "receipt" ? label(activeDoc) : label(activeMethod).replace(/^[①②③]/, "");
   document.body.classList.toggle("method-off", !ready);
 }
-document.getElementById("docSelect").addEventListener("change", e => {
-  settings.docType = e.target.value;
+// 原始資料の種類の選択（会社を選ぶ欄と同じ形）
+const docPickerMenu = document.getElementById("docPickerMenu");
+function renderDocPicker(doc) {
+  const cur = AUTO_RULE_TYPES.find(t => t.id === doc) || AUTO_RULE_TYPES[0];
+  document.getElementById("docPickerName").textContent = cur.name;
+  document.getElementById("docPickerList").innerHTML = AUTO_RULE_TYPES.map(t => `<button class="co-picker-item ${t.id === cur.id ? "active" : ""}" data-pickdoc="${t.id}" role="option">
+    <span>${escapeHtml(t.name)}</span>${t.ready ? "" : `<span class="soon-tag">準備中</span>`}</button>`).join("");
+}
+document.getElementById("docPickerBtn").onclick = () => { docPickerMenu.hidden = !docPickerMenu.hidden; };
+document.getElementById("docPickerList").addEventListener("click", e => {
+  const b = e.target.closest("[data-pickdoc]"); if (!b) return;
+  docPickerMenu.hidden = true;
+  settings.docType = b.dataset.pickdoc;
   saveSettings();
   renderMethod();
 });
+document.addEventListener("click", e => { if (!e.target.closest("#docPicker")) docPickerMenu.hidden = true; });
 document.getElementById("docTypes").addEventListener("click", e => {
   const b = e.target.closest("[data-doc]");
   if (!b) return;
