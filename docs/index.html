@@ -334,6 +334,14 @@
   .master-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
   .doc-types { display: flex; gap: 6px; margin: -6px 0 16px; flex-wrap: wrap; }
   .doc-types[hidden], .methods[hidden] { display: none !important; }
+  /* 原始資料の種類のプルダウン（会社を選ぶ欄と同じ形） */
+  #docTypes { display: block !important; }
+  #docTypes[hidden] { display: none !important; }
+  #docTypes .doc-type { display: none !important; }
+  .doc-select-wrap { position: relative; display: inline-flex; min-width: 240px; max-width: 100%; }
+  .doc-select { appearance: none; -webkit-appearance: none; width: 100%; height: 38px; padding: 0 38px 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text);
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px; box-shadow: var(--shadow); cursor: pointer; }
+  .doc-select-wrap svg { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
   .doc-type { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface);
     color: var(--muted); border-radius: 999px; padding: 5px 14px; cursor: pointer; }
   .doc-type.active { background: var(--text); border-color: var(--text); color: #fff; }
@@ -568,6 +576,8 @@
     #importView .page-head > div { width: 100%; }
     .co-picker, .co-picker-btn { display: flex; width: 100%; }
     .co-picker-btn { font-size: 16px; }
+    .doc-select-wrap { display: flex; width: 100%; }
+    .doc-select { font-size: 16px; }
     .co-picker-menu { width: 100%; max-width: none; }
     .co-picker-menu input { font-size: 16px; height: 40px; }
     .co-picker-item { padding: 12px 10px; font-size: 15px; }
@@ -790,6 +800,19 @@
       </div>
       <!-- ①原始資料の種類（レシート・領収書／給与台帳／通帳） -->
       <div class="doc-types" id="docTypes" role="tablist" aria-label="原始資料の種類">
+        <!-- 種類は、会社を選ぶ欄と同じ形のプルダウンで選ぶ（下のボタンは使わないが、選んでいる種類の名前を取るために残す） -->
+        <div class="doc-select-wrap">
+          <select id="docSelect" class="doc-select" aria-label="原始資料の種類">
+            <option value="receipt">出金領収書</option>
+            <option value="income">入金領収書（準備中）</option>
+            <option value="passbook">通帳（準備中）</option>
+            <option value="purchase">仕入請求書（準備中）</option>
+            <option value="sales">売上請求書（準備中）</option>
+            <option value="payroll">給与台帳（準備中）</option>
+            <option value="card">クレジット明細（準備中）</option>
+          </select>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
         <button class="doc-type" data-doc="receipt">出金領収書</button>
         <button class="doc-type" data-doc="income">入金領収書<span class="soon-tag">準備中</span></button>
         <button class="doc-type" data-doc="passbook">通帳<span class="soon-tag">準備中</span></button>
@@ -3509,6 +3532,7 @@ function renderMethod() {
   const doc = settings.docType || "receipt";
   for (const b of document.querySelectorAll(".method")) b.classList.toggle("active", b.dataset.method === method);
   for (const b of document.querySelectorAll(".doc-type")) b.classList.toggle("active", b.dataset.doc === doc);
+  document.getElementById("docSelect").value = doc;
   document.getElementById("docTypes").hidden = method !== "receipt";
   const fmt = importFormat(method);
   const ready = (method === "receipt" ? doc === "receipt" : true) && fmt.types.length > 0;
@@ -3528,6 +3552,11 @@ function renderMethod() {
     method === "receipt" ? label(activeDoc) : label(activeMethod).replace(/^[①②③]/, "");
   document.body.classList.toggle("method-off", !ready);
 }
+document.getElementById("docSelect").addEventListener("change", e => {
+  settings.docType = e.target.value;
+  saveSettings();
+  renderMethod();
+});
 document.getElementById("docTypes").addEventListener("click", e => {
   const b = e.target.closest("[data-doc]");
   if (!b) return;
