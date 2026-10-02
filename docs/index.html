@@ -1786,7 +1786,11 @@ function render() {
   const firstOfSide = { debit: fields.find(f => f.side === "debit"), credit: fields.find(f => f.side === "credit") };
   const lastOfSide = { debit: fields.filter(f => f.side === "debit").at(-1), credit: fields.filter(f => f.side === "credit").at(-1) };
   let body = "", no = 0;
-  const totalV = voucherCount(items);
+  // 「何件目 / 全部」は、＋で足した塊も1件として、上から順に数える
+  const linesOfV = vr => vr[0].status !== "done" || (vr.length === 1 && lineOf(vr[0]) === "pair") ? 1
+    : Math.max(vr.filter(o => lineOf(o) !== "c").length, vr.filter(o => lineOf(o) !== "d").length, 1);
+  const totalV = [...new Set(items.map(vidOf))].reduce((n, v) => n + linesOfV(items.filter(o => vidOf(o) === v)), 0);
+  let pos = 0;
   const seen = new Set();
   for (const row0 of items) {
     // 仕訳のまとまりごとに描く（借方・貸方が複数あるときは、何行かに分けて並べる）
@@ -1803,7 +1807,7 @@ function render() {
       const msg = anchor.status === "reading"
         ? `<span class="status-msg">読み取っています…</span>`
         : `<span class="status-msg error">${escapeHtml(anchor.error)}<button class="btn" data-retry="${anchor.id}">再読み取り</button></span>`;
-      body += `<tr class="is-${anchor.status}" data-row="${anchor.id}" data-vid-head="${escapeHtml(v)}"><td class="rowno">${no}</td><td class="c-status">${statusBadge(anchor)}</td>${thumbOf(anchor)}<td colspan="${fields.length}" class="c-msg">${msg}</td>${actions(anchor, v, false)}</tr>`;
+      body += `<tr class="is-${anchor.status}" data-row="${anchor.id}" data-vid-head="${escapeHtml(v)}"><td class="rowno">${no}</td><td class="c-status"><span class="v-no">${++pos} / ${totalV}</span><span class="st">${statusBadge(anchor)}</span></td>${thumbOf(anchor)}<td colspan="${fields.length}" class="c-msg">${msg}</td>${actions(anchor, v, false)}</tr>`;
       continue;
     }
     const compound = vr.length > 1 || lineOf(anchor) !== "pair";
@@ -1816,7 +1820,7 @@ function render() {
       const first = i === 0, last = i === k - 1, dRow = D[i] || null, cRow = C[i] || null;
       const srcOf = f => !f.side ? (first ? anchor : null) : f.side === "debit" ? dRow : cRow;
       // スマホでは、仕訳の枠の一番上に「何件目 / 全部で何件」を出す（たくさん読み込んだ時に、今どこを見ているか分かるように）
-      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? `<span class="v-no">${no} / ${totalV}</span><span class="st">${statusBadge(anchor)}</span>` : `<span class="v-no">${no} / ${totalV}</span>`}</td>${first ? thumbOf(anchor) : `<td class="c-thumb"></td>`}`;
+      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status"><span class="v-no">${++pos} / ${totalV}</span>${first ? `<span class="st">${statusBadge(anchor)}</span>` : ""}</td>${first ? thumbOf(anchor) : `<td class="c-thumb"></td>`}`;
       // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
       const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
         [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(kd => fields.find(f => f.side === side && kindOf(f.key) === kd) || { blank: true, side }))];
