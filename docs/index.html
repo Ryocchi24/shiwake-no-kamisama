@@ -639,7 +639,8 @@
     tbody tr.v-mid { border-bottom: none; padding-bottom: 4px; }
     tbody tr.v-cont { padding-top: 0; }
     tbody tr.v-cont td.c-date, tbody tr.v-cont td.c-thumb { display: none; }
-    tbody tr.v-cont td.c-status { margin: 8px 0 2px; } /* 足した塊の上にも、同じ仕訳の番号を出す */
+    /* 足した塊の上にも番号を出し、上に区切りの線を引く（片側だけ足した時も同じ） */
+    tbody tr.v-cont td.c-status { margin: 10px 0 2px; padding-top: 10px; border-top: 1px dashed var(--line-strong) !important; }
     tbody tr.v-mid td.c-del { display: none; }
     td.c-del .v-actions { justify-content: flex-start; align-items: center; }
     tbody tr.row-receipt td.c-status { margin-bottom: 6px; }
