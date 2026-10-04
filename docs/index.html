@@ -1083,7 +1083,12 @@ function importFormat(method) {
 let rows = load(STORAGE_KEY, []);
 // 以前の＋で足した塊は、書類の種類（通帳・給与台帳）の印が付いていなかったので、同じ仕訳の塊から引き継ぐ
 { const docOf = new Map(rows.filter(r => r.doc && r.vid).map(r => [r.vid, r.doc]));
-  for (const r of rows) if (!r.doc && r.vid && docOf.has(r.vid)) r.doc = docOf.get(r.vid); }
+  for (const r of rows) if (!r.doc && r.vid && docOf.has(r.vid)) r.doc = docOf.get(r.vid);
+  // 通帳の科目（預金）の側の事業者区分は「－」にした（まだ完了していない行もそろえる）
+  for (const r of rows) if (r.doc === "passbook" && r.bankSide && !r.locked && r.review !== "exported") {
+    const side = r.bankSide === "d" ? "debit" : "credit";
+    if (r[side + "Biz"] === "課税事業者") r[side + "Biz"] = "";
+  } }
 const fullImages = new Map(); // groupId -> dataURL（読み込み済みの大きい画像のキャッシュ）
 // 読み取り専用の、さらに大きい画像（小さい文字をつぶさないため）。読み取りが終わったら捨てる
 const ocrImages = new Map();
@@ -1729,6 +1734,8 @@ function receiptTaxHint(text) {
   return { reduced: has8 && !has10, mixed: has8 && has10, noInvoice: t.length > 20 && !invoice };
 }
 // 行の借方・貸方の消費税を自動で入れる（手で選び直した側はそのまま）
+// 通帳の仕訳で、通帳の科目（預金）が入っている側か
+const isBankSide = (row, side) => row.doc === "passbook" && !!row.bankSide && side === (row.bankSide === "d" ? "debit" : "credit");
 function setAutoTax(row, side) {
   if (row.source === TRIAL_SOURCE) return;
   const c = companies.find(x => x.id === row.companyId);
@@ -1739,6 +1746,8 @@ function setAutoTax(row, side) {
   row[side + "Tax"] = type;
   row[side + "Rate"] = type !== "課税" ? type : h.reduced ? "8%軽" : "10%";
   // 事業者区分は取引の相手で決まる（品物が対象外・非課税でも、相手は課税事業者のことがある）
+  // 通帳の科目（預金）の側は「－」（空）
+  if (isBankSide(row, side)) { row[side + "Biz"] = ""; return; }
   // 給与台帳は「－」（空）。課税になる欄（通勤費の旅費交通費）だけ課税事業者
   if (row.doc === "payroll") { row[side + "Biz"] = type === "課税" ? "課税事業者" : ""; return; }
   row[side + "Biz"] = side === "debit" && h.noInvoice ? "免税事業者" : "課税事業者";
@@ -2321,7 +2330,7 @@ list.addEventListener("change", e => {
     const v = row[key];
     if (key.endsWith("Tax")) row[side + "Rate"] = v === "課税" ? (TAX_TYPES.includes(row[side + "Rate"]) || !row[side + "Rate"] ? "10%" : row[side + "Rate"]) : v;
     else if (key.endsWith("Rate")) row[side + "Tax"] = TAX_TYPES.includes(v) ? v : v ? "課税" : "";
-    if (!key.endsWith("Biz") && !row[side + "Biz"] && row.doc !== "payroll") row[side + "Biz"] = "課税事業者";
+    if (!key.endsWith("Biz") && !row[side + "Biz"] && row.doc !== "payroll" && !isBankSide(row, side)) row[side + "Biz"] = "課税事業者";
     row.taxManual = { ...row.taxManual, [side]: true };
     save(); render(); return;
   }
