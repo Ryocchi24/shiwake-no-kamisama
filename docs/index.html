@@ -1302,7 +1302,7 @@ async function readGroup(groupId) {
       ];
     }).map(r => ({
       id: uid(), groupId, companyId: placeholder.companyId, source: placeholder.source || "receipt", thumb: placeholder.thumb, status: "done", review: "pending",
-      store: r.store || "", item: r.item || "",
+      store: r.store || "", item: r.item || "", bizV2: true, bizV3: true,
       date: r.date || "",
       debitCode: r.debitShokuchi ? shokuchiOf(placeholder.companyId) : receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
@@ -1736,6 +1736,8 @@ function receiptTaxHint(text) {
 // 行の借方・貸方の消費税を自動で入れる（手で選び直した側はそのまま）
 // 通帳の仕訳で、通帳の科目（預金）が入っている側か
 const isBankSide = (row, side) => row.doc === "passbook" && !!row.bankSide && side === (row.bankSide === "d" ? "debit" : "credit");
+// 出金領収書で、貸方が支払いの科目（現金・未払金）か
+const isPaySide = (row, side) => side === "credit" && row.source === "receipt" && !row.doc && /^(現金|未払金)$/.test(normName(masterName(row.creditCode, row.companyId)));
 function setAutoTax(row, side) {
   if (row.source === TRIAL_SOURCE) return;
   const c = companies.find(x => x.id === row.companyId);
@@ -1747,7 +1749,8 @@ function setAutoTax(row, side) {
   row[side + "Rate"] = type !== "課税" ? type : h.reduced ? "8%軽" : "10%";
   // 事業者区分は取引の相手で決まる（品物が対象外・非課税でも、相手は課税事業者のことがある）
   // 通帳の科目（預金）の側は「－」（空）
-  if (isBankSide(row, side)) { row[side + "Biz"] = ""; return; }
+  // 出金領収書の貸方の現金・未払金も「－」
+  if (isBankSide(row, side) || isPaySide(row, side)) { row[side + "Biz"] = ""; return; }
   // 給与台帳は「－」（空）。課税になる欄（通勤費の旅費交通費）だけ課税事業者
   if (row.doc === "payroll") { row[side + "Biz"] = type === "課税" ? "課税事業者" : ""; return; }
   row[side + "Biz"] = side === "debit" && h.noInvoice ? "免税事業者" : "課税事業者";
@@ -1921,6 +1924,8 @@ function render() {
     if (r.debitTax === undefined && r.debitRate === undefined) setAutoTaxBoth(r); else moveBiz(r);
     // 以前は対象外・非課税のとき事業者区分を空にしていたので、一度だけ課税事業者を入れる
     if (!r.bizV2) { for (const side of ["debit", "credit"]) if (!r[side + "Biz"]) r[side + "Biz"] = "課税事業者"; r.bizV2 = true; }
+    // 出金領収書の貸方の現金・未払金は「－」にした（まだ完了していない行を一度だけそろえる）
+    if (!r.bizV3) { if (!r.locked && r.review !== "exported" && isPaySide(r, "credit") && r.creditBiz === "課税事業者") r.creditBiz = ""; r.bizV3 = true; }
   }
   // 見出しの上の段：続いている借方・貸方の項目をまとめる
   const groupHead = fields.reduce((a, f) => {
@@ -2330,7 +2335,7 @@ list.addEventListener("change", e => {
     const v = row[key];
     if (key.endsWith("Tax")) row[side + "Rate"] = v === "課税" ? (TAX_TYPES.includes(row[side + "Rate"]) || !row[side + "Rate"] ? "10%" : row[side + "Rate"]) : v;
     else if (key.endsWith("Rate")) row[side + "Tax"] = TAX_TYPES.includes(v) ? v : v ? "課税" : "";
-    if (!key.endsWith("Biz") && !row[side + "Biz"] && row.doc !== "payroll" && !isBankSide(row, side)) row[side + "Biz"] = "課税事業者";
+    if (!key.endsWith("Biz") && !row[side + "Biz"] && row.doc !== "payroll" && !isBankSide(row, side) && !isPaySide(row, side)) row[side + "Biz"] = "課税事業者";
     row.taxManual = { ...row.taxManual, [side]: true };
     save(); render(); return;
   }
