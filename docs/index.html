@@ -1081,6 +1081,9 @@ function importFormat(method) {
 
 /** 1行 = 1仕訳。thumb は一覧用の小さい画像（localStorage）、大きい画像は IndexedDB に保存 */
 let rows = load(STORAGE_KEY, []);
+// 以前の＋で足した塊は、書類の種類（通帳・給与台帳）の印が付いていなかったので、同じ仕訳の塊から引き継ぐ
+{ const docOf = new Map(rows.filter(r => r.doc && r.vid).map(r => [r.vid, r.doc]));
+  for (const r of rows) if (!r.doc && r.vid && docOf.has(r.vid)) r.doc = docOf.get(r.vid); }
 const fullImages = new Map(); // groupId -> dataURL（読み込み済みの大きい画像のキャッシュ）
 // 読み取り専用の、さらに大きい画像（小さい文字をつぶさないため）。読み取りが終わったら捨てる
 const ocrImages = new Map();
@@ -2366,7 +2369,7 @@ function addLine(v, side) {
   if (!anchor) return;
   const blank = { debitCode: "", debitSub: "", debitAmount: "", debitTax: "", debitRate: "", debitBiz: "課税事業者",
     creditCode: "", creditSub: "", creditAmount: "", creditTax: "", creditRate: "", creditBiz: "課税事業者", summary: "", creditSummary: "", store: "", note: "" };
-  const base = { groupId: anchor.groupId, companyId: anchor.companyId, source: anchor.source, thumb: "", status: "done", review: "pending", date: anchor.date, taxHint: {}, bizV2: true, vid: v };
+  const base = { groupId: anchor.groupId, companyId: anchor.companyId, source: anchor.source, ...(anchor.doc ? { doc: anchor.doc } : {}), thumb: "", status: "done", review: "pending", date: anchor.date, taxHint: {}, bizV2: true, vid: v };
   if (vr.length === 1 && lineOf(anchor) === "pair") {
     // 今の貸方を、貸方だけの行に移す
     const c = { ...base, ...blank, id: uid(), line: "c", creditCode: anchor.creditCode, creditSub: anchor.creditSub, creditAmount: anchor.creditAmount,
@@ -2416,6 +2419,7 @@ list.addEventListener("pointerdown", e => {
   const h = e.target.closest("[data-linemove]");
   if (!h) return;
   e.preventDefault();
+  if (blockDrag) cancelBlockDrag(); // 前のドラッグが残っていたら片付ける
   const v = h.dataset.vid, side = h.dataset.linemove;
   const vr = rows.filter(r => r.companyId === currentCompanyId && vidOf(r) === v);
   const blocks = vr.filter(o => side === "debit" ? lineOf(o) !== "c" : lineOf(o) === "c");
@@ -2467,25 +2471,38 @@ function updateDropTarget() {
 // 画面の上下の端に近いあいだは、指を止めていても少しずつなめらかに動かす（端に近いほど速く）
 function dragTick() {
   if (!blockDrag) return;
+  if (!blockDrag.trs[0]?.isConnected) return cancelBlockDrag(); // 途中で一覧が描き直されたら、やめる
   const top = compactDrag() ? 170 : 90, bottom = innerHeight - (compactDrag() ? 150 : 90), y = blockDrag.y;
   const dy = y < top ? -Math.min(18, (top - y) / 5 + 2) : y > bottom ? Math.min(18, (y - bottom) / 5 + 2) : 0;
   if (dy) { scrollBy(0, dy); updateDropTarget(); }
   blockDrag.raf = requestAnimationFrame(dragTick);
 }
-list.addEventListener("pointermove", e => {
+// 指を離したことが一覧に届かないこともあるので、画面全体で受ける
+window.addEventListener("pointermove", e => {
   if (!blockDrag || e.pointerId !== blockDrag.id) return;
   blockDrag.x = e.clientX; blockDrag.y = e.clientY;
   moveGhost();
   updateDropTarget();
 });
-const endBlockDrag = e => {
-  if (!blockDrag || e.pointerId !== blockDrag.id) return;
-  const d = blockDrag; blockDrag = null;
+// ドラッグの札・線・印を片付ける
+function clearBlockDrag(d) {
   cancelAnimationFrame(d.raf);
   d.ghost.remove(); d.line.remove();
+  for (const el of document.querySelectorAll(".drag-ghost, .drop-line")) el.remove();
   document.body.classList.remove("block-dragging");
   for (const td of list.querySelectorAll("td.drag-from, td.drop-here")) td.classList.remove("drag-from", "drop-here");
-  if (e.type === "pointerup" && d.to !== d.from) { justMovedId = d.rowId; justMovedY = d.y; moveLine(d.v, d.side, d.from, d.to); return; }
+}
+function cancelBlockDrag() {
+  const d = blockDrag; if (!d) return;
+  blockDrag = null;
+  clearBlockDrag(d);
+  for (const tr of list.querySelectorAll("tr.compact-drag")) tr.classList.remove("compact-drag");
+}
+const endBlockDrag = e => {
+  if (!blockDrag || (e.pointerId !== undefined && e.pointerId !== blockDrag.id)) return;
+  const d = blockDrag; blockDrag = null;
+  clearBlockDrag(d);
+  if ((e.type === "pointerup" || e.type === "touchend") && d.to !== d.from) { justMovedId = d.rowId; justMovedY = d.y; moveLine(d.v, d.side, d.from, d.to); return; }
   // 動かさなかったときは、たたんだ塊を元に戻し、つかんだ塊が指の下に残るようにする
   if (d.allTrs[0]?.classList.contains("compact-drag")) {
     const before = sideRect(d.trs[d.from], d.side).top;
@@ -2493,8 +2510,19 @@ const endBlockDrag = e => {
     scrollBy(0, sideRect(d.trs[d.from], d.side).top - before);
   }
 };
-list.addEventListener("pointerup", endBlockDrag);
-list.addEventListener("pointercancel", endBlockDrag);
+window.addEventListener("pointerup", endBlockDrag);
+window.addEventListener("pointercancel", endBlockDrag);
+// iPhoneでは、指の動き・離した合図（pointermove・pointerup）が届かないことがあるので、touchmove・touchend でも受ける
+window.addEventListener("touchmove", e => {
+  if (!blockDrag) return;
+  e.preventDefault(); // つかんでいる間は、画面が指で動かないようにする
+  const t = e.touches[0]; blockDrag.x = t.clientX; blockDrag.y = t.clientY;
+  moveGhost(); updateDropTarget();
+}, { passive: false });
+window.addEventListener("touchend", e => { if (blockDrag && !e.touches.length) endBlockDrag(e); });
+window.addEventListener("touchcancel", e => { if (blockDrag && !e.touches.length) endBlockDrag(e); });
+window.addEventListener("blur", cancelBlockDrag);
+document.addEventListener("visibilitychange", cancelBlockDrag);
 // －：借方か貸方の塊を1つ消す。借方・貸方が1つずつに戻ったら、ふつうの仕訳（1行）にまとめる
 function removeLine(id) {
   const row = rows.find(r => r.id === id);
