@@ -2315,6 +2315,12 @@ list.addEventListener("change", e => {
     saveReceiptSettings(); save(); render();
   }
   else if (row.doc === "payroll" && key === "date") { payrollMonth(row); save(); render(); }
+  else if (row.doc === "payroll" && row.payKey && key === (lineOf(row) === "c" ? "creditCode" : "debitCode")) {
+    // 給与台帳: 選んだ科目を、その欄（役員報酬・給料手当…）の科目として会社ごとに覚え、次から使う
+    const rules = autoRulesOf(row.companyId, "payroll").rules, ex = rules.find(r => r.keyword === row.payKey);
+    if (row[key]) { if (ex) ex.code = row[key]; else rules.push({ keyword: row.payKey, code: row[key] }); }
+    saveReceiptSettings(); save(); render();
+  }
   else if (row.source === "receipt" && !row.doc && key === "debitCode" && ruleKeywordOf(row)) {
     // 領収書: 借方のコードを、そのお店（店名が読めなければ摘要）のルールとして覚え、同じお店でコードが空の行にも入れる
     const kw = ruleKeywordOf(row);
@@ -3131,9 +3137,22 @@ const PAYROLL_LINES = [
   { side: "c", names: ["法定福利費"], summary: "雇用保険", month: true },
   { side: "c", names: ["貸付金", "短期貸付金", "従業員貸付金"], summary: "貸付金返済" },
 ];
-function codeByNames(names, cid) {
+// 科目をその会社のミロク科目マスタから名前で探す
+//   前に選んだ科目があればそれ。同じ名前が製造原価と販管費の両方にあるときや、「役員報酬（販）」のように
+//   名前に印が付いているときは、販管費のほうを選ぶ
+function codeByNames(names, cid, key) {
   const m = masterOf(cid);
-  for (const n of names) { const hit = m.filter(x => normName(x.name) === normName(n)); if (hit.length === 1) return hit[0].code; }
+  const learned = key && autoRulesOf(cid, "payroll").rules.find(r => r.keyword === key)?.code;
+  if (learned && m.some(x => x.code === learned)) return learned;
+  const isMfg = x => /製|原価|工場/.test(x.name);
+  const pick = list => list.length === 1 ? list[0] : list.filter(x => !isMfg(x)).length === 1 ? list.filter(x => !isMfg(x))[0]
+    : list.filter(x => /販/.test(x.name)).length === 1 ? list.filter(x => /販/.test(x.name))[0] : null;
+  for (const n of names) { const hit = pick(m.filter(x => normName(x.name) === normName(n))); if (hit) return hit.code; }
+  for (const n of names) {
+    const t = normName(n);
+    const hit = pick(m.filter(x => { const v = normName(x.name); return (v.startsWith(t) || v.endsWith(t)) && v.length - t.length <= 4 && !/未払|未収|前払|預り|引当/.test(v.replace(t, "")); }));
+    if (hit) return hit.code;
+  }
   return suggestCode(names[0], cid) || "";
 }
 async function importPayroll(files) {
@@ -3188,9 +3207,9 @@ async function importPayroll(files) {
 function addPayrollVoucher(groupId, thumb, { amounts = [], date = "", note = "" }, cid, blank) {
   const vid = uid();
   PAYROLL_LINES.forEach((l, k) => {
-    const code = codeByNames(l.names, cid), d = l.side === "d";
+    const payKey = `${l.names[0]} ${l.summary}`, code = codeByNames(l.names, cid, payKey), d = l.side === "d";
     const r = { ...blank, id: k === 0 ? vid : uid(), vid, line: l.side, groupId, companyId: cid, source: "receipt", doc: "payroll", thumb: k === 0 ? thumb : "",
-      status: "done", review: "pending", date: "", taxHint: {}, bizV2: true, payBase: l.month ? l.summary : "", payAuto: l.summary,
+      status: "done", review: "pending", date: "", taxHint: {}, bizV2: true, payKey, payBase: l.month ? l.summary : "", payAuto: l.summary,
       [d ? "debitCode" : "creditCode"]: code, [d ? "summary" : "creditSummary"]: l.summary,
       [d ? "debitAmount" : "creditAmount"]: amounts[k] || "" };
     if (k === 0) { r.date = date; r.note = note; }
