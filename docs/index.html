@@ -187,6 +187,23 @@
   .add-row input { flex: 1; }
   .row-actions { display: flex; gap: 2px; }
   .act-label { display: none; }
+  /* 保管庫 */
+  .archive-company { height: 34px; font: inherit; font-size: 13.5px; font-weight: 600; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 12px; background: var(--surface); color: var(--text); max-width: 100%; }
+  .archive-list { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .arc-item { border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); overflow: hidden; }
+  .arc-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; font: inherit; font-size: 14px; color: var(--text); background: none; border: none; cursor: pointer; text-align: left; flex-wrap: wrap; }
+  .arc-head .arc-date { font-weight: 700; }
+  .arc-head .arc-sum { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .arc-body { border-top: 1px solid var(--line); padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .arc-v { display: flex; gap: 10px; align-items: flex-start; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  .arc-v:last-of-type { border-bottom: none; }
+  .arc-thumb { width: 52px; height: 52px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); cursor: zoom-in; flex: none; background: var(--surface-2); }
+  .arc-lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .arc-line { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; }
+  .arc-line .d { color: var(--debit-text); } .arc-line .c { color: var(--credit-text); }
+  .arc-line .sm { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+  .arc-line .amt { font-family: "Roboto Mono", monospace; }
+  .arc-actions { display: flex; gap: 8px; justify-content: flex-end; }
   /* 複合仕訳の＋・－と、完了 */
   /* ＋：ほかのボタンと同じ白い角丸に、線のアイコン（借方は紺、貸方は茶） */
   .btn.add-line { width: 30px; min-width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 7px; }
@@ -399,7 +416,7 @@
   #companiesView .company-item:last-child { border-bottom: none; }
   #companiesView .company-item input { height: 36px; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; }
   .company-item .current-tag { font-size: 11px; color: var(--primary); background: var(--primary-soft); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
-  body.view-companies .mobile-capture, body.view-standards .mobile-capture { display: none !important; }
+  body.view-companies .mobile-capture, body.view-standards .mobile-capture, body.view-archive .mobile-capture { display: none !important; }
   .mode-tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
   .banner .btn { margin-left: auto; height: 32px; }
 
@@ -751,6 +768,7 @@
   <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></symbol>
   <symbol id="i-receipt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2z"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
   <symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
@@ -765,6 +783,7 @@
       <a href="#" data-view="companies"><svg><use href="#i-building"/></svg>会社マスタ</a>
       <div class="nav-label">仕訳</div>
       <a href="#" data-view="import"><svg><use href="#i-receipt"/></svg>取り込み</a>
+      <a href="#" data-view="archive"><svg><use href="#i-box"/></svg>保管庫</a>
     </nav>
   </aside>
 
@@ -774,6 +793,7 @@
       <nav class="mobile-nav" aria-label="画面の切り替え">
         <button data-view="companies">会社マスタ</button>
         <button data-view="import">取り込み</button>
+        <button data-view="archive">保管庫</button>
       </nav>
       <div class="crumb" id="crumb">仕訳 / <b>取り込み</b></div>
     </div>
@@ -842,6 +862,19 @@
      </section>
 
      <!-- 会社の画面 -->
+     <!-- 保管庫：CSVに書き出した仕訳を、レシートの写真と一緒に会社ごとに残す（ミロクに入れた後の照合用） -->
+     <section id="archiveView" hidden>
+      <div class="page-head"><div><h1>保管庫</h1></div></div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">書き出した仕訳</span>
+          <span class="spacer"></span>
+          <select id="archiveCompany" class="archive-company" aria-label="会社"></select>
+        </div>
+        <div class="archive-list" id="archiveList"></div>
+      </div>
+     </section>
+
      <section id="companiesView" hidden>
       <div class="page-head">
         <div>
@@ -1057,9 +1090,12 @@ async function getFullImage(groupId) {
   } catch { return null; }
 }
 // どの仕訳からも使われなくなった画像を消す
+// 保管庫：CSVに書き出した仕訳（写真は groupId で端末の中に残す）
+const ARCHIVE_KEY = "shiwake-archive"; // [{ id, companyId, source, docName, savedAt, fileName, csv, encoding, rows }]
+let archives = load(ARCHIVE_KEY, []);
 async function pruneImages() {
   try {
-    const used = new Set(rows.map(r => r.groupId));
+    const used = new Set([...rows.map(r => r.groupId), ...archives.flatMap(a => a.rows.map(r => r.groupId))]); // 保管庫の写真も残す
     for (const key of await imageStore.keys()) if (!used.has(key)) await imageStore.del(key);
     for (const key of fullImages.keys()) if (!used.has(key)) fullImages.delete(key);
     for (const key of ocrImages.keys()) if (!used.has(key)) ocrImages.delete(key);
@@ -1888,6 +1924,62 @@ function render() {
   renderTrialBar();
 }
 
+// ---- 保管庫 ----
+function saveArchives() {
+  try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archives)); }
+  catch { alert("保管庫がいっぱいです。古いものを削除してください。"); }
+}
+let archiveOpen = null;
+const csvBytes = (text, enc) => enc === "utf8" ? new TextEncoder().encode("\ufeff" + text)
+  : new Uint8Array(Encoding.convert(Encoding.stringToCode(text), { to: "SJIS", from: "UNICODE" }));
+function renderArchive() {
+  const sel = document.getElementById("archiveCompany"), listEl = document.getElementById("archiveList");
+  const want = sel.value || currentCompanyId || "";
+  sel.innerHTML = companies.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+  sel.value = companies.some(c => c.id === want) ? want : (companies[0]?.id || "");
+  const list = archives.filter(a => a.companyId === sel.value).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  if (!list.length) { listEl.innerHTML = `<div class="company-empty">まだありません</div>`; return; }
+  const yen = n => Number(n || 0).toLocaleString();
+  const when = iso => new Date(iso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  listEl.innerHTML = list.map(a => {
+    const total = a.rows.filter(r => lineOf(r) !== "c").reduce((n, r) => n + Number(r.debitAmount || 0), 0);
+    const vids = [...new Set(a.rows.map(vidOf))];
+    const name = code => code ? `${escapeHtml(code)} ${escapeHtml(masterName(code, a.companyId))}` : "—";
+    const body = archiveOpen !== a.id ? "" : `<div class="arc-body">${vids.map(v => {
+      const vr = a.rows.filter(r => vidOf(r) === v);
+      return `<div class="arc-v"><img class="arc-thumb" data-arc-img="${escapeHtml(vr[0].groupId || "")}" alt=""><div class="arc-lines">${vr.map(r => {
+        const ln = lineOf(r), d = ln !== "c", c = ln !== "d";
+        return `<div class="arc-line">
+          <span>${escapeHtml((r.date || "").replace(/-/g, "/"))}</span><span></span>
+          <span class="d">${d ? `借 ${name(r.debitCode)}　<span class="amt">${yen(r.debitAmount)}</span>` : ""}</span>
+          <span class="c">${c ? `貸 ${name(r.creditCode)}　<span class="amt">${yen(r.creditAmount)}</span>` : ""}</span>
+          <span class="sm">${escapeHtml(d ? r.summary || "" : creditSummaryOf(r))}</span></div>`;
+      }).join("")}</div></div>`;
+    }).join("")}
+      <div class="arc-actions"><button class="btn btn-sm" data-arc-csv="${a.id}">CSVをもう一度保存</button><button class="icon-btn del" data-arc-del="${a.id}" title="削除"><svg><use href="#i-trash"/></svg></button></div></div>`;
+    return `<div class="arc-item"><button class="arc-head" data-arc-open="${a.id}"><span class="arc-date">${when(a.savedAt)}</span>
+      <span class="method-tag t-${a.source}">${escapeHtml(a.docName || "")}</span><span class="arc-sum">${vids.length}件・${yen(total)}円</span></button>${body}</div>`;
+  }).join("");
+  // 写真は端末の中から読み込んで出す
+  for (const img of listEl.querySelectorAll("img[data-arc-img]")) getFullImage(img.dataset.arcImg).then(src => { if (src) img.src = src; else img.style.visibility = "hidden"; });
+}
+document.getElementById("archiveCompany").addEventListener("change", () => { archiveOpen = null; renderArchive(); });
+document.getElementById("archiveList").addEventListener("click", async e => {
+  const open = e.target.closest("[data-arc-open]"), img = e.target.closest("img[data-arc-img]");
+  const csvBtn = e.target.closest("[data-arc-csv]"), del = e.target.closest("[data-arc-del]");
+  if (open) { archiveOpen = archiveOpen === open.dataset.arcOpen ? null : open.dataset.arcOpen; renderArchive(); }
+  else if (img && img.src) openViewer(img.src);
+  else if (csvBtn) {
+    const a = archives.find(x => x.id === csvBtn.dataset.arcCsv);
+    if (!a) return;
+    await saveFile(new Blob([csvBytes(a.csv, a.encoding)], { type: "text/csv" }), a.fileName);
+  } else if (del) {
+    if (!confirm("保管庫からこの書き出しを削除しますか？（写真も消えます）")) return;
+    archives = archives.filter(x => x.id !== del.dataset.arcDel);
+    saveArchives(); renderArchive(); pruneImages();
+  }
+});
+
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -2380,6 +2472,11 @@ document.getElementById("download").onclick = async () => {
   const company = (currentCompany()?.name || "会社").replace(/[\\/:*?"<>|]/g, "_");
   const name = `${company}_仕訳_${stamp}.csv`;
   if (!(await saveFile(blob, name))) return; // 保存をキャンセルした場合は一覧に残す
+  // 保管庫に、書き出した仕訳とCSVを残す（写真は仕訳の groupId で端末の中に残る）
+  const docName = currentSource() === "receipt" ? (AUTO_RULE_TYPES.find(t => t.id === (settings.docType || "receipt")) || AUTO_RULE_TYPES[0]).name : importFormat(currentSource()).name;
+  archives.push({ id: uid(), companyId: currentCompanyId, source: currentSource(), docName, savedAt: new Date().toISOString(), fileName: name, csv, encoding: settings.encoding,
+    rows: done.map(r => { const o = { ...r }; delete o.thumb; delete o.ocrText; return o; }) });
+  saveArchives();
 
   // 書き出した（完成した）領収書の仕訳は、自動入力ルールに覚える（次から同じお店に同じ科目が入る）
   for (const r of done) learnReceiptRule(r);
@@ -3413,10 +3510,12 @@ function showView(view) {
   currentView = view;
   document.getElementById("importView").hidden = view !== "import";
   document.getElementById("companiesView").hidden = view !== "companies";
+  document.getElementById("archiveView").hidden = view !== "archive";
   document.body.classList.toggle("view-companies", view === "companies");
+  document.body.classList.toggle("view-archive", view === "archive");
   for (const el of document.querySelectorAll("[data-view]")) el.classList.toggle("active", el.dataset.view === view);
-  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : "マスタ / <b>会社マスタ</b>";
-  if (view === "companies") renderCompanyList(); else render();
+  document.getElementById("crumb").innerHTML = view === "import" ? "仕訳 / <b>取り込み</b>" : view === "archive" ? "仕訳 / <b>保管庫</b>" : "マスタ / <b>会社マスタ</b>";
+  if (view === "companies") renderCompanyList(); else if (view === "archive") renderArchive(); else render();
   scrollTo(0, 0);
 }
 document.addEventListener("click", e => {
@@ -3572,6 +3671,7 @@ document.getElementById("companyList").addEventListener("click", e => {
   const n = rows.filter(r => r.companyId === c.id).length;
   if (!confirm(n ? `「${c.name}」を削除すると、仕訳 ${n} 件も削除されます。よろしいですか？` : `「${c.name}」を削除しますか？`)) return;
   rows = rows.filter(r => r.companyId !== c.id);
+  archives = archives.filter(a => a.companyId !== c.id); saveArchives();
   companies = companies.filter(x => x !== c);
   if (currentCompanyId === c.id) currentCompanyId = companies[0]?.id || null;
   saveCompanies(); save();
