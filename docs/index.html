@@ -205,6 +205,12 @@
   .arc-line .sm { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
   .arc-line .amt { font-family: "Roboto Mono", monospace; }
   .arc-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  /* 月ごとの見出し（新しい月から） */
+  .arc-month { font-size: 13px; font-weight: 700; color: var(--muted); padding: 6px 2px 0; display: flex; gap: 8px; align-items: baseline; }
+  .arc-month span { font-weight: 400; font-size: 12px; }
+  .arc-head .arc-range { color: var(--muted); font-size: 12.5px; }
+  .arc-head .arc-chev { width: 16px; height: 16px; color: var(--muted); flex: none; transition: transform .15s; }
+  .arc-item.open .arc-chev { transform: rotate(90deg); }
   /* 複合仕訳の＋・－と、完了 */
   /* ＋：ほかのボタンと同じ白い角丸に、線のアイコン（借方は紺、貸方は茶） */
   .btn.add-line { width: 30px; min-width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 7px; }
@@ -789,6 +795,7 @@
   <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></symbol>
@@ -897,6 +904,7 @@
         <div class="panel-head">
           <span class="panel-title">書き出した仕訳</span>
           <span class="spacer"></span>
+          <select id="archiveDoc" class="archive-company" aria-label="資料の種類"></select>
           <select id="archiveCompany" class="archive-company" aria-label="会社"></select>
         </div>
         <div class="archive-list" id="archiveList"></div>
@@ -2255,11 +2263,26 @@ function renderArchive() {
   const want = sel.value || currentCompanyId || "";
   sel.innerHTML = companies.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
   sel.value = companies.some(c => c.id === want) ? want : (companies[0]?.id || "");
-  const list = archives.filter(a => a.companyId === sel.value).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  // 資料の種類で絞り込む（その会社にある種類だけ出す）
+  const docSel = document.getElementById("archiveDoc"), mine = archives.filter(a => a.companyId === sel.value);
+  const docs = [...new Set(mine.map(a => a.docName || ""))].filter(Boolean), wantDoc = docSel.value;
+  docSel.innerHTML = `<option value="">すべての資料</option>` + docs.map(d => `<option>${escapeHtml(d)}</option>`).join("");
+  docSel.value = docs.includes(wantDoc) ? wantDoc : "";
+  docSel.hidden = docs.length < 2;
+  const list = mine.filter(a => !docSel.value || a.docName === docSel.value).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   if (!list.length) { listEl.innerHTML = `<div class="company-empty">まだありません</div>`; return; }
   const yen = n => Number(n || 0).toLocaleString();
-  const when = iso => new Date(iso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const when = iso => new Date(iso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const monthOf = iso => new Date(iso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "long" });
+  // 伝票日付の範囲（例: 9/1〜9/30）
+  const range = a => {
+    const ds = a.rows.map(r => r.date).filter(Boolean).sort(), md = d => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`;
+    return !ds.length ? "" : ds[0] === ds.at(-1) ? `伝票 ${md(ds[0])}` : `伝票 ${md(ds[0])}〜${md(ds.at(-1))}`;
+  };
+  let lastMonth = "";
   listEl.innerHTML = list.map(a => {
+    const m = monthOf(a.savedAt), head = m !== lastMonth ? `<div class="arc-month">${escapeHtml(m)}<span>${list.filter(x => monthOf(x.savedAt) === m).length}回</span></div>` : "";
+    lastMonth = m;
     const total = a.rows.filter(r => lineOf(r) !== "c").reduce((n, r) => n + Number(r.debitAmount || 0), 0);
     const vids = [...new Set(a.rows.map(vidOf))];
     const name = code => code ? `${escapeHtml(code)} ${escapeHtml(masterName(code, a.companyId))}` : "—";
@@ -2275,13 +2298,14 @@ function renderArchive() {
       }).join("")}</div></div>`;
     }).join("")}
       <div class="arc-actions"><button class="btn btn-sm" data-arc-csv="${a.id}">CSVをもう一度保存</button><button class="icon-btn del" data-arc-del="${a.id}" title="削除"><svg><use href="#i-trash"/></svg></button></div></div>`;
-    return `<div class="arc-item"><button class="arc-head" data-arc-open="${a.id}"><span class="arc-date">${when(a.savedAt)}</span>
-      <span class="method-tag t-${a.source}">${escapeHtml(a.docName || "")}</span><span class="arc-sum">${vids.length}件・${yen(total)}円</span></button>${body}</div>`;
+    return `${head}<div class="arc-item ${archiveOpen === a.id ? "open" : ""}"><button class="arc-head" data-arc-open="${a.id}"><svg class="arc-chev"><use href="#i-chevron"/></svg><span class="arc-date">${when(a.savedAt)}</span>
+      <span class="method-tag t-${a.source}">${escapeHtml(a.docName || "")}</span><span class="arc-range">${range(a)}</span><span class="arc-sum">${vids.length}件・${yen(total)}円</span></button>${body}</div>`;
   }).join("");
   // 写真は端末の中から読み込んで出す
   for (const img of listEl.querySelectorAll("img[data-arc-img]")) getFullImage(img.dataset.arcImg).then(src => { if (src) img.src = src; else img.style.visibility = "hidden"; });
 }
 document.getElementById("archiveCompany").addEventListener("change", () => { archiveOpen = null; renderArchive(); });
+document.getElementById("archiveDoc").addEventListener("change", () => { archiveOpen = null; renderArchive(); });
 document.getElementById("archiveList").addEventListener("click", async e => {
   const open = e.target.closest("[data-arc-open]"), img = e.target.closest("img[data-arc-img]");
   const csvBtn = e.target.closest("[data-arc-csv]"), del = e.target.closest("[data-arc-del]");
