@@ -1075,17 +1075,20 @@ const FILE_TYPES = {
   Excel: ".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel",
   CSV: ".csv,text/csv",
 };
+// 読み込める形式は、どの資料も同じ：iPhoneアプリは 写真・PDF・Excel・CSV、PC（Web版）は Excel・CSV
+//   写真・PDFは文字の読み取りが要るので、正確に読める iPhone アプリだけ
+const ALL_TYPES = { web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] };
 const IMPORT_FORMATS = {
-  receipt: { name: "出金領収書", web: [], app: ["写真", "PDF"] },
-  format2: { name: "日計表", web: [], app: ["写真", "PDF"] },
-  format3: { name: "試算表", web: ["Excel", "CSV"], app: ["Excel", "CSV", "PDF", "写真"] },
+  receipt: { name: "出金領収書", ...ALL_TYPES },
+  format2: { name: "日計表", ...ALL_TYPES },
+  format3: { name: "試算表", ...ALL_TYPES },
   // 原始資料のうち、出金領収書以外の種類（取り込み方法が「原始資料」のとき、選んだ種類で決まる）
-  income: { name: "入金領収書", web: [], app: ["写真", "PDF"] },
-  purchase: { name: "仕入請求書", web: [], app: ["写真", "PDF"] },
-  sales: { name: "売上請求書", web: [], app: ["写真", "PDF"] },
-  card: { name: "クレジット明細", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
-  passbook: { name: "通帳", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
-  payroll: { name: "給与台帳", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
+  income: { name: "入金領収書", ...ALL_TYPES },
+  purchase: { name: "仕入請求書", ...ALL_TYPES },
+  sales: { name: "売上請求書", ...ALL_TYPES },
+  card: { name: "クレジット明細", ...ALL_TYPES },
+  passbook: { name: "通帳", ...ALL_TYPES },
+  payroll: { name: "給与台帳", ...ALL_TYPES },
 };
 function importFormat(method) {
   const key = method || settings.method || "receipt";
@@ -1210,13 +1213,20 @@ addEventListener("drop", e => {
 });
 
 async function addFiles(fileList) {
-  const files = Array.from(fileList);
+  let files = Array.from(fileList);
   if (!files.length) return;
   if (settings.method === TRIAL_SOURCE) return importTrial(files);
-  if (settings.method === NIKKEI_SOURCE) return importNikkei(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "passbook") return importPassbook(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "payroll") return importPayroll(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "card") return importCard(files);
+  const listDoc = (settings.method || "receipt") === "receipt" ? settings.docType || "receipt" : settings.method === NIKKEI_SOURCE ? "nikkei" : "";
+  if (["receipt", "income", "purchase", "sales", "nikkei"].includes(listDoc) && files.some(isSheetFile)) {
+    await importListSheet(files.filter(isSheetFile), listDoc);
+    files = files.filter(f => !isSheetFile(f));
+    if (!files.length) return;
+    if (!NATIVE) { alert("写真・PDFは、iPhoneアプリで読み取れます。PCではExcel・CSVを読み込めます。"); return; }
+  }
+  if (settings.method === NIKKEI_SOURCE) return importNikkei(files);
   if ((settings.method || "receipt") !== "receipt" || !["receipt", "income", "purchase", "sales"].includes(settings.docType || "receipt")) {
     alert("この取り込み方法は準備中です。");
     return;
@@ -1657,6 +1667,73 @@ function learnPurchaseRule(r) {
   if (!ex) rules.push(ex = { keyword: kw });
   if (r.debitCode) ex.code = r.debitCode;
   if (r.creditCode) ex.creditCode = r.creditCode;
+}
+
+// ---- 一覧の表（Excel・CSV）：出金・入金領収書、仕入・売上請求書、日計表（現金出納帳） ----
+// 見出しの言葉で、日付・相手（店名・取引先・摘要）・金額・入金／出金・税率・科目の列を見つけ、1行を1つの仕訳にする
+function parseListSheet(table) {
+  const norm = c => String(c ?? "").normalize("NFKC").replace(/\s/g, "");
+  const find = (row, re, not) => row.findIndex(c => re.test(norm(c)) && !(not && not.test(norm(c))));
+  const hi = table.findIndex(row => find(row, /日付|年月日|取引日|伝票日|利用日|請求日|発行日/) >= 0 && find(row, /金額|税込|合計|請求額|入金|出金|収入|支出/) >= 0);
+  if (hi < 0) return [];
+  const h = table[hi];
+  const col = {
+    date: find(h, /日付|年月日|取引日|伝票日|利用日|請求日|発行日/),
+    name: find(h, /取引先|得意先|仕入先|支払先|相手|店名|請求先|宛名|摘要|内容|品名/),
+    item: find(h, /品名|但し|内容|摘要/),
+    acct: find(h, /科目/),
+    rate: find(h, /税率/),
+    inn: find(h, /入金|収入/), out: find(h, /出金|支出|支払額/),
+    amount: find(h, /税込|請求額|合計|金額/, /税抜|消費税|税額/),
+  };
+  if (col.item === col.name) col.item = -1;
+  const cell = (r, k) => col[k] >= 0 ? String(r[col[k]] ?? "").trim() : "";
+  const out = [];
+  for (const r of table.slice(hi + 1)) {
+    const date = sheetDate(cell(r, "date"));
+    if (!date) continue;
+    const inn = sheetNum(cell(r, "inn")), outAmt = sheetNum(cell(r, "out")), amt = sheetNum(cell(r, "amount"));
+    const dir = inn ? "in" : outAmt ? "out" : "";
+    const amount = Math.abs(inn || outAmt || amt || 0);
+    if (!amount) continue;
+    const rate = cell(r, "rate").normalize("NFKC");
+    out.push({ date, name: cell(r, "name"), item: cell(r, "item"), acct: cell(r, "acct"), amount, dir, reduced: /8|軽/.test(rate) });
+  }
+  return out;
+}
+async function importListSheet(files, doc) {
+  if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
+  const cid = currentCompanyId, byName = (...names) => masterOf(cid).find(m => names.some(n => normName(m.name) === normName(n)))?.code || "";
+  const acctCode = e => e.acct ? (masterOf(cid).find(m => m.code === e.acct.replace(/\D/g, ""))?.code || suggestCode(e.acct.replace(/^\d+\s*/, ""), cid) || "") : "";
+  const cash = byName("現金");
+  let made = 0; const problems = [];
+  for (const file of files) {
+    let entries = [];
+    try { entries = parseListSheet(await sheetToRows(file)); } catch (err) { problems.push(`${file.name}: 読み込めませんでした（${err.message}）`); continue; }
+    if (!entries.length) { problems.push(`${file.name}: 日付と金額の列が見つかりませんでした`); continue; }
+    const groupId = uid();
+    for (const e of entries) {
+      const summary = [e.name, e.item].filter(Boolean).join(" ");
+      const base = { id: uid(), groupId, companyId: cid, source: doc === "nikkei" ? NIKKEI_SOURCE : "receipt", thumb: "", status: "done", review: "pending", date: e.date,
+        store: e.name, item: e.item, summary, creditSummary: summary, debitSub: "", creditSub: "", debitAmount: e.amount, creditAmount: e.amount,
+        taxHint: e.reduced ? { reduced: true } : {}, bizV2: true, bizV3: true, note: "" };
+      let d = "", c = "", extra = {};
+      if (doc === "receipt") { d = acctCode(e) || receiptDebitCode(cid, e.name, summary); c = receiptSettingsOf(cid).fixedCode || cash; }
+      else if (doc === "income") { d = incomeCashCode(cid); c = acctCode(e) || incomeCreditCode(cid, e.name, e.item); extra = { doc: "income" }; }
+      else if (doc === "purchase") { const rule = purchaseRule(cid, e.name, e.item); d = acctCode(e) || rule?.code || purchaseDefault(cid, "debit"); c = rule?.creditCode || purchaseDefault(cid, "credit"); extra = { doc: "purchase" }; }
+      else if (doc === "sales") { const rule = salesRule(cid, e.name, e.item); d = rule?.code || salesDefault(cid, "debit"); c = acctCode(e) || rule?.creditCode || salesDefault(cid, "credit"); extra = { doc: "sales" }; }
+      else if (doc === "nikkei") {
+        // 日計表（現金出納帳）：入金の行は入金領収書と同じ、出金の行は出金領収書と同じ形
+        if (e.dir === "in") { d = cash; c = acctCode(e) || incomeCreditCode(cid, e.name, e.item); }
+        else { d = acctCode(e) || receiptDebitCode(cid, e.name, summary); c = cash; }
+      }
+      rows.push(withTax({ ...base, ...extra, debitCode: d, creditCode: c }));
+      made++;
+    }
+  }
+  save(); render();
+  if (problems.length) alert(`${made}行を作りました。次の点を確かめてください。\n\n${problems.join("\n")}`);
+  else if (made) showToast(`${made}行を作りました`);
 }
 
 // ---- クレジット明細 ----
