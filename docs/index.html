@@ -2324,6 +2324,19 @@ document.getElementById("download").onclick = async () => {
   const emptyLine = r => lineOf(r) !== "pair" && !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount) && !(lineOf(r) === "c" ? r.creditCode : r.debitCode);
   const done = csvTargetRows().filter(r => !emptyLine(r));
   if (!done.length) return;
+  // 原始資料・日計表は、すべての仕訳で「完了」を押してから書き出す（試算表は完了ボタンがないので対象外）
+  if (currentSource() !== TRIAL_SOURCE) {
+    const order = [...new Set(sortedRows().map(vidOf))];
+    const left = order.map((v, i) => ({ v, no: i + 1 })).filter(x => {
+      const vr = sortedRows().filter(r => vidOf(r) === x.v);
+      return vr.some(r => r.status === "done") && !vr.every(r => r.locked);
+    });
+    if (left.length) {
+      alert(`まだ「完了」になっていない仕訳があります（${left.slice(0, 10).map(x => `${x.no}件目`).join("・")}${left.length > 10 ? " ほか" : ""}）。\nすべて「完了」を押してから、CSVをダウンロードしてください。`);
+      list.querySelector(`tr[data-vid-head="${CSS.escape(left[0].v)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+  }
   const incomplete = done.filter(r => r.source === TRIAL_SOURCE
     ? !r.date || !(Number(r.debitAmount) ? r.debitCode : r.creditCode)
     : !r.date || !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount));
