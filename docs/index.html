@@ -1047,8 +1047,8 @@ const IMPORT_FORMATS = {
   format2: { name: "日計表", web: [], app: ["写真", "PDF"] },
   format3: { name: "試算表", web: ["Excel", "CSV"], app: ["Excel", "CSV", "PDF", "写真"] },
   // 原始資料のうち、出金領収書以外の種類（取り込み方法が「原始資料」のとき、選んだ種類で決まる）
-  passbook: { name: "通帳", web: [], app: ["写真", "PDF"] },
-  payroll: { name: "給与台帳", web: [], app: ["写真", "PDF"] },
+  passbook: { name: "通帳", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
+  payroll: { name: "給与台帳", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
 };
 function importFormat(method) {
   const key = method || settings.method || "receipt";
@@ -2993,16 +2993,78 @@ function parsePassbook(cellRows, prev) {
   }
   return { entries, prev };
 }
+// Excel・CSV（ネットバンキングの明細など）: 見出しの言葉で、日付・摘要・出金・入金・残高の列を見つける
+function sheetDate(t) {
+  const v = String(t || "").normalize("NFKC").trim();
+  let m = v.match(/(令和|R)\s*(\d{1,2})\s*[.\/\-年]\s*(\d{1,2})\s*[.\/\-月]\s*(\d{1,2})/i);
+  if (m) { const y = 2018 + +m[2]; return validDate(y, +m[3], +m[4]) ? `${y}-${pad(+m[3])}-${pad(+m[4])}` : ""; }
+  m = v.match(/(\d{4})\s*[.\/\-年]\s*(\d{1,2})\s*[.\/\-月]\s*(\d{1,2})/) || v.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) return validDate(+m[1], +m[2], +m[3]) ? `${m[1]}-${pad(+m[2])}-${pad(+m[3])}` : "";
+  return passbookDate(v);
+}
+const sheetNum = t => { const v = String(t || "").normalize("NFKC").replace(/[¥\\,\s円]/g, ""); return /^[-−▲△]?\d+(\.\d+)?$/.test(v) ? Number(v.replace(/[−▲△]/, "-")) : null; };
+function parsePassbookSheet(table) {
+  const find = (row, re) => row.findIndex(c => re.test(String(c).normalize("NFKC").replace(/\s/g, "")));
+  const hi = table.findIndex(row => find(row, /日付|取引日|年月日|日時/) >= 0 && (find(row, /支払|払戻|出金|引出|払出|預り|預入|入金|金額/) >= 0));
+  if (hi < 0) return { entries: [] };
+  const h = table[hi];
+  const col = { date: find(h, /日付|取引日|年月日|日時/), out: find(h, /支払|払戻|出金|引出|払出/), in: find(h, /預り|預入|入金/),
+    amount: find(h, /^(取引)?金額/), kind: find(h, /区分|入出金|入払/), bal: find(h, /残高/) };
+  const textCols = h.map((c, k) => /摘要|内容|取引先|備考|メモ|お取引/.test(String(c).normalize("NFKC")) && !Object.values(col).includes(k) ? k : -1).filter(k => k >= 0);
+  const entries = [];
+  let prev = null;
+  for (const row of table.slice(hi + 1)) {
+    const date = sheetDate(row[col.date]);
+    if (!date) continue;
+    let dir = "", amount = 0;
+    const o = col.out >= 0 ? sheetNum(row[col.out]) : null, n = col.in >= 0 ? sheetNum(row[col.in]) : null;
+    if (o) { dir = "out"; amount = Math.abs(o); }
+    else if (n) { dir = "in"; amount = Math.abs(n); }
+    else if (col.amount >= 0 && sheetNum(row[col.amount])) {
+      const a = sheetNum(row[col.amount]), k = col.kind >= 0 ? String(row[col.kind]) : "";
+      dir = /出|払|引/.test(k) || a < 0 ? "out" : "in"; amount = Math.abs(a);
+    }
+    const bal = col.bal >= 0 ? sheetNum(row[col.bal]) : null;
+    if (!amount) { if (bal != null) prev = bal; continue; } // 前日残高・繰越の行
+    const ok = prev == null || bal == null ? null : prev + (dir === "out" ? -amount : amount) === bal;
+    entries.push({ date, kana: textCols.map(k => String(row[k] || "").normalize("NFKC").trim()).filter(Boolean).join(" "), amount, dir, balance: bal, ok });
+    if (bal != null) prev = bal;
+  }
+  return { entries };
+}
+// 読んだ通帳の行を、仕訳にして一覧に入れる
+function addPassbookEntries(entries, groupId, thumb) {
+  const cid = currentCompanyId, bank = passbookBankCode(cid);
+  for (const e of entries) {
+    const out = e.dir === "out";
+    const r = { id: uid(), groupId, companyId: cid, source: "receipt", doc: "passbook", thumb, status: "done", review: "pending", date: e.date,
+      store: e.kana, summary: e.kana, creditSummary: e.kana, bankSide: out ? "c" : "d",
+      debitCode: out ? "" : bank, debitSub: "", debitAmount: e.amount, creditCode: out ? bank : "", creditSub: "", creditAmount: e.amount,
+      taxHint: {}, bizV2: true,
+      note: [!e.kana ? PB_NO_TEXT : "", e.ok === false ? "残高が合いません。金額を確かめてください" : ""].filter(Boolean).join("／") };
+    if (e.kana && !applyPassbookRule(r)) r.note = [PB_NO_RULE, r.note].filter(Boolean).join("／");
+    rows.push(withTax(r));
+  }
+  return entries.length;
+}
 async function importPassbook(files) {
   if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
-  if (!NATIVE) { alert("通帳は、iPhoneアプリで読み取れます。"); return; }
+  const sheets = files.filter(isSheetFile), others = files.filter(f => !isSheetFile(f));
+  if (others.length && !NATIVE) { alert("通帳の写真・PDFは、iPhoneアプリで読み取れます。PCではExcel・CSVを読み込めます。"); return; }
   const banner = document.getElementById("ocrBanner");
   const show = t => { banner.textContent = t; banner.hidden = false; };
-  const cid = currentCompanyId, bank = passbookBankCode(cid);
   let made = 0, prev = null; const problems = [];
   try {
+    for (const file of sheets) {
+      show(`通帳のファイルを読み込んでいます（${file.name}）…`);
+      const p = parsePassbookSheet(await sheetToRows(file));
+      if (!p.entries.length) { problems.push(`${file.name}: 日付と金額の列が見つかりませんでした`); continue; }
+      const bad = p.entries.filter(e => e.ok === false).length;
+      if (bad) problems.push(`${file.name}: 残高が合わない行が${bad}行あります`);
+      made += addPassbookEntries(p.entries, uid(), "");
+    }
     const pages = [];
-    for (const file of files) {
+    for (const file of others) {
       if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) { show(`PDFを開いています（${file.name}）…`); pages.push(...await pdfToImages(file)); }
       else pages.push(await resize(file, OCR_MAX_SIDE, 0.9));
     }
@@ -3017,17 +3079,7 @@ async function importPassbook(files) {
       fullImages.set(groupId, full); imageStore.put(groupId, full).catch(() => {});
       const bad = p.entries.filter(e => e.ok === false).length;
       if (bad) problems.push(`${i + 1}枚目: 残高が合わない行が${bad}行あります`);
-      for (const e of p.entries) {
-        const out = e.dir === "out";
-        const r = { id: uid(), groupId, companyId: cid, source: "receipt", doc: "passbook", thumb, status: "done", review: "pending", date: e.date,
-          store: e.kana, summary: e.kana, creditSummary: e.kana, bankSide: out ? "c" : "d",
-          debitCode: out ? "" : bank, debitSub: "", debitAmount: e.amount, creditCode: out ? bank : "", creditSub: "", creditAmount: e.amount,
-          taxHint: {}, bizV2: true,
-          note: [!e.kana ? PB_NO_TEXT : "", e.ok === false ? "残高が合いません。金額を確かめてください" : ""].filter(Boolean).join("／") };
-        if (e.kana && !applyPassbookRule(r)) r.note = [PB_NO_RULE, r.note].filter(Boolean).join("／");
-        rows.push(withTax(r));
-        made++;
-      }
+      made += addPassbookEntries(p.entries, groupId, thumb);
     }
   } catch (err) {
     alert(`通帳を読み取れませんでした: ${err.message}`);
@@ -3083,7 +3135,19 @@ async function importPayroll(files) {
     creditCode: "", creditSub: "", creditAmount: "", creditTax: "", creditRate: "", creditBiz: "課税事業者", summary: "", creditSummary: "", store: "", note: "" };
   const banner = document.getElementById("ocrBanner");
   let made = 0; const problems = [];
-  for (const file of files) {
+  const sheets = files.filter(isSheetFile), others = files.filter(f => !isSheetFile(f));
+  if (others.length && !NATIVE) { alert("給与台帳の写真・PDFは、iPhoneアプリで読み取れます。PCではExcel・CSVを読み込めます。"); return; }
+  for (const file of sheets) {
+    try {
+      const table = await sheetToRows(file);
+      const items = table.flatMap((row, y) => row.map((text, x) => ({ text: String(text ?? ""), x, y, w: 0.9, h: 0.9 }))).filter(it => it.text.trim());
+      const p = parsePayroll(items, 1, 1);
+      if (p.note) problems.push(`${file.name}: ${p.note}`);
+      addPayrollVoucher(uid(), "", p, cid, blank);
+      made++;
+    } catch (err) { problems.push(`${file.name}: 読み込めませんでした（${err.message}）`); }
+  }
+  for (const file of others) {
     let pages = [file];
     if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
       try { pages = await Promise.all((await pdfToImages(file)).map(dataUrlToBlob)); } catch { alert(`${file.name}: PDFを開けませんでした`); continue; }
@@ -3092,7 +3156,6 @@ async function importPayroll(files) {
       const groupId = uid();
       const [full, thumb] = await Promise.all([resize(page, 1600, 0.85), resize(page, 240, 0.7)]);
       fullImages.set(groupId, full); imageStore.put(groupId, full).catch(() => {});
-      const vid = uid();
       // iPhoneアプリでは、台帳の合計の数字を読んで金額を入れておく（読み間違いは確認画面で直す）
       let amounts = [], date = "", note = "";
       if (NATIVE) {
@@ -3105,23 +3168,28 @@ async function importPayroll(files) {
         } catch (err) { problems.push(`${made + 1}枚目: 読み取れませんでした（${err.message}）`); }
         banner.hidden = true;
       }
-      PAYROLL_LINES.forEach((l, k) => {
-        const code = codeByNames(l.names, cid), d = l.side === "d";
-        const r = { ...blank, id: k === 0 ? vid : uid(), vid, line: l.side, groupId, companyId: cid, source: "receipt", doc: "payroll", thumb: k === 0 ? thumb : "",
-          status: "done", review: "pending", date: "", taxHint: {}, bizV2: true, payBase: l.month ? l.summary : "", payAuto: l.summary,
-          [d ? "debitCode" : "creditCode"]: code, [d ? "summary" : "creditSummary"]: l.summary,
-          [d ? "debitAmount" : "creditAmount"]: amounts[k] || "" };
-        if (k === 0) { r.date = date; r.note = note; }
-        setAutoTax(r, d ? "debit" : "credit");
-        rows.push(r);
-      });
-      if (date) payrollMonth(rows.find(r => r.id === vid));
+      addPayrollVoucher(groupId, thumb, { amounts, date, note }, cid, blank);
       made++;
     }
   }
   save(); render();
   if (problems.length) alert(`給与台帳の仕訳を${made}件作りました。次の点を確かめてください。\n\n${problems.join("\n")}`);
   else if (made) showToast(`給与台帳の仕訳を${made}件作りました`);
+}
+// 給与台帳1枚分の複合仕訳を作る（科目・摘要は先に入れ、読めた金額と支給日を入れる）
+function addPayrollVoucher(groupId, thumb, { amounts = [], date = "", note = "" }, cid, blank) {
+  const vid = uid();
+  PAYROLL_LINES.forEach((l, k) => {
+    const code = codeByNames(l.names, cid), d = l.side === "d";
+    const r = { ...blank, id: k === 0 ? vid : uid(), vid, line: l.side, groupId, companyId: cid, source: "receipt", doc: "payroll", thumb: k === 0 ? thumb : "",
+      status: "done", review: "pending", date: "", taxHint: {}, bizV2: true, payBase: l.month ? l.summary : "", payAuto: l.summary,
+      [d ? "debitCode" : "creditCode"]: code, [d ? "summary" : "creditSummary"]: l.summary,
+      [d ? "debitAmount" : "creditAmount"]: amounts[k] || "" };
+    if (k === 0) { r.date = date; r.note = note; }
+    setAutoTax(r, d ? "debit" : "credit");
+    rows.push(r);
+  });
+  if (date) payrollMonth(rows.find(r => r.id === vid));
 }
 // 給与台帳の文字から、合計の金額と支給日を拾う
 //   項目名（総支給・通勤手当・健康保険…）と「合計」の見出しが交わるところの数字を読む。
