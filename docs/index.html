@@ -224,6 +224,14 @@
     color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; z-index: 1; }
   .line-del svg { width: 15px; height: 15px; }
   .line-del:hover, .line-del:active { color: var(--err); border-color: #f0c4c4; background: var(--err-soft); }
+  /* ⋮⋮：つかんで上下に動かすと、塊の順番を入れ替える（－の左） */
+  .line-move { position: absolute; top: 2px; right: 38px; width: 30px; height: 30px; border-radius: 7px; border: none; background: none;
+    color: var(--muted); display: grid; place-items: center; cursor: grab; padding: 0; z-index: 1; touch-action: none; }
+  .line-move svg { width: 16px; height: 16px; }
+  .line-move:hover { color: var(--text); }
+  body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+  td.drag-from { opacity: .45; }
+  td.drop-here { box-shadow: inset 0 0 0 2px var(--gold); }
   tr.locked td.s-debit, tr.locked td.s-credit, tr.locked td.c-date { opacity: .7; }
   td input:disabled, td select:disabled, td textarea:disabled { color: var(--text); -webkit-text-fill-color: var(--text); opacity: 1; }
   .tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
@@ -689,9 +697,10 @@
     tbody tr.row-receipt td.c-date + td.s-debit, tbody tr.row-receipt td.s-debit + td.s-credit { border-radius: 10px 10px 0 0; padding-top: 10px; }
     /* －は、項目名の行の右に収める（項目名の行を少し高くして、入力欄と重ならないようにする） */
     tbody tr.row-receipt td.has-minus { padding-top: 10px; }
-    tbody tr.row-receipt td.has-minus::before { line-height: 36px; padding-right: 36px; }
+    tbody tr.row-receipt td.has-minus::before { line-height: 36px; padding-right: 76px; }
     tbody tr.row-receipt.minus-row td.first-f::before { line-height: 36px; } /* －がない側も同じ高さにして、借方と貸方の欄をそろえる */
     tbody tr.row-receipt td.has-minus .line-del { top: 10px; right: 10px; }
+    tbody tr.row-receipt td.has-minus .line-move { top: 10px; right: 46px; }
     tbody tr.row-receipt td.s-debit:has(+ td.s-credit), tbody tr.row-receipt td.s-credit:has(+ td.c-del), tbody tr.row-receipt td.s-credit:has(+ td.c-add) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
     tbody tr.row-receipt td.s-debit { background: var(--debit); }
     tbody tr.row-receipt td.s-credit { background: var(--credit); }
@@ -765,6 +774,7 @@
   <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></symbol>
@@ -1753,14 +1763,14 @@ function warningsOf(r) {
     return w;
   }
   const w = [];
-  if (!r.date) w.push("日付が空です");
+  if (!voucherRows(r)[0].date) w.push("日付が空です"); // 日付は仕訳の先頭の塊が持っている
   const ln = lineOf(r), codes = ln === "d" ? [r.debitCode] : ln === "c" ? [r.creditCode] : [r.debitCode, r.creditCode];
   if (r.source === NIKKEI_SOURCE) {
     if (codes.some(c => !c)) w.push("コードが未設定です");
     for (const c of codes) if (c && masterOf(r.companyId).length && !masterOf(r.companyId).some(m => m.code === String(c))) { w.push("マスタにないコードです"); break; }
     if (r.codeHow === "推測") w.push("科目名から推測したコードです");
   }
-  if (!Number(ln === "c" ? r.creditAmount : r.debitAmount)) w.push("金額が空です");
+  if (ln === "pair" && !Number(r.debitAmount)) w.push("金額が空です"); // 複合仕訳で金額が空の塊は、使わない欄としてCSVに出さない
   if (!String(ln === "c" ? creditSummaryOf(r) : r.summary || "").trim()) w.push("摘要が空です");
   if (r.note) w.push(r.note);
   return w;
@@ -1940,7 +1950,7 @@ function render() {
       // この段に－が出るか（出るなら、借方・貸方の最初の項目の高さをそろえる）
       const minusRow = compound && !locked && ["debit", "credit"].some(side => sideCount[side] > 1 && (side === "debit" ? dRow : cRow));
       const trCls = [isTrial ? "" : "row-receipt", k > 1 && !last ? "v-mid" : "", first ? "" : "v-cont", locked ? "locked" : "", minusRow ? "minus-row" : ""].filter(Boolean).join(" ");
-      body += `<tr data-row="${(dRow || cRow || anchor).id}" ${first ? `data-vid-head="${escapeHtml(v)}"` : ""} class="${trCls}">${head}` + cells.map(f => {
+      body += `<tr data-row="${(dRow || cRow || anchor).id}" data-vid="${escapeHtml(v)}" data-bi="${i}" ${first ? `data-vid-head="${escapeHtml(v)}"` : ""} class="${trCls}">${head}` + cells.map(f => {
         if (f.blank) return `<td class="c-blank s-${f.side}"></td>`;
         const src = srcOf(f);
         if (!src) return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""} c-none"></td>`;
@@ -1948,7 +1958,8 @@ function render() {
         // －（その塊を消す）は塊の右上（項目名の行）、＋（塊を足す）はその側の一番下の塊の下に出す（並べると押し間違えるため離す）
         const bottom = !isTrial && !locked && f.side && f === lastOfSide[f.side];
         const minus = !isTrial && !locked && f.side && f === firstOfSide[f.side] && compound && sideCount[f.side] > 1
-          ? `<button class="line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す"><svg><use href="#i-minus"/></svg></button>` : "";
+          ? `<button class="line-move" data-linemove="${f.side}" data-vid="${escapeHtml(v)}" data-bi="${i}" title="つかんで動かすと順番を入れ替えます" aria-label="順番を入れ替える"><svg><use href="#i-grip"/></svg></button>`
+            + `<button class="line-del" data-linedel="${src.id}" title="この${f.side === "debit" ? "借方" : "貸方"}を消す" aria-label="この${f.side === "debit" ? "借方" : "貸方"}を消す"><svg><use href="#i-minus"/></svg></button>` : "";
         const plus = bottom && src === (f.side === "debit" ? D : C).at(-1) ? addBtn(f.side, v) : "";
         return `<td class="${f.cls}${f.side ? ` s-${f.side}` : ""}${f.key === "date" && !balanceOf(anchor).ok ? " unbalanced" : ""}${minus ? " has-minus" : ""}${f.side && f === firstOfSide[f.side] ? " first-f" : ""}" data-label="${f.label}">
         ${cellInput(src, f)}${minus}
@@ -2356,6 +2367,55 @@ function addLine(v, side) {
   rows.splice(rows.indexOf(vr[vr.length - 1]) + 1, 0, nb);
   save(); render();
 }
+// ⋮⋮：借方（または貸方）の塊の順番を入れ替える
+function moveLine(v, side, from, to) {
+  const vr = rows.filter(r => r.companyId === currentCompanyId && vidOf(r) === v);
+  const D = vr.filter(o => lineOf(o) !== "c"), C = vr.filter(o => lineOf(o) === "c");
+  const list = side === "debit" ? D : C;
+  if (from === to || !list[from] || to < 0 || to >= list.length) return;
+  list.splice(to, 0, list.splice(from, 1)[0]);
+  const oldHead = vr[0], seq = [...D, ...C], slots = vr.map(r => rows.indexOf(r)).sort((a, b) => a - b);
+  seq.forEach((r, k) => { rows[slots[k]] = r; });
+  // 写真・日付・お知らせは、仕訳の先頭の塊が持っているので、新しい先頭に移す
+  const head = seq[0];
+  if (head !== oldHead) { head.date = oldHead.date; head.thumb = oldHead.thumb; head.note = oldHead.note; oldHead.thumb = ""; oldHead.note = ""; }
+  save(); render();
+}
+let blockDrag = null;
+list.addEventListener("pointerdown", e => {
+  const h = e.target.closest("[data-linemove]");
+  if (!h) return;
+  e.preventDefault();
+  const v = h.dataset.vid, side = h.dataset.linemove;
+  const vr = rows.filter(r => r.companyId === currentCompanyId && vidOf(r) === v);
+  const count = vr.filter(o => side === "debit" ? lineOf(o) !== "c" : lineOf(o) === "c").length;
+  const trs = [...list.querySelectorAll(`tr[data-vid="${CSS.escape(v)}"]`)].slice(0, count);
+  blockDrag = { v, side, from: Number(h.dataset.bi), to: Number(h.dataset.bi), trs, id: e.pointerId };
+  h.setPointerCapture?.(e.pointerId);
+  document.body.classList.add("block-dragging");
+  for (const td of trs[blockDrag.from].querySelectorAll(`td.s-${side}`)) td.classList.add("drag-from");
+});
+list.addEventListener("pointermove", e => {
+  if (!blockDrag || e.pointerId !== blockDrag.id) return;
+  const { trs, side } = blockDrag;
+  // 指（マウス）の高さにある塊を、入れる先にする
+  let to = trs.findIndex(tr => { const r = tr.getBoundingClientRect(); return e.clientY >= r.top && e.clientY < r.bottom; });
+  if (to < 0) to = e.clientY < trs[0].getBoundingClientRect().top ? 0 : trs.length - 1;
+  if (e.clientY < 70) scrollBy(0, -12); else if (e.clientY > innerHeight - 70) scrollBy(0, 12);
+  if (to === blockDrag.to) return;
+  blockDrag.to = to;
+  for (const td of list.querySelectorAll("td.drop-here")) td.classList.remove("drop-here");
+  if (to !== blockDrag.from) for (const td of trs[to].querySelectorAll(`td.s-${side}`)) td.classList.add("drop-here");
+});
+const endBlockDrag = e => {
+  if (!blockDrag || e.pointerId !== blockDrag.id) return;
+  const d = blockDrag; blockDrag = null;
+  document.body.classList.remove("block-dragging");
+  for (const td of list.querySelectorAll("td.drop-here, td.drag-from")) td.classList.remove("drop-here", "drag-from");
+  if (e.type === "pointerup") moveLine(d.v, d.side, d.from, d.to);
+};
+list.addEventListener("pointerup", endBlockDrag);
+list.addEventListener("pointercancel", endBlockDrag);
 // －：借方か貸方の塊を1つ消す。借方・貸方が1つずつに戻ったら、ふつうの仕訳（1行）にまとめる
 function removeLine(id) {
   const row = rows.find(r => r.id === id);
@@ -2530,7 +2590,7 @@ document.getElementById("download").onclick = async () => {
   //   借方だけの行：借方 科目 ／ 貸方 諸口　　貸方だけの行：借方 諸口 ／ 貸方 科目
   const lineCsv = r => {
     const ln = lineOf(r);
-    if (ln === "d") return { ...r, creditCode: shokuchi, creditSub: "", creditAmount: r.debitAmount, creditTax: "対象外", creditRate: "対象外", creditBiz: "課税事業者", creditSummary: r.summary };
+    if (ln === "d") return { ...r, date: voucherRows(r)[0].date, creditCode: shokuchi, creditSub: "", creditAmount: r.debitAmount, creditTax: "対象外", creditRate: "対象外", creditBiz: "課税事業者", creditSummary: r.summary };
     if (ln === "c") return { ...r, date: voucherRows(r)[0].date, debitCode: shokuchi, debitSub: "", debitAmount: r.creditAmount, debitTax: "対象外", debitRate: "対象外", debitBiz: "課税事業者", summary: creditSummaryOf(r) };
     return r;
   };
