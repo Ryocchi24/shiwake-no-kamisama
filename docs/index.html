@@ -1048,7 +1048,7 @@ const IMPORT_FORMATS = {
   format3: { name: "試算表", web: ["Excel", "CSV"], app: ["Excel", "CSV", "PDF", "写真"] },
   // 原始資料のうち、出金領収書以外の種類（取り込み方法が「原始資料」のとき、選んだ種類で決まる）
   passbook: { name: "通帳", web: [], app: ["写真", "PDF"] },
-  payroll: { name: "給与台帳", web: ["写真", "PDF"], app: ["写真", "PDF"] },
+  payroll: { name: "給与台帳", web: [], app: ["写真", "PDF"] },
 };
 function importFormat(method) {
   const key = method || settings.method || "receipt";
@@ -3081,7 +3081,8 @@ async function importPayroll(files) {
   const cid = currentCompanyId;
   const blank = { debitCode: "", debitSub: "", debitAmount: "", debitTax: "", debitRate: "", debitBiz: "課税事業者",
     creditCode: "", creditSub: "", creditAmount: "", creditTax: "", creditRate: "", creditBiz: "課税事業者", summary: "", creditSummary: "", store: "", note: "" };
-  let made = 0;
+  const banner = document.getElementById("ocrBanner");
+  let made = 0; const problems = [];
   for (const file of files) {
     let pages = [file];
     if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
@@ -3092,19 +3093,96 @@ async function importPayroll(files) {
       const [full, thumb] = await Promise.all([resize(page, 1600, 0.85), resize(page, 240, 0.7)]);
       fullImages.set(groupId, full); imageStore.put(groupId, full).catch(() => {});
       const vid = uid();
+      // iPhoneアプリでは、台帳の合計の数字を読んで金額を入れておく（読み間違いは確認画面で直す）
+      let amounts = [], date = "", note = "";
+      if (NATIVE) {
+        banner.textContent = `給与台帳を読み取っています（${made + 1}枚目）…`; banner.hidden = false;
+        try {
+          const res = await callNative("recognizeText", { image: (await resize(page, OCR_MAX_SIDE, 0.9)).split(",")[1] });
+          const p = parsePayroll(res.items || [], res.width, res.height);
+          amounts = p.amounts; date = p.date; note = p.note;
+          if (note) problems.push(`${made + 1}枚目: ${note}`);
+        } catch (err) { problems.push(`${made + 1}枚目: 読み取れませんでした（${err.message}）`); }
+        banner.hidden = true;
+      }
       PAYROLL_LINES.forEach((l, k) => {
         const code = codeByNames(l.names, cid), d = l.side === "d";
         const r = { ...blank, id: k === 0 ? vid : uid(), vid, line: l.side, groupId, companyId: cid, source: "receipt", doc: "payroll", thumb: k === 0 ? thumb : "",
           status: "done", review: "pending", date: "", taxHint: {}, bizV2: true, payBase: l.month ? l.summary : "", payAuto: l.summary,
-          [d ? "debitCode" : "creditCode"]: code, [d ? "summary" : "creditSummary"]: l.summary };
+          [d ? "debitCode" : "creditCode"]: code, [d ? "summary" : "creditSummary"]: l.summary,
+          [d ? "debitAmount" : "creditAmount"]: amounts[k] || "" };
+        if (k === 0) { r.date = date; r.note = note; }
         setAutoTax(r, d ? "debit" : "credit");
         rows.push(r);
       });
+      if (date) payrollMonth(rows.find(r => r.id === vid));
       made++;
     }
   }
   save(); render();
-  if (made) showToast(`給与台帳の仕訳を${made}件作りました`);
+  if (problems.length) alert(`給与台帳の仕訳を${made}件作りました。次の点を確かめてください。\n\n${problems.join("\n")}`);
+  else if (made) showToast(`給与台帳の仕訳を${made}件作りました`);
+}
+// 給与台帳の文字から、合計の金額と支給日を拾う
+//   項目名（総支給・通勤手当・健康保険…）と「合計」の見出しが交わるところの数字を読む。
+//   「合計」が見つからなければ、項目名の行のいちばん右（または列のいちばん下）の数字
+//   戻り値の amounts は PAYROLL_LINES と同じ順（役員報酬・給料手当・通勤費・差引支給・社会保険・源泉・住民税・雇用保険・貸付金）
+function parsePayroll(items, width = 1, height = 1) {
+  const maxW = Math.max(0, ...items.map(i => i.w));
+  const angles = items.filter(i => typeof i.angle === "number" && i.w >= maxW * 0.3).map(i => i.angle).sort((a, b) => a - b);
+  const theta = angles.length ? angles[Math.floor(angles.length / 2)] : 0;
+  const cos = Math.cos(theta), sin = Math.sin(theta);
+  const pts = items.map(it => {
+    const cx = (it.x + it.w / 2) * width, cy = (it.y + it.h / 2) * height;
+    return { text: String(it.text || "").normalize("NFKC").trim(), x: cx * cos + cy * sin, y: -cx * sin + cy * cos, w: it.w * width, h: it.h * height };
+  }).filter(p => p.text);
+  const hs = pts.map(p => p.h).sort((a, b) => a - b), mh = hs[Math.floor(hs.length / 2)] || 10;
+  const isNum = t => /^[¥\\]?(\d{1,3}(,\d{3})+|\d{2,9})$/.test(t.replace(/\s/g, ""));
+  const nums = pts.filter(p => isNum(p.text)).map(p => ({ ...p, v: Number(p.text.replace(/\D/g, "")) }));
+  const totals = pts.filter(p => /^(合\s*計|総\s*計|計)$/.test(p.text));
+  const valueFor = re => {
+    for (const L of pts.filter(p => re.test(p.text) && !isNum(p.text))) {
+      const tol = Math.max(L.h, mh) * 0.6;
+      const inRow = nums.filter(n => Math.abs(n.y - L.y) < tol && n.x > L.x);
+      const inCol = nums.filter(n => Math.abs(n.x - L.x) < Math.max(L.w, n.w) * 0.6 && n.y > L.y);
+      for (const T of totals) {
+        const a = inRow.find(n => Math.abs(n.x - T.x) < Math.max(T.w, n.w) * 0.7); if (a) return a.v;
+        const b = inCol.find(n => Math.abs(n.y - T.y) < tol); if (b) return b.v;
+      }
+      if (inRow.length) return inRow.sort((a, b) => b.x - a.x)[0].v;
+      if (inCol.length) return inCol.sort((a, b) => b.y - a.y)[0].v;
+    }
+    return 0;
+  };
+  const gross = valueFor(/総支給|支給合計|支給額計|支給総額/);
+  const exec = valueFor(/役員報酬/);
+  const commute = valueFor(/通勤/);
+  const social = valueFor(/健康保険|健保/) + valueFor(/厚生年金|厚年/) + valueFor(/介護保険/) || valueFor(/社会保険/);
+  const employ = valueFor(/雇用保険/);
+  const tax = valueFor(/所得税|源泉/);
+  const resident = valueFor(/住民税|市民税|県民税/);
+  const loan = valueFor(/貸付|返済/);
+  let net = valueFor(/差引支給|差引額|差引合計|振込|手取|支払額/);
+  const deduct = social + employ + tax + resident + loan;
+  const g = gross || (net ? net + deduct : 0);
+  const salary = g ? g - exec - commute : 0;
+  if (!net && g && deduct) net = g - deduct;
+  // 支給日（例: 支給日 令和8年9月25日、2026/9/25）
+  let date = "";
+  const toDate = t => {
+    const m = String(t).match(/(令和|R)?\s*(\d{1,4})\s*[年\/.\-]\s*(\d{1,2})\s*[月\/.\-]\s*(\d{1,2})/);
+    if (!m) return "";
+    const y = Number(m[2]) >= 1900 ? Number(m[2]) : 2018 + Number(m[2]);
+    return validDate(y, +m[3], +m[4]) ? `${y}-${pad(+m[3])}-${pad(+m[4])}` : "";
+  };
+  for (const L of pts.filter(p => /支給日|支払日/.test(p.text))) {
+    date = toDate(L.text) || toDate(pts.filter(p => Math.abs(p.y - L.y) < Math.max(L.h, mh) * 0.6 && p.x > L.x).sort((a, b) => a.x - b.x).map(p => p.text).join(" "));
+    if (date) break;
+  }
+  const amounts = [exec, salary > 0 ? salary : 0, commute, net, social, tax, resident, employ, loan];
+  const note = !g && !net ? "金額を読み取れませんでした。台帳を見て入れてください"
+    : g !== net + deduct ? "合計が合いません。台帳を見て金額を確かめてください" : "";
+  return { amounts, date, note };
 }
 // 支給日を入れたら、「○月分」の摘要の月をそろえる（自分で書き換えた摘要はそのまま）
 function payrollMonth(row) {
