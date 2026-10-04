@@ -2119,7 +2119,7 @@ function render() {
     const what = currentSource() === TRIAL_SOURCE && systemOf().id ? `${systemOf().name}の${fmt.name}` : fmt.name;
     const icon = currentSource() === "receipt" ? "i-receipt" : "i-list";
     list.innerHTML = `<div class="dropzone"><svg><use href="#${icon}"/></svg>
-      <b>${escapeHtml(what)}${NATIVE ? "を撮影するか、ファイルを選んでください" : "のファイルを選んでください"}</b>${fmt.types.join("・")}
+      <b>${escapeHtml(what)}${NATIVE ? "を撮影するか、ファイルを選んでください" : "のファイルを選んでください"}</b>${fmt.types.join("・")}${!NATIVE && fmt.app.some(t => !fmt.types.includes(t)) ? `（${fmt.app.filter(t => !fmt.types.includes(t)).join("・")}はiPhoneアプリで）` : ""}
       <div class="drop-actions">${NATIVE ? `<button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button>` : ""}
       <button class="btn ${NATIVE ? "" : "btn-primary"} drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div></div>`;
     return;
