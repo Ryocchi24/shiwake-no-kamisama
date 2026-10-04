@@ -3135,9 +3135,9 @@ const PAYROLL_LINES = [
   { side: "c", names: ["未払金"], summary: "給与 未払計上" },
   { side: "c", names: ["法定福利費"], summary: "健康保険" },
   { side: "c", names: ["法定福利費"], summary: "厚生年金" },
+  { side: "c", names: ["法定福利費"], summary: "雇用保険", month: true },
   { side: "c", names: ["預り金", "預かり金"], summary: "源泉所得税", month: true },
   { side: "c", names: ["預り金", "預かり金"], summary: "住民税", month: true },
-  { side: "c", names: ["法定福利費"], summary: "雇用保険", month: true },
   { side: "c", names: ["貸付金", "短期貸付金", "従業員貸付金"], summary: "貸付金返済" },
 ];
 // 科目をその会社のミロク科目マスタから名前で探す
@@ -3224,7 +3224,7 @@ function addPayrollVoucher(groupId, thumb, { amounts = [], date = "", note = "" 
 // 給与台帳の文字から、合計の金額と支給日を拾う
 //   項目名（総支給・通勤手当・健康保険…）と「合計」の見出しが交わるところの数字を読む。
 //   「合計」が見つからなければ、項目名の行のいちばん右（または列のいちばん下）の数字
-//   戻り値の amounts は PAYROLL_LINES と同じ順（役員報酬・給料手当・通勤費・差引支給・健康保険・厚生年金・源泉・住民税・雇用保険・貸付金）
+//   戻り値の amounts は PAYROLL_LINES と同じ順（役員報酬・給料手当・通勤費・差引支給・健康保険・厚生年金・雇用保険・源泉・住民税・貸付金）
 function parsePayroll(items, width = 1, height = 1) {
   const maxW = Math.max(0, ...items.map(i => i.w));
   const angles = items.filter(i => typeof i.angle === "number" && i.w >= maxW * 0.3).map(i => i.angle).sort((a, b) => a - b);
@@ -3280,7 +3280,7 @@ function parsePayroll(items, width = 1, height = 1) {
     date = toDate(L.text) || toDate(pts.filter(p => Math.abs(p.y - L.y) < Math.max(L.h, mh) * 0.6 && p.x > L.x).sort((a, b) => a.x - b.x).map(p => p.text).join(" "));
     if (date) break;
   }
-  const amounts = [exec, salary > 0 ? salary : 0, commute, net, health, pension, tax, resident, employ, loan];
+  const amounts = [exec, salary > 0 ? salary : 0, commute, net, health, pension, employ, tax, resident, loan];
   const note = !g && !net ? "金額を読み取れませんでした。台帳を見て入れてください"
     : g !== net + deduct ? "合計が合いません。台帳を見て金額を確かめてください" : "";
   return { amounts, date, note };
