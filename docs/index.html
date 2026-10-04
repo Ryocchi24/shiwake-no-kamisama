@@ -851,7 +851,7 @@
           <div class="co-picker-menu" id="docPickerMenu" hidden><div class="co-picker-list" id="docPickerList" role="listbox"></div></div>
         </div>
         <button class="doc-type" data-doc="receipt">出金領収書</button>
-        <button class="doc-type" data-doc="income">入金領収書<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="income">入金領収書</button>
         <button class="doc-type" data-doc="passbook">通帳</button>
         <button class="doc-type" data-doc="purchase">仕入請求書<span class="soon-tag">準備中</span></button>
         <button class="doc-type" data-doc="sales">売上請求書<span class="soon-tag">準備中</span></button>
@@ -1070,6 +1070,7 @@ const IMPORT_FORMATS = {
   format2: { name: "日計表", web: [], app: ["写真", "PDF"] },
   format3: { name: "試算表", web: ["Excel", "CSV"], app: ["Excel", "CSV", "PDF", "写真"] },
   // 原始資料のうち、出金領収書以外の種類（取り込み方法が「原始資料」のとき、選んだ種類で決まる）
+  income: { name: "入金領収書", web: [], app: ["写真", "PDF"] },
   passbook: { name: "通帳", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
   payroll: { name: "給与台帳", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
 };
@@ -1202,7 +1203,7 @@ async function addFiles(fileList) {
   if (settings.method === NIKKEI_SOURCE) return importNikkei(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "passbook") return importPassbook(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "payroll") return importPayroll(files);
-  if ((settings.method || "receipt") !== "receipt" || (settings.docType || "receipt") !== "receipt") {
+  if ((settings.method || "receipt") !== "receipt" || !["receipt", "income"].includes(settings.docType || "receipt")) {
     alert("この取り込み方法は準備中です。");
     return;
   }
@@ -1231,7 +1232,7 @@ async function addFiles(fileList) {
       fullImages.set(groupId, full);
       if (forOcr) ocrImages.set(groupId, forOcr);
       imageStore.put(groupId, full).catch(() => {});
-      rows.push({ id: uid(), groupId, companyId: currentCompanyId, source: "receipt", thumb, status: "reading" });
+      rows.push({ id: uid(), groupId, companyId: currentCompanyId, source: "receipt", ...(settings.docType === "income" ? { doc: "income" } : {}), thumb, status: "reading" });
       queue.push(groupId);
     } catch (err) {
       alert(`${file.name}: ${err.message}`);
@@ -1287,7 +1288,7 @@ async function readGroup(groupId) {
       // 対象額が読めなかった時も3行に分け、8%と10%の金額は空にしておく（手で入れる）
       // 金額はすべて税込。8%と10%の合計が、領収書の合計と必ず一致するようにする
       const hint = receiptTaxHint(r.ocrText);
-      if (!hint.mixed) return [r];
+      if (!hint.mixed || placeholder.doc === "income") return [r];
       const sp = splitByRate(r.ocrText);
       let total = Number(r.amount) || 0, r8 = "", r10 = "", off = "";
       if (sp && !total) { r8 = sp.r8; r10 = sp.r10; total = r8 + r10; }
@@ -1313,6 +1314,13 @@ async function readGroup(groupId) {
       ...(r.splitRole ? { splitRole: r.splitRole } : {}),
       taxHint: r.reduced === undefined ? receiptTaxHint(r.ocrText) : { ...receiptTaxHint(r.ocrText), reduced: r.reduced, split: true },
     }));
+    // 入金領収書は出金領収書の逆：借方 現金 ／ 貸方 相手の科目（宛名の取引先から覚えた科目）。摘要は宛名と但し書き
+    if (placeholder.doc === "income") for (const r of newRows) {
+      const payee = extractPayee(String(r.ocrText || "").split("\n"));
+      Object.assign(r, { doc: "income", store: payee, debitCode: incomeCashCode(r.companyId), creditCode: incomeCreditCode(r.companyId, payee, r.item),
+        summary: [payee, r.item].filter(Boolean).join(" "), taxHint: {}, note: "" });
+      r.creditSummary = r.summary;
+    }
     newRows.forEach(setAutoTaxBoth);
     rows.splice(idx, 1, ...newRows);
     ocrImages.delete(groupId);
@@ -1586,6 +1594,31 @@ function learnStoreName(row) {
   try { localStorage.setItem(STORE_NAMES_KEY, JSON.stringify(storeNames)); } catch {}
 }
 
+// ---- 入金領収書 ----
+// 宛名（〜様・〜御中・〜殿）。会社が出した領収書の控えでは、お金を払った相手
+function extractPayee(lines) {
+  for (const line of lines) {
+    const m = String(line).normalize("NFKC").match(/^(.*?)\s*(様|御中|殿)\s*$/);
+    const name = m && m[1].replace(/^(領収書|領収証|No\.?\s*\d+|\d+)\s*/, "").trim();
+    if (name && name.length <= 30 && !/上記|正に|金額|但/.test(name)) return name;
+  }
+  return "";
+}
+const incomeRulesOf = cid => autoRulesOf(cid, "income");
+const incomeCashCode = cid => incomeRulesOf(cid).fixedCode || masterOf(cid).find(m => normName(m.name) === "現金")?.code || "";
+// 宛名（なければ但し書き）から、前に選んだ貸方の科目
+function incomeCreditCode(cid, payee, item) {
+  const text = normName(`${payee || ""} ${item || ""}`);
+  return incomeRulesOf(cid).rules.filter(r => r.keyword && r.code && text.includes(normName(r.keyword)))
+    .sort((a, b) => normName(b.keyword).length - normName(a.keyword).length)[0]?.code || "";
+}
+function learnIncomeRule(r) {
+  const kw = String(r.store || r.item || "").trim().slice(0, 30);
+  if (r.doc !== "income" || !kw || !r.creditCode || lineOf(r) === "d") return;
+  const rules = incomeRulesOf(r.companyId).rules, ex = rules.find(x => normName(x.keyword) === normName(kw));
+  if (ex) ex.code = r.creditCode; else rules.push({ keyword: kw, code: r.creditCode });
+}
+
 // 領収書の「但し 〇〇代として」から品目を取り出す
 function extractPurpose(lines) {
   for (const line of lines) {
@@ -1737,7 +1770,8 @@ function receiptTaxHint(text) {
 // 通帳の仕訳で、通帳の科目（預金）が入っている側か
 const isBankSide = (row, side) => row.doc === "passbook" && !!row.bankSide && side === (row.bankSide === "d" ? "debit" : "credit");
 // 出金領収書で、貸方が支払いの科目（現金・未払金）か
-const isPaySide = (row, side) => side === "credit" && row.source === "receipt" && !row.doc && /^(現金|未払金)$/.test(normName(masterName(row.creditCode, row.companyId)));
+const isPaySide = (row, side) => row.source === "receipt" && (side === "credit" && !row.doc || side === "debit" && row.doc === "income")
+  && /^(現金|未払金)$/.test(normName(masterName(row[side + "Code"], row.companyId)));
 function setAutoTax(row, side) {
   if (row.source === TRIAL_SOURCE) return;
   const c = companies.find(x => x.id === row.companyId);
@@ -2358,6 +2392,14 @@ list.addEventListener("change", e => {
     saveReceiptSettings(); save(); render();
   }
   else if (row.doc === "payroll" && key === "date") { payrollMonth(row); save(); render(); }
+  else if (row.doc === "income" && key === "creditCode" && (row.store || row.item)) {
+    // 入金領収書: 貸方の科目を、宛名（なければ但し書き）のルールとして覚え、同じ相手でまだ科目が空の行にも入れる
+    learnIncomeRule(row);
+    const kw = normName(row.store || row.item);
+    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.doc === "income" && !o.locked && o.review !== "exported" && !o.creditCode
+      && normName(o.store || o.item) === kw) { o.creditCode = row.creditCode; setAutoTax(o, "credit"); }
+    saveReceiptSettings(); save(); render();
+  }
   else if (row.doc === "payroll" && row.payKey && key === (lineOf(row) === "c" ? "creditCode" : "debitCode")) {
     // 給与台帳: 選んだ科目を、その欄（役員報酬・給料手当…）の科目として会社ごとに覚え、次から使う
     const rules = autoRulesOf(row.companyId, "payroll").rules, ex = rules.find(r => r.keyword === row.payKey);
@@ -2743,7 +2785,7 @@ document.getElementById("download").onclick = async () => {
   saveArchives();
 
   // 書き出した（完成した）領収書の仕訳は、自動入力ルールに覚える（次から同じお店に同じ科目が入る）
-  for (const r of done) { learnReceiptRule(r); learnPassbookRule(r); }
+  for (const r of done) { learnReceiptRule(r); learnPassbookRule(r); learnIncomeRule(r); }
   saveReceiptSettings();
   // 出力した仕訳は「出力済み」の印を付けて、一覧に残す
   setReview(done.map(r => r.id), "exported", `${voucherCount(done)}件を保存しました`);
@@ -2861,7 +2903,7 @@ function saveMasters() {
 // 「いつも使う科目」1つと、「言葉 → 科目」のルールを持つ。領収書以外は、読み取りを作ったときに使う（先に登録しておける）
 const AUTO_RULE_TYPES = [
   { id: "receipt",  name: "出金領収書", ready: true,  fixed: "貸方の科目（現金）",     fixedEx: "例: 1101", rule: "店名 → 借方の科目",     ruleEx: "例: セブンイレブン" },
-  { id: "income",   name: "入金領収書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1101", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
+  { id: "income",   name: "入金領収書", ready: true,  fixed: "借方の科目",     fixedEx: "例: 1101", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "passbook", name: "通帳",       ready: true,  fixed: "この通帳の科目", fixedEx: "例: 1107", rule: "摘要 → 相手の科目",     ruleEx: "例: NTT" },
   { id: "purchase", name: "仕入請求書", ready: false, fixed: "貸方の科目",     fixedEx: "例: 2103", rule: "取引先 → 借方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "sales",    name: "売上請求書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1142", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
