@@ -1713,7 +1713,8 @@ function setAutoTax(row, side) {
   row[side + "Tax"] = type;
   row[side + "Rate"] = type !== "課税" ? type : h.reduced ? "8%軽" : "10%";
   // 事業者区分は取引の相手で決まる（品物が対象外・非課税でも、相手は課税事業者のことがある）
-  row[side + "Biz"] = side === "debit" && h.noInvoice ? "免税事業者" : "課税事業者";
+  // 給与台帳（役員報酬・給料・通勤費など）は、相手が事業者ではないので免税事業者
+  row[side + "Biz"] = row.doc === "payroll" || (side === "debit" && h.noInvoice) ? "免税事業者" : "課税事業者";
 }
 // 以前は税率の中に「免税事業者」があったので、事業者の項目に移す
 function moveBiz(r) {
