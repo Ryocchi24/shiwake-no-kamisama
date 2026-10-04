@@ -300,6 +300,7 @@
   .dlg-sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6px; }
   #masterDlg[hidden] { display: none; }
   #masterDlg .tabs { margin-bottom: 8px; }
+  .master-tools-below { margin-top: 12px; }
   .master-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
   .master-tools input[type=search] { flex: 1 1 100%; min-width: 160px; height: 30px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; }
   .master-csv[hidden] { display: none; }
@@ -328,6 +329,10 @@
   .code-suggest[hidden] { display: none; }
   .cs-item { display: flex; gap: 10px; padding: 8px 10px; border-radius: 7px; font-size: 14px; cursor: pointer; color: var(--text); }
   .cs-item.active, .cs-item:hover { background: var(--primary-soft); }
+  @media (pointer: coarse) {
+    .cs-item { padding: 12px 12px; font-size: 16px; } /* 指で押しやすい大きさ */
+    .code-suggest { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  }
   .cs-code { font-family: "Roboto Mono", monospace; color: var(--muted); min-width: 40px; }
 
   .side-codes { font-size: 11px; color: var(--gold-deep); }
@@ -628,8 +633,9 @@
     td.b-left { border: none; }
     td.rowno { display: none; }
     td.c-thumb { position: absolute; left: 14px; top: 14px; }
-    .v-no { display: inline-block; margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line);
-      font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; vertical-align: middle; }
+    .v-no { display: block; width: fit-content; margin: 6px auto 0; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line);
+      font-size: 11px; font-weight: 700; color: var(--text); white-space: nowrap; }
+    tbody tr.v-cont td.c-thumb .v-no { margin-top: 0; }
     .add-wrap { display: none; }
     tbody tr.row-receipt td.c-add { display: flex; padding-top: 6px; background: none; }
     tbody tr.row-receipt td.c-add-debit { grid-column: 1; }
@@ -648,9 +654,8 @@
     /* 借方・貸方が複数ある仕訳は、2行目からを1行目の続きとして見せる（間の線・日付・画像を出さない） */
     tbody tr.v-mid { border-bottom: none; padding-bottom: 4px; }
     tbody tr.v-cont { padding-top: 0; }
-    tbody tr.v-cont td.c-date, tbody tr.v-cont td.c-thumb { display: none; }
-    /* 足した塊の上にも番号を出し、うすい灰色の帯で区切る（片側だけ足した時も同じ） */
-    tbody tr.v-cont td.c-status { margin: 10px 0 4px; padding: 6px 8px; background: var(--surface-2); border-radius: 8px; }
+    tbody tr.v-cont td.c-date, tbody tr.v-cont td.c-status { display: none; }
+    tbody tr.v-cont td.c-thumb { top: 4px; } /* 足した塊の番号は、借方科目の左に出す */
     tbody tr.v-mid td.c-del { display: none; }
     td.c-del .v-actions { justify-content: flex-start; align-items: center; }
     tbody tr.row-receipt td.c-status { margin-bottom: 6px; }
@@ -913,12 +918,13 @@
       <button class="tab" data-mtab="mapping"><span class="nb">別会計ソフト</span><span class="nb">科目マスタ</span></button>
     </div>
     <p class="dlg-help" id="masterHelp"></p>
-    <div class="master-tools">
+    <div class="master-list" id="masterList"></div>
+    <!-- 追加・読み込み・絞り込みはあまり使わないので、一覧の下に置く -->
+    <div class="master-tools master-tools-below">
       <button class="btn btn-sm" id="masterAdd">＋ 追加</button>
       <label class="btn btn-sm" id="masterImportBtn">ファイルから読み込む<input type="file" id="masterImport" accept=".csv,.xlsx,.xlsm,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
       <input type="search" id="masterSearch" placeholder="コード・科目名で絞り込み">
     </div>
-    <div class="master-list" id="masterList"></div>
     <!-- 普段は使わないので折りたたむ（別の会社のマスタをまとめて登録する・別の端末に移すとき用） -->
     <details class="master-csv" id="masterCsv">
       <summary>その他</summary>
@@ -1821,7 +1827,7 @@ function render() {
       const msg = anchor.status === "reading"
         ? `<span class="status-msg">読み取っています…</span>`
         : `<span class="status-msg error">${escapeHtml(anchor.error)}<button class="btn" data-retry="${anchor.id}">再読み取り</button></span>`;
-      body += `<tr class="is-${anchor.status}" data-row="${anchor.id}" data-vid-head="${escapeHtml(v)}"><td class="rowno">${no}</td><td class="c-status"><span class="v-no">${no} / ${totalV}</span><span class="st">${statusBadge(anchor)}</span></td>${thumbOf(anchor)}<td colspan="${fields.length}" class="c-msg">${msg}</td>${actions(anchor, v, false)}</tr>`;
+      body += `<tr class="is-${anchor.status}" data-row="${anchor.id}" data-vid-head="${escapeHtml(v)}"><td class="rowno">${no}</td><td class="c-status"><span class="st">${statusBadge(anchor)}</span></td>${thumbOf(anchor).replace(/<\/td>$/, `<span class="v-no">${no} / ${totalV}</span></td>`)}<td colspan="${fields.length}" class="c-msg">${msg}</td>${actions(anchor, v, false)}</tr>`;
       continue;
     }
     const compound = vr.length > 1 || lineOf(anchor) !== "pair";
@@ -1833,8 +1839,8 @@ function render() {
     for (let i = 0; i < k; i++) {
       const first = i === 0, last = i === k - 1, dRow = D[i] || null, cRow = C[i] || null;
       const srcOf = f => !f.side ? (first ? anchor : null) : f.side === "debit" ? dRow : cRow;
-      // スマホでは、仕訳の枠の一番上に「何件目 / 全部で何件」を出す（たくさん読み込んだ時に、今どこを見ているか分かるように）
-      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status"><span class="v-no">${no} / ${totalV}</span>${first ? `<span class="st">${statusBadge(anchor)}</span>` : ""}</td>${first ? thumbOf(anchor) : `<td class="c-thumb"></td>`}`;
+      // スマホでは「何件目 / 全部で何件」を、写真の下（足した塊は借方科目の左）に出す（たくさん読み込んだ時に、今どこを見ているか分かるように）
+      const head = `<td class="rowno">${first ? no : ""}</td><td class="c-status">${first ? `<span class="st">${statusBadge(anchor)}</span>` : ""}</td>${first ? thumbOf(anchor).replace(/<\/td>$/, `<span class="v-no">${no} / ${totalV}</span></td>`) : `<td class="c-thumb"><span class="v-no">${no} / ${totalV}</span></td>`}`;
       // スマホで借方と貸方の同じ項目（科目・金額・摘要など）が横に並ぶよう、片側にしかない項目の反対側に空欄を入れる（PCでは出さない）
       const cells = isTrial ? fields : [...fields.filter(f => !f.side), ...["debit", "credit"].flatMap(side =>
         [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(kd => fields.find(f => f.side === side && kindOf(f.key) === kd) || { blank: true, side }))];
@@ -1932,22 +1938,46 @@ function keepSuggestVisible() {
   else if (el.offsetTop + el.offsetHeight > suggestEl.scrollTop + suggestEl.clientHeight) suggestEl.scrollTop = el.offsetTop + el.offsetHeight - suggestEl.clientHeight;
 }
 // 候補の位置: 欄のすぐ下（下に入りきらなければ上）
+// スマホ（指で操作する画面）か
+const isTouch = () => matchMedia("(pointer: coarse)").matches;
 function placeSuggest() {
   if (!suggestInput) return;
   const rc = suggestInput.getBoundingClientRect();
-  if (rc.bottom < 0 || rc.top > innerHeight) return hideSuggest(); // 欄が画面の外に出たら閉じる
+  // キーボードが出ているときは、見えている範囲（キーボードの上まで）で位置と高さを決める
+  const vv = window.visualViewport, viewBottom = vv ? vv.offsetTop + vv.height : innerHeight;
+  if (rc.bottom < 0 || rc.top > viewBottom) return hideSuggest(); // 欄が画面の外に出たら閉じる
+  if (isTouch()) {
+    // スマホ：画面の横幅いっぱいに、欄のすぐ下からキーボードの上までに出す
+    suggestEl.style.left = "12px";
+    suggestEl.style.width = (innerWidth - 24) + "px";
+    const below = viewBottom - rc.bottom - 8, above = rc.top - (vv ? vv.offsetTop : 0) - 8;
+    const useAbove = below < 160 && above > below;
+    const room = Math.max(120, Math.min(360, useAbove ? above : below));
+    suggestEl.style.maxHeight = room + "px";
+    const h = Math.min(room, suggestEl.scrollHeight);
+    suggestEl.style.top = (useAbove ? rc.top - 4 - h : rc.bottom + 4) + "px";
+    return;
+  }
+  suggestEl.style.width = ""; suggestEl.style.maxHeight = "";
   const h = Math.min(300, suggestEl.scrollHeight);
   suggestEl.style.left = Math.max(8, Math.min(rc.left, innerWidth - 268)) + "px";
   suggestEl.style.top = (rc.bottom + 4 + h > innerHeight && rc.top - 4 - h > 0 ? rc.top - 4 - h : rc.bottom + 4) + "px";
+}
+window.visualViewport?.addEventListener("resize", () => { if (!suggestEl.hidden) placeSuggest(); });
+window.visualViewport?.addEventListener("scroll", () => { if (!suggestEl.hidden) placeSuggest(); });
+// 選んだコードを欄に入れて、入力として反映する
+function commitCode(input, code) {
+  input.value = code;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 function hideSuggest() { suggestEl.hidden = true; suggestInput = null; }
 function pickSuggest(i) {
   const m = suggestItems[i], input = suggestInput;
   if (!m || !input) return;
   hideSuggest();
-  input.value = m.code;
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+  input.closest(".code-box")?.classList.remove("searching");
+  commitCode(input, m.code);
   hideSuggest();
 }
 document.addEventListener("input", e => {
@@ -1958,12 +1988,32 @@ document.addEventListener("input", e => {
 document.addEventListener("focusin", e => {
   if (!e.target.matches?.("[data-code-suggest]")) return;
   e.target.dataset.prev = e.target.value;
-  const t = e.target; setTimeout(() => { if (document.activeElement === t) { showSuggest(t, true); t.select(); } }, 0); // 押しただけで候補の一覧を出し、そのまま科目名を打てるようにする
+  const t = e.target;
+  setTimeout(() => {
+    if (document.activeElement !== t) return;
+    if (isTouch()) {
+      // スマホ：欄を空にして、すぐ科目名やコードを打てるようにする（選ばずに離れたら元に戻す）。横の科目名は隠す
+      t.value = "";
+      t.closest(".code-box")?.classList.add("searching");
+    } else t.select(); // PC：文字を選んだ状態にして、そのまま打てば置き換わる
+    showSuggest(t, true); // 押しただけで候補の一覧を出す
+  }, 0);
 });
 document.addEventListener("focusout", e => {
   const t = e.target;
   if (!t.matches?.("[data-code-suggest]")) return;
-  setTimeout(() => { if (suggestInput === t) hideSuggest(); if (isCodeSearch(t)) t.value = t.dataset.prev || ""; }, 150); // 選ばずに離れたら元に戻す
+  setTimeout(() => {
+    if (suggestInput === t) hideSuggest();
+    t.closest(".code-box")?.classList.remove("searching");
+    const q = t.value.trim(), prev = t.dataset.prev || "";
+    if (!q) { if (prev) commitCode(t, prev); return; } // 何も打たずに離れたら元のコード
+    if (!isCodeSearch(t)) return; // コード（数字）を打った場合はそのまま
+    // 科目名を打って一覧から選ばずに離れたとき：名前がぴったり合うか、候補が1つだけならそれに決める。そうでなければ元に戻す
+    const n = normName(q), all = suggestList(t);
+    const hits = all.filter(m => normName(m.name).includes(n));
+    const pick = all.find(m => normName(m.name) === n) || (hits.length === 1 ? hits[0] : null);
+    commitCode(t, pick ? pick.code : prev);
+  }, 150);
 });
 document.addEventListener("keydown", e => {
   if (suggestEl.hidden || e.target !== suggestInput) return;
@@ -3135,7 +3185,8 @@ companyTypeSel.onchange = () => {
 };
 // 会社の種類ごとに、出すタブ（原始資料 → レシートの自動入力、試算表 → 試算表の読み替え）
 let ruleType = "receipt"; // 自動入力ルールで表示している書類の種類
-const TABS_BY_TYPE = { receipt: ["master", "receipt"], format2: ["master"], format3: ["master", "mapping"] };
+// 自動入力ルールのタブは出さない（手で直した科目やCSVに書き出した仕訳から、会社ごとに自動で覚えて使う）
+const TABS_BY_TYPE = { receipt: ["master"], format2: ["master"], format3: ["master", "mapping"] };
 function renderMaster() {
   const type = companies.find(x => x.id === masterCid)?.method || "receipt";
   companyTypeSel.value = type;
