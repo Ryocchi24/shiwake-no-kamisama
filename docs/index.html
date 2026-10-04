@@ -355,7 +355,9 @@
   .master-csv { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
   .master-csv summary { cursor: pointer; }
   .master-csv-body { display: flex; gap: 8px; margin-top: 8px; }
-  .master-list { overflow: auto; border: 1px solid var(--line); border-radius: 8px; min-height: 120px; }
+  .master-list { overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  /* 科目がまだないときは、枠を出さない（見出しだけ） */
+  .master-list:not(:has(.master-row)) { border: none; }
   .master-row { display: grid; grid-template-columns: 90px 1fr 36px; gap: 6px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); }
   .master-row.mapping { grid-template-columns: 70px 1fr 110px 1fr 36px; }
   .master-row input { width: 100%; font: inherit; font-size: 13px; height: 30px; border: 1px solid transparent; border-radius: 5px; padding: 0 6px; background: transparent; }
@@ -853,10 +855,10 @@
         <button class="doc-type" data-doc="receipt">出金領収書</button>
         <button class="doc-type" data-doc="income">入金領収書</button>
         <button class="doc-type" data-doc="passbook">通帳</button>
-        <button class="doc-type" data-doc="purchase">仕入請求書<span class="soon-tag">準備中</span></button>
-        <button class="doc-type" data-doc="sales">売上請求書<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="purchase">仕入請求書</button>
+        <button class="doc-type" data-doc="sales">売上請求書</button>
         <button class="doc-type" data-doc="payroll">給与台帳</button>
-        <button class="doc-type" data-doc="card">クレジット明細<span class="soon-tag">準備中</span></button>
+        <button class="doc-type" data-doc="card">クレジット明細</button>
       </div>
       <section class="method-soon" id="methodSoon" hidden>
         <h2 id="methodSoonTitle"></h2>
@@ -1071,6 +1073,9 @@ const IMPORT_FORMATS = {
   format3: { name: "試算表", web: ["Excel", "CSV"], app: ["Excel", "CSV", "PDF", "写真"] },
   // 原始資料のうち、出金領収書以外の種類（取り込み方法が「原始資料」のとき、選んだ種類で決まる）
   income: { name: "入金領収書", web: [], app: ["写真", "PDF"] },
+  purchase: { name: "仕入請求書", web: [], app: ["写真", "PDF"] },
+  sales: { name: "売上請求書", web: [], app: ["写真", "PDF"] },
+  card: { name: "クレジット明細", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
   passbook: { name: "通帳", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
   payroll: { name: "給与台帳", web: ["Excel", "CSV"], app: ["写真", "PDF", "Excel", "CSV"] },
 };
@@ -1203,7 +1208,8 @@ async function addFiles(fileList) {
   if (settings.method === NIKKEI_SOURCE) return importNikkei(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "passbook") return importPassbook(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "payroll") return importPayroll(files);
-  if ((settings.method || "receipt") !== "receipt" || !["receipt", "income"].includes(settings.docType || "receipt")) {
+  if ((settings.method || "receipt") === "receipt" && settings.docType === "card") return importCard(files);
+  if ((settings.method || "receipt") !== "receipt" || !["receipt", "income", "purchase", "sales"].includes(settings.docType || "receipt")) {
     alert("この取り込み方法は準備中です。");
     return;
   }
@@ -1232,7 +1238,7 @@ async function addFiles(fileList) {
       fullImages.set(groupId, full);
       if (forOcr) ocrImages.set(groupId, forOcr);
       imageStore.put(groupId, full).catch(() => {});
-      rows.push({ id: uid(), groupId, companyId: currentCompanyId, source: "receipt", ...(settings.docType === "income" ? { doc: "income" } : {}), thumb, status: "reading" });
+      rows.push({ id: uid(), groupId, companyId: currentCompanyId, source: "receipt", ...(["income", "purchase", "sales"].includes(settings.docType) ? { doc: settings.docType } : {}), thumb, status: "reading" });
       queue.push(groupId);
     } catch (err) {
       alert(`${file.name}: ${err.message}`);
@@ -1288,7 +1294,7 @@ async function readGroup(groupId) {
       // 対象額が読めなかった時も3行に分け、8%と10%の金額は空にしておく（手で入れる）
       // 金額はすべて税込。8%と10%の合計が、領収書の合計と必ず一致するようにする
       const hint = receiptTaxHint(r.ocrText);
-      if (!hint.mixed || placeholder.doc === "income") return [r];
+      if (!hint.mixed || placeholder.doc === "income" || placeholder.doc === "sales") return [r];
       const sp = splitByRate(r.ocrText);
       let total = Number(r.amount) || 0, r8 = "", r10 = "", off = "";
       if (sp && !total) { r8 = sp.r8; r10 = sp.r10; total = r8 + r10; }
@@ -1320,6 +1326,35 @@ async function readGroup(groupId) {
       Object.assign(r, { doc: "income", store: payee, debitCode: incomeCashCode(r.companyId), creditCode: incomeCreditCode(r.companyId, payee, r.item),
         summary: [payee, r.item].filter(Boolean).join(" "), taxHint: {}, note: "" });
       r.creditSummary = r.summary;
+    }
+    // 仕入請求書：借方 仕入高など（請求元ごとに覚えた科目）／貸方 買掛金（請求元ごとに覚えた科目。未払金など）
+    if (placeholder.doc === "purchase") {
+      const sk = shokuchiOf(placeholder.companyId);
+      for (const r of newRows) {
+        const rule = purchaseRule(r.companyId, r.store, r.item);
+        r.doc = "purchase";
+        if (r.debitCode !== sk) r.debitCode = rule?.code || purchaseDefault(r.companyId, "debit");
+        if (r.creditCode !== sk) r.creditCode = rule?.creditCode || purchaseDefault(r.companyId, "credit");
+        r.note = String(r.note || "").split("／").filter(n => n && !/クレジット払い/.test(n)).join("／");
+      }
+    }
+    // 売上請求書：借方 売掛金 ／ 貸方 売上高（宛名の取引先ごとに覚えた科目）。8%と10%が混ざっていれば、貸方を分ける
+    //   借方 売掛金（合計）／ 貸方 諸口、借方 諸口 ／ 貸方 売上高（8%）、借方 諸口 ／ 貸方 売上高（10%）
+    if (placeholder.doc === "sales") {
+      const out = [];
+      for (const r of newRows) {
+        const payee = extractPayee(String(r.ocrText || "").split("\n")), rule = salesRule(r.companyId, payee, r.item);
+        const deb = rule?.code || salesDefault(r.companyId, "debit"), cre = rule?.creditCode || salesDefault(r.companyId, "credit");
+        const summary = [payee, r.item].filter(Boolean).join(" ");
+        const base = { ...r, doc: "sales", store: payee, summary, creditSummary: summary, taxHint: {}, note: "" };
+        if (!receiptTaxHint(r.ocrText).mixed) { out.push({ ...base, debitCode: deb, creditCode: cre }); continue; }
+        const sp = splitAmounts(r.ocrText, r.debitAmount), vid = base.id;
+        const blank = { debitCode: "", debitAmount: "", creditCode: "", creditAmount: "" };
+        out.push({ ...base, ...blank, vid, line: "d", debitCode: deb, debitAmount: sp.total || "", note: sp.off });
+        out.push({ ...base, ...blank, id: uid(), vid, line: "c", thumb: "", creditCode: cre, creditAmount: sp.r8, taxHint: { reduced: true } });
+        out.push({ ...base, ...blank, id: uid(), vid, line: "c", thumb: "", creditCode: cre, creditAmount: sp.r10, taxHint: { reduced: false } });
+      }
+      newRows.splice(0, newRows.length, ...out);
     }
     newRows.forEach(setAutoTaxBoth);
     rows.splice(idx, 1, ...newRows);
@@ -1594,6 +1629,154 @@ function learnStoreName(row) {
   try { localStorage.setItem(STORE_NAMES_KEY, JSON.stringify(storeNames)); } catch {}
 }
 
+// ---- 仕入請求書 ----
+// 請求元ごとに「借方の科目・貸方の科目」を覚える。覚えていなければ、借方 仕入高・貸方 買掛金
+const purchaseRulesOf = cid => autoRulesOf(cid, "purchase");
+function purchaseRule(cid, store, item) {
+  const text = normName(`${store || ""} ${item || ""}`);
+  return purchaseRulesOf(cid).rules.filter(r => r.keyword && text.includes(normName(r.keyword)))
+    .sort((a, b) => normName(b.keyword).length - normName(a.keyword).length)[0] || null;
+}
+function purchaseDefault(cid, side) {
+  const byName = (...names) => masterOf(cid).find(m => names.some(n => normName(m.name) === normName(n)))?.code || "";
+  return side === "debit" ? byName("仕入高", "仕入", "商品仕入高") : byName("買掛金");
+}
+function learnPurchaseRule(r) {
+  const kw = String(r.store || r.item || "").trim().slice(0, 30);
+  if (r.doc !== "purchase" || !kw || lineOf(r) !== "pair") return;
+  const rules = purchaseRulesOf(r.companyId).rules;
+  let ex = rules.find(x => normName(x.keyword) === normName(kw));
+  if (!ex) rules.push(ex = { keyword: kw });
+  if (r.debitCode) ex.code = r.debitCode;
+  if (r.creditCode) ex.creditCode = r.creditCode;
+}
+
+// ---- クレジット明細 ----
+// 1行（ご利用1件）→ 1つの仕訳。借方 店名から覚えた科目（出金領収書と同じルール）／ 貸方 未払金
+function cardDate(t) {
+  const v = String(t || "").normalize("NFKC");
+  let m = v.match(/(\d{4})\s*[\/.\-年]\s*(\d{1,2})\s*[\/.\-月]\s*(\d{1,2})/);
+  if (m) return validDate(+m[1], +m[2], +m[3]) ? `${m[1]}-${pad(+m[2])}-${pad(+m[3])}` : "";
+  m = v.match(/(?<!\d)(\d{2})\s*[\/.]\s*(\d{1,2})\s*[\/.]\s*(\d{1,2})(?!\d)/);
+  if (m) return validDate(2000 + +m[1], +m[2], +m[3]) ? `${2000 + +m[1]}-${pad(+m[2])}-${pad(+m[3])}` : "";
+  m = v.match(/(?<![\d\/])(\d{1,2})\s*[\/月]\s*(\d{1,2})日?(?![\d\/])/);
+  if (!m) return "";
+  // 年がなければ、今日より先にならない一番近い年
+  const now = new Date(), y = now.getFullYear() - (+m[1] > now.getMonth() + 2 ? 1 : 0);
+  return validDate(y, +m[1], +m[2]) ? `${y}-${pad(+m[1])}-${pad(+m[2])}` : "";
+}
+const CARD_SKIP = /合計|小計|ご?請求|お支払い?(金額|日|総額)|前回|今回|残高|ポイント|年会費|利用可能|お知らせ|振替|口座/;
+// 写真・PDF：行ごとのセルから、日付・店名・金額を拾う（金額は、その行で最初の金額 ＝ 利用金額）
+function parseCardRows(cellRows) {
+  const out = [];
+  for (const cells of cellRows) {
+    const line = cells.map(c => String(c.text || "").normalize("NFKC")).join(" ");
+    if (CARD_SKIP.test(line)) continue;
+    const date = cardDate(line);
+    if (!date) continue;
+    const dm = line.match(/\d{2,4}\s*[\/.\-年]\s*\d{1,2}\s*[\/.\-月]\s*\d{1,2}日?|\d{1,2}\s*[\/月]\s*\d{1,2}日?/);
+    let rest = dm ? line.replace(dm[0], " ") : line;
+    const am = [...rest.matchAll(/[¥\\]?\s*\d{1,3}(?:,\d{3})+|[¥\\]\s*\d+|(?<![\d.])\d{3,7}(?=\s*円)/g)];
+    if (!am.length) continue;
+    const amount = Number(am[0][0].replace(/\D/g, ""));
+    rest = rest.slice(0, am[0].index);
+    const store = rest.replace(/1回払い?|一括|分割|リボ|本人|家族|ご?利用|\s+/g, " ").trim();
+    if (amount) out.push({ date, store, amount });
+  }
+  return out;
+}
+// Excel・CSV（カード会社の明細のダウンロード）：見出しの言葉で列を見つける
+function parseCardSheet(table) {
+  const find = (row, re) => row.findIndex(c => re.test(String(c).normalize("NFKC").replace(/\s/g, "")));
+  const hi = table.findIndex(row => find(row, /利用日|日付|ご利用年月日/) >= 0 && find(row, /金額/) >= 0);
+  if (hi < 0) return [];
+  const h = table[hi], dc = find(h, /利用日|日付|ご利用年月日/), sc = find(h, /利用店|ご利用先|店名|加盟店|内容|摘要/), ac = find(h, /利用金額|ご利用金額|金額/);
+  return table.slice(hi + 1).map(r => ({ date: cardDate(r[dc]), store: sc >= 0 ? String(r[sc] || "").trim() : "", amount: Math.abs(sheetNum(r[ac]) || 0) }))
+    .filter(e => e.date && e.amount);
+}
+function addCardEntries(entries, groupId, thumb) {
+  const cid = currentCompanyId, rc = receiptSettingsOf(cid);
+  const pay = rc.cardCode || masterOf(cid).find(m => /^(未払金|未払い金)$/.test(normName(m.name)))?.code || "";
+  for (const e of entries) {
+    const r = { id: uid(), groupId, companyId: cid, source: "receipt", doc: "card", thumb, status: "done", review: "pending", date: e.date,
+      store: e.store, summary: e.store, debitCode: receiptDebitCode(cid, e.store, e.store), debitSub: "", debitAmount: e.amount,
+      creditCode: pay, creditSub: "", creditAmount: e.amount, taxHint: {}, bizV2: true, bizV3: true, note: "" };
+    rows.push(withTax(r));
+  }
+  return entries.length;
+}
+async function importCard(files) {
+  if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
+  const sheets = files.filter(isSheetFile), others = files.filter(f => !isSheetFile(f));
+  if (others.length && !NATIVE) { alert("クレジット明細の写真・PDFは、iPhoneアプリで読み取れます。PCではExcel・CSVを読み込めます。"); return; }
+  const banner = document.getElementById("ocrBanner");
+  const show = t => { banner.textContent = t; banner.hidden = false; };
+  let made = 0; const problems = [];
+  try {
+    for (const file of sheets) {
+      show(`クレジット明細を読み込んでいます（${file.name}）…`);
+      const entries = parseCardSheet(await sheetToRows(file));
+      if (!entries.length) { problems.push(`${file.name}: 利用日と金額の列が見つかりませんでした`); continue; }
+      made += addCardEntries(entries, uid(), "");
+    }
+    const pages = [];
+    for (const file of others) {
+      if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) { show(`PDFを開いています（${file.name}）…`); pages.push(...await pdfToImages(file)); }
+      else pages.push(await resize(file, OCR_MAX_SIDE, 0.9));
+    }
+    for (let i = 0; i < pages.length; i++) {
+      show(`クレジット明細を読み取っています（${i + 1} / ${pages.length} 枚）…`);
+      const res = await callNative("recognizeText", { image: pages[i].split(",")[1] });
+      const entries = parseCardRows(tableCells(res.items || [], res.width, res.height));
+      if (!entries.length) { problems.push(`${i + 1}枚目: ご利用の行を読み取れませんでした`); continue; }
+      const groupId = uid(), blob = await dataUrlToBlob(pages[i]);
+      const [full, thumb] = await Promise.all([resize(blob, 1600, 0.85), resize(blob, 240, 0.7)]);
+      fullImages.set(groupId, full); imageStore.put(groupId, full).catch(() => {});
+      made += addCardEntries(entries, groupId, thumb);
+    }
+  } catch (err) {
+    alert(`クレジット明細を読み取れませんでした: ${err.message}`);
+  } finally {
+    banner.hidden = true;
+  }
+  save(); render();
+  if (problems.length) alert(`${made}行を作りました。次の点を確かめてください。\n\n${problems.join("\n")}`);
+  else if (made) showToast(`${made}行を作りました`);
+}
+
+// ---- 売上請求書 ----
+// 宛名の取引先ごとに「借方の科目・貸方の科目」を覚える。覚えていなければ、借方 売掛金・貸方 売上高
+const salesRulesOf = cid => autoRulesOf(cid, "sales");
+function salesRule(cid, payee, item) {
+  const text = normName(`${payee || ""} ${item || ""}`);
+  return salesRulesOf(cid).rules.filter(r => r.keyword && text.includes(normName(r.keyword)))
+    .sort((a, b) => normName(b.keyword).length - normName(a.keyword).length)[0] || null;
+}
+function salesDefault(cid, side) {
+  const byName = (...names) => masterOf(cid).find(m => names.some(n => normName(m.name) === normName(n)))?.code || "";
+  return side === "debit" ? byName("売掛金") : byName("売上高", "売上");
+}
+function learnSalesRule(r) {
+  const kw = String(r.store || r.item || "").trim().slice(0, 30);
+  if (r.doc !== "sales" || !kw) return;
+  const rules = salesRulesOf(r.companyId).rules, ln = lineOf(r);
+  let ex = rules.find(x => normName(x.keyword) === normName(kw));
+  if (!ex) rules.push(ex = { keyword: kw });
+  if (ln !== "c" && r.debitCode) ex.code = r.debitCode;
+  if (ln !== "d" && r.creditCode) ex.creditCode = r.creditCode;
+}
+// 8%と10%の金額（税込）。合計と必ず一致させる。読めなければ空にしてお知らせ
+function splitAmounts(text, amount) {
+  const sp = splitByRate(text);
+  let total = Number(amount) || 0, r8 = "", r10 = "", off = "";
+  if (sp && !total) { r8 = sp.r8; r10 = sp.r10; total = r8 + r10; }
+  else if (sp && sp.r8 + sp.r10 === total) { r8 = sp.r8; r10 = sp.r10; }
+  else if (sp && Math.abs(Math.round(sp.r8 * 1.08) + Math.round(sp.r10 * 1.1) - total) <= 2) { r8 = Math.round(sp.r8 * 1.08); r10 = total - r8; } // 税抜で書かれていた
+  else if (sp && sp.r8 < total) { r8 = sp.r8; r10 = total - r8; off = "8%と10%の金額を確かめてください"; }
+  else off = "8%の金額を入れてください（10%は合計との差で入ります）";
+  return { total, r8, r10, off };
+}
+
 // ---- 入金領収書 ----
 // 宛名（〜様・〜御中・〜殿）。会社が出した領収書の控えでは、お金を払った相手
 function extractPayee(lines) {
@@ -1770,8 +1953,9 @@ function receiptTaxHint(text) {
 // 通帳の仕訳で、通帳の科目（預金）が入っている側か
 const isBankSide = (row, side) => row.doc === "passbook" && !!row.bankSide && side === (row.bankSide === "d" ? "debit" : "credit");
 // 出金領収書で、貸方が支払いの科目（現金・未払金）か
-const isPaySide = (row, side) => row.source === "receipt" && (side === "credit" && !row.doc || side === "debit" && row.doc === "income")
-  && /^(現金|未払金)$/.test(normName(masterName(row[side + "Code"], row.companyId)));
+const isPaySide = (row, side) => row.source === NIKKEI_SOURCE ? /現金|預金|銀/.test(normName(masterName(row[side + "Code"], row.companyId))) // 日計表：現金・預金の側（入金・出金・預金の部分とも）
+  : row.source === "receipt" && (side === "credit" && (!row.doc || row.doc === "purchase" || row.doc === "card") || side === "debit" && (row.doc === "income" || row.doc === "sales"))
+  && /^(現金|未払金|買掛金|売掛金)$/.test(normName(masterName(row[side + "Code"], row.companyId)));
 function setAutoTax(row, side) {
   if (row.source === TRIAL_SOURCE) return;
   const c = companies.find(x => x.id === row.companyId);
@@ -1959,7 +2143,7 @@ function render() {
     // 以前は対象外・非課税のとき事業者区分を空にしていたので、一度だけ課税事業者を入れる
     if (!r.bizV2) { for (const side of ["debit", "credit"]) if (!r[side + "Biz"]) r[side + "Biz"] = "課税事業者"; r.bizV2 = true; }
     // 出金領収書の貸方の現金・未払金は「－」にした（まだ完了していない行を一度だけそろえる）
-    if (!r.bizV3) { if (!r.locked && r.review !== "exported" && isPaySide(r, "credit") && r.creditBiz === "課税事業者") r.creditBiz = ""; r.bizV3 = true; }
+    if (!r.bizV3) { if (!r.locked && r.review !== "exported") for (const side of ["debit", "credit"]) if (isPaySide(r, side) && r[side + "Biz"] === "課税事業者") r[side + "Biz"] = ""; r.bizV3 = true; }
   }
   // 見出しの上の段：続いている借方・貸方の項目をまとめる
   const groupHead = fields.reduce((a, f) => {
@@ -2358,6 +2542,7 @@ list.addEventListener("keydown", e => {
 });
 // 金額はフォーカスが外れたらカンマ区切りで表示、日付変更時は並び替え
 list.addEventListener("change", e => {
+  queueMicrotask(() => { if (suggestInput && !suggestInput.isConnected) hideSuggest(); }); // 一覧を描き直して欄がなくなったら、候補も閉じる
   if (isCodeSearch(e.target)) return; // 科目名で探している途中は、まだ反映しない
   const { id, key } = e.target.dataset;
   const row = rows.find(r => r.id === id);
@@ -2392,6 +2577,22 @@ list.addEventListener("change", e => {
     saveReceiptSettings(); save(); render();
   }
   else if (row.doc === "payroll" && key === "date") { payrollMonth(row); save(); render(); }
+  else if (row.doc === "purchase" && (key === "debitCode" || key === "creditCode") && (row.store || row.item)) {
+    // 仕入請求書: 直した科目を請求元のルールとして覚え、同じ請求元でまだ直していない行にも入れる
+    learnPurchaseRule(row);
+    const kw = normName(row.store || row.item), def = purchaseDefault(row.companyId, key === "debitCode" ? "debit" : "credit");
+    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.doc === "purchase" && !o.locked && o.review !== "exported" && lineOf(o) === "pair"
+      && normName(o.store || o.item) === kw && (!o[key] || o[key] === def)) { o[key] = row[key]; setAutoTax(o, key === "debitCode" ? "debit" : "credit"); }
+    saveReceiptSettings(); save(); render();
+  }
+  else if (row.doc === "sales" && (key === "debitCode" || key === "creditCode") && (row.store || row.item)) {
+    // 売上請求書: 直した科目を取引先のルールとして覚え、同じ取引先でまだ直していない行にも入れる
+    learnSalesRule(row);
+    const kw = normName(row.store || row.item), side = key === "debitCode" ? "debit" : "credit", def = salesDefault(row.companyId, side);
+    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.doc === "sales" && !o.locked && o.review !== "exported"
+      && lineOf(o) !== (side === "debit" ? "c" : "d") && normName(o.store || o.item) === kw && (!o[key] || o[key] === def)) { o[key] = row[key]; setAutoTax(o, side); }
+    saveReceiptSettings(); save(); render();
+  }
   else if (row.doc === "income" && key === "creditCode" && (row.store || row.item)) {
     // 入金領収書: 貸方の科目を、宛名（なければ但し書き）のルールとして覚え、同じ相手でまだ科目が空の行にも入れる
     learnIncomeRule(row);
@@ -2406,12 +2607,12 @@ list.addEventListener("change", e => {
     if (row[key]) { if (ex) ex.code = row[key]; else rules.push({ keyword: row.payKey, code: row[key] }); }
     saveReceiptSettings(); save(); render();
   }
-  else if (row.source === "receipt" && !row.doc && key === "debitCode" && ruleKeywordOf(row)) {
+  else if (row.source === "receipt" && (!row.doc || row.doc === "card") && key === "debitCode" && ruleKeywordOf(row)) {
     // 領収書: 借方のコードを、そのお店（店名が読めなければ摘要）のルールとして覚え、同じお店でコードが空の行にも入れる
     const kw = ruleKeywordOf(row);
     if (row.debitCode) learnReceiptRule(row);
     else { const rc = receiptSettingsOf(row.companyId); rc.rules = rc.rules.filter(x => normName(x.keyword) !== normName(kw)); }
-    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.source === "receipt" && !o.doc && o.review !== "exported" && !o.debitCode && normName(ruleKeywordOf(o)) === normName(kw)) { o.debitCode = row.debitCode; setAutoTax(o, "debit"); }
+    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.source === "receipt" && (!o.doc || o.doc === "card") && !o.locked && o.review !== "exported" && !o.debitCode && normName(ruleKeywordOf(o)) === normName(kw)) { o.debitCode = row.debitCode; setAutoTax(o, "debit"); }
     saveReceiptSettings(); save(); render();
   }
   else if (FIELDS.find(f => f.key === key)?.num && row[key] !== "") e.target.value = Number(row[key]).toLocaleString();
@@ -2785,7 +2986,7 @@ document.getElementById("download").onclick = async () => {
   saveArchives();
 
   // 書き出した（完成した）領収書の仕訳は、自動入力ルールに覚える（次から同じお店に同じ科目が入る）
-  for (const r of done) { learnReceiptRule(r); learnPassbookRule(r); learnIncomeRule(r); }
+  for (const r of done) { learnReceiptRule(r); learnPassbookRule(r); learnIncomeRule(r); learnPurchaseRule(r); learnSalesRule(r); }
   saveReceiptSettings();
   // 出力した仕訳は「出力済み」の印を付けて、一覧に残す
   setReview(done.map(r => r.id), "exported", `${voucherCount(done)}件を保存しました`);
@@ -2905,10 +3106,10 @@ const AUTO_RULE_TYPES = [
   { id: "receipt",  name: "出金領収書", ready: true,  fixed: "貸方の科目（現金）",     fixedEx: "例: 1101", rule: "店名 → 借方の科目",     ruleEx: "例: セブンイレブン" },
   { id: "income",   name: "入金領収書", ready: true,  fixed: "借方の科目",     fixedEx: "例: 1101", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "passbook", name: "通帳",       ready: true,  fixed: "この通帳の科目", fixedEx: "例: 1107", rule: "摘要 → 相手の科目",     ruleEx: "例: NTT" },
-  { id: "purchase", name: "仕入請求書", ready: false, fixed: "貸方の科目",     fixedEx: "例: 2103", rule: "取引先 → 借方の科目",   ruleEx: "例: 取引先の名前" },
-  { id: "sales",    name: "売上請求書", ready: false, fixed: "借方の科目",     fixedEx: "例: 1142", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
+  { id: "purchase", name: "仕入請求書", ready: true,  fixed: "貸方の科目",     fixedEx: "例: 2103", rule: "取引先 → 借方の科目",   ruleEx: "例: 取引先の名前" },
+  { id: "sales",    name: "売上請求書", ready: true,  fixed: "借方の科目",     fixedEx: "例: 1142", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "payroll",  name: "給与台帳",   ready: true,  fixed: "支払いの科目",   fixedEx: "例: 1107", rule: "項目名 → 科目",         ruleEx: "例: 源泉所得税" },
-  { id: "card",     name: "クレジット明細", ready: false, fixed: "貸方の科目",   fixedEx: "例: 2106", rule: "利用店名 → 借方の科目", ruleEx: "例: 利用店の名前" },
+  { id: "card",     name: "クレジット明細", ready: true,  fixed: "貸方の科目",   fixedEx: "例: 2106", rule: "利用店名 → 借方の科目", ruleEx: "例: 利用店の名前" },
 ];
 const RECEIPT_SETTINGS_KEY = "shiwake-receipt-settings"; // { 会社ID: { 書類の種類: { fixedCode, rules: [{ keyword, code }] } } }
 let receiptSettings = load(RECEIPT_SETTINGS_KEY, {});
@@ -2925,7 +3126,7 @@ const ruleKeywordOf = r => String(r.store || r.summary || "").trim().slice(0, 30
 // 領収書の仕訳から「店名（または摘要） → 借方の科目」を覚える（すでにあれば科目を上書き）
 function learnReceiptRule(r) {
   const kw = ruleKeywordOf(r);
-  if (r.source !== "receipt" || r.doc || !kw || !r.debitCode || lineOf(r) === "c") return;
+  if (r.source !== "receipt" || (r.doc && r.doc !== "card") || !kw || !r.debitCode || lineOf(r) === "c") return;
   const rc = receiptSettingsOf(r.companyId);
   const ex = rc.rules.find(x => normName(x.keyword) === normName(kw));
   if (ex) ex.code = r.debitCode; else rc.rules.push({ keyword: kw, code: r.debitCode });
@@ -3117,7 +3318,7 @@ async function importNikkei(files) {
       const [full, thumb] = await Promise.all([resize(blob, 1600, 0.85), resize(blob, 240, 0.7)]);
       fullImages.set(groupId, full); imageStore.put(groupId, full).catch(() => {});
       p.entries.forEach((e, k) => {
-        const base = { id: uid(), groupId, companyId: cid, source: NIKKEI_SOURCE, thumb, status: "done", review: "pending", date: p.date,
+        const base = { id: uid(), groupId, companyId: cid, source: NIKKEI_SOURCE, thumb, status: "done", review: "pending", date: p.date, bizV2: true, bizV3: true,
           debitSub: "", creditSub: "", summary: [e.party, e.content].filter(Boolean).join(" "), note: k === 0 && notes.length ? notes.join("／") : "" };
         if (e.side === "transfer") {
           const d = nikkeiAccount(e.dAcct, cid), c = nikkeiAccount(e.cAcct, cid);
