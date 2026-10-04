@@ -230,8 +230,19 @@
   .line-move svg { width: 16px; height: 16px; }
   .line-move:hover { color: var(--text); }
   body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
-  td.drag-from { opacity: .45; }
+  /* 動かしている塊：元の場所は薄くし、指（マウス）に札を付いてこさせる。入る場所には金色の線 */
+  td.drag-from { opacity: .35; }
+  .drag-ghost { position: fixed; z-index: 50; pointer-events: none; min-width: 160px; max-width: 260px; padding: 9px 12px; border-radius: 10px;
+    border: 1.5px solid var(--gold); box-shadow: 0 10px 28px rgba(13, 22, 41, .22); font-size: 13px; line-height: 1.5; transform: rotate(-1.5deg); }
+  .drag-ghost.debit { background: var(--debit); color: var(--debit-text); }
+  .drag-ghost.credit { background: var(--credit); color: var(--credit-text); }
+  .drag-ghost b { font-weight: 600; display: block; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drag-ghost span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   td.drop-here { box-shadow: inset 0 0 0 2px var(--gold); }
+  .drop-line { position: fixed; z-index: 49; height: 4px; border-radius: 2px; background: var(--gold); pointer-events: none; }
+  /* 入れ替えた塊を、少しの間光らせる */
+  @keyframes justMoved { from { box-shadow: inset 0 0 0 2px var(--gold); background-color: var(--gold-light); } to { box-shadow: inset 0 0 0 2px transparent; } }
+  td.just-moved { animation: justMoved 1.6s ease-out; }
   tr.locked td.s-debit, tr.locked td.s-credit, tr.locked td.c-date { opacity: .7; }
   td input:disabled, td select:disabled, td textarea:disabled { color: var(--text); -webkit-text-fill-color: var(--text); opacity: 1; }
   .tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
@@ -696,11 +707,10 @@
     tbody tr.row-receipt td.s-debit, tbody tr.row-receipt td.s-credit { padding: 5px 10px; border-radius: 0; }
     tbody tr.row-receipt td.c-date + td.s-debit, tbody tr.row-receipt td.s-debit + td.s-credit { border-radius: 10px 10px 0 0; padding-top: 10px; }
     /* －は、項目名の行の右に収める（項目名の行を少し高くして、入力欄と重ならないようにする） */
-    tbody tr.row-receipt td.has-minus { padding-top: 10px; }
-    tbody tr.row-receipt td.has-minus::before { line-height: 36px; padding-right: 76px; }
-    tbody tr.row-receipt.minus-row td.first-f::before { line-height: 36px; } /* －がない側も同じ高さにして、借方と貸方の欄をそろえる */
+    /* ⋮⋮（左）と－（右）は、項目名の上の段に置く（項目名が改行されないように）。ないほうの側も同じだけ空けて、借方と貸方の欄をそろえる */
+    tbody tr.row-receipt.minus-row > td.first-f[data-label] { padding-top: 48px; }
     tbody tr.row-receipt td.has-minus .line-del { top: 10px; right: 10px; }
-    tbody tr.row-receipt td.has-minus .line-move { top: 10px; right: 46px; }
+    tbody tr.row-receipt td.has-minus .line-move { top: 10px; left: 6px; right: auto; }
     tbody tr.row-receipt td.s-debit:has(+ td.s-credit), tbody tr.row-receipt td.s-credit:has(+ td.c-del), tbody tr.row-receipt td.s-credit:has(+ td.c-add) { border-radius: 0 0 10px 10px; padding-bottom: 10px; }
     tbody tr.row-receipt td.s-debit { background: var(--debit); }
     tbody tr.row-receipt td.s-credit { background: var(--credit); }
@@ -2371,48 +2381,80 @@ function addLine(v, side) {
 function moveLine(v, side, from, to) {
   const vr = rows.filter(r => r.companyId === currentCompanyId && vidOf(r) === v);
   const D = vr.filter(o => lineOf(o) !== "c"), C = vr.filter(o => lineOf(o) === "c");
-  const list = side === "debit" ? D : C;
-  if (from === to || !list[from] || to < 0 || to >= list.length) return;
-  list.splice(to, 0, list.splice(from, 1)[0]);
+  const blocks = side === "debit" ? D : C;
+  if (from === to || !blocks[from] || to < 0 || to >= blocks.length) return;
+  blocks.splice(to, 0, blocks.splice(from, 1)[0]);
   const oldHead = vr[0], seq = [...D, ...C], slots = vr.map(r => rows.indexOf(r)).sort((a, b) => a - b);
   seq.forEach((r, k) => { rows[slots[k]] = r; });
   // 写真・日付・お知らせは、仕訳の先頭の塊が持っているので、新しい先頭に移す
   const head = seq[0];
   if (head !== oldHead) { head.date = oldHead.date; head.thumb = oldHead.thumb; head.note = oldHead.note; oldHead.thumb = ""; oldHead.note = ""; }
   save(); render();
+  // 入れ替えた塊を光らせる
+  const id = justMovedId; justMovedId = "";
+  if (id) setTimeout(() => {
+    const inp = list.querySelector(`[data-id="${CSS.escape(id)}"][data-key="${side}Code"]`);
+    if (inp) for (const td of inp.closest("tr").querySelectorAll(`td.s-${side}`)) td.classList.add("just-moved");
+  }, 30);
 }
-let blockDrag = null;
+let blockDrag = null, justMovedId = "";
+// 塊のセル（借方か貸方の側）の、画面の上の範囲
+const sideRect = (tr, side) => {
+  const r = [...tr.querySelectorAll(`td.s-${side}`)].map(td => td.getBoundingClientRect()).filter(x => x.width);
+  return r.length ? { top: Math.min(...r.map(x => x.top)), bottom: Math.max(...r.map(x => x.bottom)), left: Math.min(...r.map(x => x.left)), right: Math.max(...r.map(x => x.right)) } : tr.getBoundingClientRect();
+};
 list.addEventListener("pointerdown", e => {
   const h = e.target.closest("[data-linemove]");
   if (!h) return;
   e.preventDefault();
   const v = h.dataset.vid, side = h.dataset.linemove;
   const vr = rows.filter(r => r.companyId === currentCompanyId && vidOf(r) === v);
-  const count = vr.filter(o => side === "debit" ? lineOf(o) !== "c" : lineOf(o) === "c").length;
-  const trs = [...list.querySelectorAll(`tr[data-vid="${CSS.escape(v)}"]`)].slice(0, count);
-  blockDrag = { v, side, from: Number(h.dataset.bi), to: Number(h.dataset.bi), trs, id: e.pointerId };
-  h.setPointerCapture?.(e.pointerId);
+  const blocks = vr.filter(o => side === "debit" ? lineOf(o) !== "c" : lineOf(o) === "c");
+  const trs = [...list.querySelectorAll(`tr[data-vid="${CSS.escape(v)}"]`)].slice(0, blocks.length);
+  const from = Number(h.dataset.bi), row = blocks[from];
+  // 指に付いてくる札（科目・金額・摘要）
+  const code = side === "debit" ? row.debitCode : row.creditCode, amt = side === "debit" ? row.debitAmount : row.creditAmount;
+  const ghost = Object.assign(document.createElement("div"), { className: `drag-ghost ${side}` });
+  ghost.innerHTML = `<b>${escapeHtml(code ? `${code} ${masterName(code, row.companyId)}` : "（科目なし）")}</b><span>${Number(amt) ? Number(amt).toLocaleString() + "円" : ""}　${escapeHtml(side === "debit" ? row.summary || "" : creditSummaryOf(row))}</span>`;
+  const line = Object.assign(document.createElement("div"), { className: "drop-line", hidden: true });
+  document.body.append(ghost, line);
+  blockDrag = { v, side, from, to: from, trs, id: e.pointerId, ghost, line, rowId: row.id };
+  try { h.setPointerCapture(e.pointerId); } catch {}
   document.body.classList.add("block-dragging");
-  for (const td of trs[blockDrag.from].querySelectorAll(`td.s-${side}`)) td.classList.add("drag-from");
+  for (const td of trs[from].querySelectorAll(`td.s-${side}`)) td.classList.add("drag-from");
+  moveGhost(e);
 });
+function moveGhost(e) {
+  const g = blockDrag.ghost, w = g.offsetWidth;
+  g.style.left = Math.max(8, Math.min(innerWidth - w - 8, e.clientX - w / 2)) + "px";
+  g.style.top = (e.clientY - g.offsetHeight / 2) + "px";
+}
 list.addEventListener("pointermove", e => {
   if (!blockDrag || e.pointerId !== blockDrag.id) return;
-  const { trs, side } = blockDrag;
+  const { trs, side, from, line } = blockDrag;
+  moveGhost(e);
+  if (e.clientY < 90) scrollBy(0, -14); else if (e.clientY > innerHeight - 90) scrollBy(0, 14);
   // 指（マウス）の高さにある塊を、入れる先にする
-  let to = trs.findIndex(tr => { const r = tr.getBoundingClientRect(); return e.clientY >= r.top && e.clientY < r.bottom; });
-  if (to < 0) to = e.clientY < trs[0].getBoundingClientRect().top ? 0 : trs.length - 1;
-  if (e.clientY < 70) scrollBy(0, -12); else if (e.clientY > innerHeight - 70) scrollBy(0, 12);
-  if (to === blockDrag.to) return;
+  const rects = trs.map(tr => sideRect(tr, side));
+  let to = rects.findIndex(r => e.clientY >= r.top && e.clientY < r.bottom);
+  if (to < 0) to = e.clientY < rects[0].top ? 0 : trs.length - 1;
   blockDrag.to = to;
   for (const td of list.querySelectorAll("td.drop-here")) td.classList.remove("drop-here");
-  if (to !== blockDrag.from) for (const td of trs[to].querySelectorAll(`td.s-${side}`)) td.classList.add("drop-here");
+  if (to !== from) for (const td of trs[to].querySelectorAll(`td.s-${side}`)) td.classList.add("drop-here");
+  // 入る場所に金色の線（上に動かすときは塊の上、下に動かすときは塊の下）
+  if (to === from) { line.hidden = true; return; }
+  const r = rects[to];
+  line.hidden = false;
+  line.style.left = r.left + "px"; line.style.width = (r.right - r.left) + "px";
+  line.style.top = ((to < from ? r.top : r.bottom) - 2) + "px";
 });
 const endBlockDrag = e => {
   if (!blockDrag || e.pointerId !== blockDrag.id) return;
   const d = blockDrag; blockDrag = null;
+  d.ghost.remove(); d.line.remove();
   document.body.classList.remove("block-dragging");
-  for (const td of list.querySelectorAll("td.drop-here, td.drag-from")) td.classList.remove("drop-here", "drag-from");
-  if (e.type === "pointerup") moveLine(d.v, d.side, d.from, d.to);
+  for (const td of list.querySelectorAll("td.drag-from, td.drop-here")) td.classList.remove("drag-from", "drop-here");
+  if (e.type === "pointerup" && d.to !== d.from) { justMovedId = d.rowId; moveLine(d.v, d.side, d.from, d.to); }
 };
 list.addEventListener("pointerup", endBlockDrag);
 list.addEventListener("pointercancel", endBlockDrag);
