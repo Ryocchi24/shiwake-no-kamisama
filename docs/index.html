@@ -1713,8 +1713,9 @@ function setAutoTax(row, side) {
   row[side + "Tax"] = type;
   row[side + "Rate"] = type !== "課税" ? type : h.reduced ? "8%軽" : "10%";
   // 事業者区分は取引の相手で決まる（品物が対象外・非課税でも、相手は課税事業者のことがある）
-  // 給与台帳（役員報酬・給料・通勤費など）は、相手が事業者ではないので免税事業者
-  row[side + "Biz"] = row.doc === "payroll" || (side === "debit" && h.noInvoice) ? "免税事業者" : "課税事業者";
+  // 給与台帳は「－」（空）。課税になる欄（通勤費の旅費交通費）だけ課税事業者
+  if (row.doc === "payroll") { row[side + "Biz"] = type === "課税" ? "課税事業者" : ""; return; }
+  row[side + "Biz"] = side === "debit" && h.noInvoice ? "免税事業者" : "課税事業者";
 }
 // 以前は税率の中に「免税事業者」があったので、事業者の項目に移す
 function moveBiz(r) {
@@ -2293,7 +2294,7 @@ list.addEventListener("change", e => {
     const v = row[key];
     if (key.endsWith("Tax")) row[side + "Rate"] = v === "課税" ? (TAX_TYPES.includes(row[side + "Rate"]) || !row[side + "Rate"] ? "10%" : row[side + "Rate"]) : v;
     else if (key.endsWith("Rate")) row[side + "Tax"] = TAX_TYPES.includes(v) ? v : v ? "課税" : "";
-    if (!key.endsWith("Biz") && !row[side + "Biz"]) row[side + "Biz"] = "課税事業者";
+    if (!key.endsWith("Biz") && !row[side + "Biz"] && row.doc !== "payroll") row[side + "Biz"] = "課税事業者";
     row.taxManual = { ...row.taxManual, [side]: true };
     save(); render(); return;
   }
