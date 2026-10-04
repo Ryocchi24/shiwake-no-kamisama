@@ -2126,17 +2126,23 @@ function pickSuggest(i) {
   if (!m || !input) return;
   hideSuggest();
   input.closest(".code-box")?.classList.remove("searching");
+  // 日本語の変換中に候補を押すと、あとから変換中の文字が欄に入って選んだコードが消えることがあるので、選んだコードを覚えておく
+  input.dataset.picked = m.code; input.dataset.pickedAt = Date.now();
   commitCode(input, m.code);
   hideSuggest();
+  if (isTouch()) input.blur(); // スマホ：選んだらキーボードを閉じる
 }
 document.addEventListener("input", e => {
   if (!e.target.matches?.("[data-code-suggest]")) return;
+  const t = e.target;
+  if (t.dataset.picked && Date.now() - Number(t.dataset.pickedAt) < 1000 && t.value !== t.dataset.picked) { t.value = t.dataset.picked; return; } // 選んだ直後に入った変換中の文字は戻す
   e.target.closest(".code-box")?.classList.toggle("searching", isCodeSearch(e.target)); // 科目名で探している間は、横の科目名を隠す
   showSuggest(e.target);
 });
 document.addEventListener("focusin", e => {
   if (!e.target.matches?.("[data-code-suggest]")) return;
   e.target.dataset.prev = e.target.value;
+  delete e.target.dataset.picked;
   const t = e.target;
   setTimeout(() => {
     if (document.activeElement !== t) return;
@@ -2154,6 +2160,8 @@ document.addEventListener("focusout", e => {
   setTimeout(() => {
     if (suggestInput === t) hideSuggest();
     t.closest(".code-box")?.classList.remove("searching");
+    // 一覧から選んでいたら、そのコードに決める
+    if (t.dataset.picked) { const c = t.dataset.picked; delete t.dataset.picked; if (t.value !== c) commitCode(t, c); return; }
     const q = t.value.trim(), prev = t.dataset.prev || "";
     if (!q) { if (prev) commitCode(t, prev); return; } // 何も打たずに離れたら元のコード
     if (!isCodeSearch(t)) return; // コード（数字）を打った場合はそのまま
