@@ -1230,7 +1230,7 @@ async function readGroup(groupId) {
       summary: r.summary || r.store || "",
       creditCode: r.creditShokuchi ? shokuchiOf(placeholder.companyId) : payCodeOf(placeholder.companyId, r.ocrText, rc), creditSub: "", creditAmount: r.amount || "",
       note: [r.note, receiptTaxHint(r.ocrText).mixed && !r.split ? "8%と10%の品物が混ざっています" : "", receiptTaxHint(r.ocrText).noInvoice && !r.debitShokuchi ? "登録番号（T＋13桁）が見つかりません" : "",
-        (!r.splitRole || r.splitRole === "r8") && paidByCard(r.ocrText) ? "クレジット払い（貸方は未払金）" : ""].filter(Boolean).join("／"),
+        (!r.splitRole || r.splitRole === "r8") && paidByCard(r.ocrText) ? "クレジット払いの領収書です（クレジット明細で取り込む場合は削除）" : ""].filter(Boolean).join("／"),
       ocrText: r.ocrText || "",
       ...(r.splitRole ? { splitRole: r.splitRole } : {}),
       taxHint: r.reduced === undefined ? receiptTaxHint(r.ocrText) : { ...receiptTaxHint(r.ocrText), reduced: r.reduced, split: true },
