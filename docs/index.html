@@ -3039,7 +3039,7 @@ document.getElementById("download").onclick = async () => {
   }
   const incomplete = done.filter(r => r.source === TRIAL_SOURCE
     ? !r.date || !(Number(r.debitAmount) ? r.debitCode : r.creditCode)
-    : !r.date || !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount));
+    : !voucherRows(r)[0].date || !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount)); // 日付は仕訳の先頭の塊が持っている
   if (incomplete.length && !confirm(`日付・金額・コードが空の行が ${incomplete.length} 件あります。このままダウンロードしますか？`)) return;
   if (done.some(r => r.source === TRIAL_SOURCE)) {
     const d = done.reduce((s, r) => s + Number(r.debitAmount || 0), 0), c = done.reduce((s, r) => s + Number(r.creditAmount || 0), 0);
@@ -3048,11 +3048,11 @@ document.getElementById("download").onclick = async () => {
 
   const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  // 試算表の行は片側だけなので、反対側を諸口にする（その会社のミロク科目マスタの「諸口」。なければミロクで基本の 3999）
-  const shokuchi = shokuchiOf();
+  // 相手の科目（諸口）は空欄で書き出す（ミロクの会計データによっては 3999 をエラーにするため。2026-10-05 お父さん）
+  const shokuchi = "", shokuchiCode = shokuchiOf();
   const fields = visibleFields(); // CSVは確認画面と同じ項目
-  // 複合仕訳（借方か貸方が2つ以上）は、相手科目を諸口にして1行ずつ書く
-  //   借方だけの行：借方 科目 ／ 貸方 諸口　　貸方だけの行：借方 諸口 ／ 貸方 科目
+  // 複合仕訳（借方か貸方が2つ以上）は、1行ずつ書き、相手の科目は空欄にする
+  //   借方だけの行：借方 科目 ／ 貸方 （空欄）　　貸方だけの行：借方 （空欄）／ 貸方 科目
   const lineCsv = r => {
     const ln = lineOf(r);
     if (ln === "d") return { ...r, date: voucherRows(r)[0].date, creditCode: shokuchi, creditSub: "", creditAmount: r.debitAmount, creditTax: "対象外", creditRate: "対象外", creditBiz: "課税事業者", creditSummary: r.summary };
@@ -3061,10 +3061,14 @@ document.getElementById("download").onclick = async () => {
   };
   const lines = done.map(lineCsv).map(r => {
     let { debitCode, debitAmount, creditCode, creditAmount } = r;
-    if (r.source === TRIAL_SOURCE && shokuchi) {
+    // 試算表の行は片側だけなので、反対側は金額だけ入れて科目は空欄
+    if (r.source === TRIAL_SOURCE) {
       if (Number(debitAmount) && !creditCode && !Number(creditAmount)) { creditCode = shokuchi; creditAmount = debitAmount; }
       else if (Number(creditAmount) && !debitCode && !Number(debitAmount)) { debitCode = shokuchi; debitAmount = creditAmount; }
     }
+    // 画面で諸口（3999など）が入っている欄も、空欄にする
+    if (String(debitCode) === shokuchiCode) debitCode = "";
+    if (String(creditCode) === shokuchiCode) creditCode = "";
     const v = { ...r, date: formatDate(r.date), debitCode, debitAmount, creditCode, creditAmount, creditSummary: creditSummaryOf(r) };
     return fields.map(f => { const codes = CSV_CODES[kindOf(f.key)]; return cell(codes ? codes[v[f.key] ?? ""] ?? "" : v[f.key]); }).join(",");
   });
