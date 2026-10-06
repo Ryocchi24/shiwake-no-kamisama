@@ -78,6 +78,11 @@
 
   /* 仕訳テーブル */
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .sync-panel { margin-bottom: 16px; }
+  .sync-body { padding: 14px 18px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .sync-pass { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
+  .sync-pass input { font: inherit; height: 38px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; flex: 1 1 180px; min-width: 0; }
+  .panel-sub.sync-err { color: var(--err); }
   .panel-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   .panel-title { font-weight: 700; font-size: 14px; }
   .panel-head .spacer { flex: 1; }
@@ -917,6 +922,10 @@
           <h1>会社マスタ</h1>
         </div>
       </div>
+      <div class="panel sync-panel" id="syncPanel" hidden>
+        <div class="panel-head"><span class="panel-title">携帯とPCの同期</span><span class="panel-sub" id="syncStatus"></span></div>
+        <div class="sync-body" id="syncBody"></div>
+      </div>
       <div class="panel">
         <div class="panel-head">
           <span class="panel-title">会社一覧</span><span class="panel-sub" id="companyCount"></span>
@@ -1139,7 +1148,8 @@ const imageStore = (() => {
 async function getFullImage(groupId) {
   if (fullImages.has(groupId)) return fullImages.get(groupId);
   try {
-    const src = await imageStore.get(groupId);
+    let src = await imageStore.get(groupId);
+    if (!src && window.__shiwakeSync) { src = await window.__shiwakeSync.fetchImage(groupId); if (src) imageStore.put(groupId, src).catch(() => {}); }
     if (src) fullImages.set(groupId, src);
     return src || null;
   } catch { return null; }
@@ -1164,6 +1174,7 @@ function load(key, fallback) {
 }
 function save() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.filter(r => r.status !== "reading"))); } catch {}
+  window.__shiwakeSync?.queue(); // 携帯とPCの同期（使っているときだけ）
 }
 // ---- 会社 ----
 let companies = load(COMPANIES_KEY, []);
@@ -1175,6 +1186,7 @@ function saveCompanies() {
     localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies));
     localStorage.setItem(CURRENT_COMPANY_KEY, JSON.stringify(currentCompanyId));
   } catch {}
+  window.__shiwakeSync?.queue();
 }
 const currentCompany = () => companies.find(c => c.id === currentCompanyId) || null;
 // 取り込み方法（①レシート ②③…）ごとに一覧を分けて管理する
@@ -1650,6 +1662,7 @@ function learnStoreName(row) {
   row.store = store;
   storeNames[key] = store;
   try { localStorage.setItem(STORE_NAMES_KEY, JSON.stringify(storeNames)); } catch {}
+  window.__shiwakeSync?.queue();
 }
 
 // ---- 仕入請求書 ----
@@ -2336,6 +2349,7 @@ function render() {
 function saveArchives() {
   try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archives)); }
   catch { alert("保管庫がいっぱいです。古いものを削除してください。"); }
+  window.__shiwakeSync?.queue();
 }
 let archiveOpen = null;
 const csvBytes = (text, enc) => enc === "utf8" ? new TextEncoder().encode("\ufeff" + text)
@@ -3208,7 +3222,8 @@ const masters = {}; // 画面で使う、会社ごとの科目マスタ（標準
 let mappings = load(MAPPINGS_KEY, {});
 function saveMasters() {
   for (const [cid, list] of Object.entries(masters)) masterDiffs[cid] = masterDiffOf(list);
-  try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masterDiffs)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {} }
+  try { localStorage.setItem(MASTERS_KEY, JSON.stringify(masterDiffs)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings)); } catch {}
+  window.__shiwakeSync?.queue(); }
 // レシートの設定（会社ごと）: 貸方のいつもの科目と、「店名・品目 → 借方の科目」のルール
 // 原始資料の自動入力ルール（会社ごと・書類の種類ごと）
 // 「いつも使う科目」1つと、「言葉 → 科目」のルールを持つ。領収書以外は、読み取りを作ったときに使う（先に登録しておける）
@@ -3229,7 +3244,7 @@ for (const [cid, v] of Object.entries(receiptSettings)) {
 }
 const autoRulesOf = (cid = currentCompanyId, type = "receipt") => ((receiptSettings[cid] ||= {})[type] ||= { fixedCode: "", rules: [] });
 const receiptSettingsOf = (cid = currentCompanyId) => autoRulesOf(cid, "receipt");
-function saveReceiptSettings() { try { localStorage.setItem(RECEIPT_SETTINGS_KEY, JSON.stringify(receiptSettings)); } catch {} }
+function saveReceiptSettings() { try { localStorage.setItem(RECEIPT_SETTINGS_KEY, JSON.stringify(receiptSettings)); } catch {} window.__shiwakeSync?.queue(); }
 // 店名・摘要にキーワードを含むルールのうち、一番長いキーワードのものを使う
 // 自動入力ルールの言葉: 店名。読めなかったときは摘要
 const ruleKeywordOf = r => String(r.store || r.summary || "").trim().slice(0, 30);
@@ -4867,6 +4882,334 @@ if (currentCompany()) { settings.method = currentCompany().method || "receipt"; 
 render();
 renderMasterCodes();
 showView("import");
+
+// ==== 携帯とPCの同期（お父さんの Googleドライブを使う） ====
+// ・仕訳・会社・科目マスタ・覚えた科目・保管庫・写真を、合言葉で鍵をかけてから Googleドライブの「仕訳の神様」フォルダに置く
+// ・Googleドライブには「仕訳の神様が作ったファイル」しか見えない許可（drive.file）だけをもらう
+// ・どの端末でも同じ合言葉を入れる。鍵は端末の中にだけ保存し、Googleにも送らない
+// ・同じものを両方で直したときは、あとから直したほうを残す（項目ごと）
+const GOOGLE = {
+  webClientId: "", // PC（Web版）用のクライアントID（〜.apps.googleusercontent.com）
+  iosClientId: "", // iPhone用のクライアントID
+  scope: "https://www.googleapis.com/auth/drive.file email",
+};
+const SYNC_META_KEY = "shiwake-sync-meta", SYNC_KEY_KEY = "shiwake-sync-key";
+const DRIVE = "https://www.googleapis.com/drive/v3", DRIVE_UP = "https://www.googleapis.com/upload/drive/v3";
+const syncState = { token: "", tokenUntil: 0, key: null, folderId: "", busy: false, again: false, error: "", lastSync: 0, remoteMeta: undefined, timer: 0 };
+let syncMeta = load(SYNC_META_KEY, { stamps: {}, tombs: {}, hashes: {}, signedIn: false, email: "", lastSync: 0 });
+syncState.lastSync = syncMeta.lastSync || 0;
+const syncConfigured = () => !!(NATIVE ? GOOGLE.iosClientId : GOOGLE.webClientId);
+const saveSyncMeta = () => { try { localStorage.setItem(SYNC_META_KEY, JSON.stringify(syncMeta)); } catch {} };
+
+// ---- 同期する中身（項目ごとに、いつ直したかを覚える） ----
+const SYNC_COLLS = {
+  rows: () => Object.fromEntries(rows.filter(r => r.status !== "reading").map((r, i) => [r.id, { ...r, _i: i }])),
+  companies: () => Object.fromEntries(companies.map((c, i) => [c.id, { ...c, _i: i }])),
+  archives: () => Object.fromEntries(archives.map(a => [a.id, a])),
+  masters: () => ({ ...masterDiffs }),
+  mappings: () => ({ ...mappings }),
+  rules: () => ({ ...receiptSettings }),
+  stores: () => ({ ...storeNames }),
+};
+const hashOf = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return `${s.length}:${h}`; };
+// 前に見たときから変わった項目に、今の時刻を付ける。消えた項目は「消した時刻」を覚える
+function markSyncChanges() {
+  const now = Date.now();
+  rows.forEach((r, i) => { if (!r.ct) r.ct = now + i / 1000; }); // 仕訳を作った順（並び順に使う）
+  for (const [name, get] of Object.entries(SYNC_COLLS)) {
+    const cur = get(), hashes = (syncMeta.hashes[name] ||= {}), stamps = (syncMeta.stamps[name] ||= {}), tombs = (syncMeta.tombs[name] ||= {});
+    for (const [k, v] of Object.entries(cur)) {
+      const h = hashOf(JSON.stringify(v));
+      if (hashes[k] !== h) { hashes[k] = h; stamps[k] = now; delete tombs[k]; }
+    }
+    for (const k of Object.keys(hashes)) if (!(k in cur)) { delete hashes[k]; delete stamps[k]; tombs[k] = now; }
+  }
+  saveSyncMeta();
+}
+
+// ---- 鍵（合言葉から作る。AES-GCM） ----
+const b64 = buf => { let s = ""; const a = new Uint8Array(buf); for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode(...a.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function deriveKey(pass, saltB64) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt: unb64(saltB64), iterations: 310000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+}
+async function encryptText(text, key = syncState.key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(text));
+  return JSON.stringify({ v: 1, iv: b64(iv), data: b64(data) });
+}
+async function decryptText(payload, key = syncState.key) {
+  const p = JSON.parse(payload);
+  return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(p.iv) }, key, unb64(p.data)));
+}
+async function loadSavedKey() {
+  try { const raw = localStorage.getItem(SYNC_KEY_KEY); if (raw) syncState.key = await crypto.subtle.importKey("raw", unb64(raw), "AES-GCM", true, ["encrypt", "decrypt"]); } catch {}
+}
+
+// ---- Googleでログイン ----
+let gisClient = null;
+async function googleToken(interactive) {
+  if (syncState.token && Date.now() < syncState.tokenUntil - 60000) return syncState.token;
+  if (NATIVE) {
+    try {
+      const r = await callNative(interactive && !syncMeta.signedIn ? "googleSignIn" : "googleToken", { clientId: GOOGLE.iosClientId, scope: GOOGLE.scope });
+      return setToken(r.accessToken, r.expiresIn);
+    } catch (err) {
+      if (!interactive) return "";
+      const r = await callNative("googleSignIn", { clientId: GOOGLE.iosClientId, scope: GOOGLE.scope });
+      return setToken(r.accessToken, r.expiresIn);
+    }
+  }
+  if (!interactive) return ""; // PCは、ボタンを押したときだけGoogleの画面を出す（勝手に開くとブラウザに止められるため）
+  if (!window.google?.accounts?.oauth2) await loadScript("https://accounts.google.com/gsi/client");
+  return new Promise((resolve, reject) => {
+    gisClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE.webClientId, scope: GOOGLE.scope,
+      callback: r => r.error ? reject(new Error(r.error)) : resolve(setToken(r.access_token, Number(r.expires_in))),
+      error_callback: e => reject(new Error(e?.type === "popup_closed" ? "ログインの画面が閉じられました" : "ログインできませんでした")),
+    });
+    gisClient.requestAccessToken({ prompt: syncMeta.signedIn ? "" : "consent", login_hint: syncMeta.email || undefined });
+  });
+}
+function setToken(token, expiresIn) {
+  syncState.token = token; syncState.tokenUntil = Date.now() + (Number(expiresIn) || 3600) * 1000;
+  if (!syncMeta.signedIn) { syncMeta.signedIn = true; saveSyncMeta(); }
+  return token;
+}
+
+// ---- Googleドライブ ----
+async function drive(url, opts = {}) {
+  const token = await googleToken(false);
+  if (!token) throw new Error("ログインが必要です");
+  const res = await fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
+  if (res.status === 401) { syncState.token = ""; throw new Error("ログインし直してください"); }
+  if (!res.ok) throw new Error(`Googleドライブとやり取りできませんでした（${res.status}）`);
+  return res;
+}
+const q = s => encodeURIComponent(s);
+async function driveFind(name, parent) {
+  const query = `name='${name}' and trashed=false` + (parent ? ` and '${parent}' in parents` : " and mimeType='application/vnd.google-apps.folder'");
+  const r = await (await drive(`${DRIVE}/files?q=${q(query)}&fields=files(id,name)&spaces=drive`)).json();
+  return r.files?.[0]?.id || "";
+}
+async function driveFolder() {
+  if (syncState.folderId) return syncState.folderId;
+  let id = await driveFind("仕訳の神様");
+  if (!id) id = (await (await drive(`${DRIVE}/files?fields=id`, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "仕訳の神様", mimeType: "application/vnd.google-apps.folder" }) })).json()).id;
+  return syncState.folderId = id;
+}
+async function driveRead(name) {
+  const id = await driveFind(name, await driveFolder());
+  return id ? await (await drive(`${DRIVE}/files/${id}?alt=media`)).text() : null;
+}
+async function driveWrite(name, text) {
+  const folder = await driveFolder(), id = await driveFind(name, folder);
+  if (id) return drive(`${DRIVE_UP}/files/${id}?uploadType=media`, { method: "PATCH", headers: { "Content-Type": "text/plain" }, body: text });
+  const boundary = "shiwake" + Math.random().toString(36).slice(2);
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder] })}\r\n--${boundary}\r\nContent-Type: text/plain\r\n\r\n${text}\r\n--${boundary}--`;
+  return drive(`${DRIVE_UP}/files?uploadType=multipart&fields=id`, { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body });
+}
+async function driveList(prefix) {
+  const folder = await driveFolder(), names = new Set();
+  let page = "";
+  do {
+    const r = await (await drive(`${DRIVE}/files?q=${q(`'${folder}' in parents and name contains '${prefix}' and trashed=false`)}&fields=nextPageToken,files(name)&pageSize=1000${page ? `&pageToken=${page}` : ""}`)).json();
+    for (const f of r.files || []) names.add(f.name);
+    page = r.nextPageToken || "";
+  } while (page);
+  return names;
+}
+
+// ---- 合言葉 ----
+// meta.json（鍵はかけない）: 合言葉から鍵を作るための塩と、合言葉が合っているかの確認用の文字（鍵付き）
+async function remoteMeta() {
+  if (syncState.remoteMeta === undefined) { const t = await driveRead("meta.json"); syncState.remoteMeta = t ? JSON.parse(t) : null; }
+  return syncState.remoteMeta;
+}
+async function setPassphrase(pass) {
+  let meta = await remoteMeta(), key;
+  if (!meta) {
+    const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+    key = await deriveKey(pass, salt);
+    meta = { v: 1, salt, check: await encryptText("shiwake-ok", key) };
+    await driveWrite("meta.json", JSON.stringify(meta));
+    syncState.remoteMeta = meta;
+  } else {
+    key = await deriveKey(pass, meta.salt);
+    try { if (await decryptText(meta.check, key) !== "shiwake-ok") throw 0; } catch { throw new Error("合言葉が違います"); }
+  }
+  syncState.key = key;
+  try { localStorage.setItem(SYNC_KEY_KEY, b64(await crypto.subtle.exportKey("raw", key))); } catch {}
+}
+
+// ---- 同期 ----
+// 手元と Googleドライブの中身を、項目ごとに新しいほうでそろえる
+function mergeColl(name, local, remote) {
+  const ls = syncMeta.stamps[name] || {}, lt = syncMeta.tombs[name] || {}, rv = remote.colls?.[name] || {}, rtb = remote.tombs?.[name] || {};
+  const keys = new Set([...Object.keys(local), ...Object.keys(rv), ...Object.keys(lt), ...Object.keys(rtb)]);
+  const vals = {}, stamps = {}, tombs = {}, old = Date.now() - 180 * 864e5;
+  for (const k of keys) {
+    const a = k in local ? { t: ls[k] || 0, v: local[k] } : null, b = rv[k] || null;
+    const win = !a ? b : !b ? a : (b.t > a.t ? b : a);
+    const tomb = Math.max(lt[k] || 0, rtb[k] || 0);
+    if (win && win.t >= tomb) { vals[k] = win.v; stamps[k] = win.t; }
+    else if (tomb > old) tombs[k] = tomb;
+  }
+  return { vals, stamps, tombs };
+}
+function applyMerged(m) {
+  const sortByI = list => list.sort((a, b) => (a._i ?? 0) - (b._i ?? 0)).map(x => { const o = { ...x }; delete o._i; return o; });
+  // 仕訳：仕訳ごとに作った順、仕訳の中は塊の順
+  const rv = Object.values(m.rows.vals), first = {};
+  for (const r of rv) { const v = vidOf(r); first[v] = Math.min(first[v] ?? Infinity, r.ct || 0); }
+  const reading = rows.filter(r => r.status === "reading");
+  rows = [...rv.sort((a, b) => (first[vidOf(a)] - first[vidOf(b)]) || ((a._i ?? 0) - (b._i ?? 0))).map(x => { const o = { ...x }; delete o._i; return o; }), ...reading];
+  companies = sortByI(Object.values(m.companies.vals));
+  if (!companies.some(c => c.id === currentCompanyId)) currentCompanyId = companies[0]?.id || null;
+  archives = Object.values(m.archives.vals).sort((a, b) => String(a.savedAt).localeCompare(String(b.savedAt)));
+  for (const k of Object.keys(masterDiffs)) delete masterDiffs[k];
+  Object.assign(masterDiffs, m.masters.vals);
+  for (const k of Object.keys(masters)) delete masters[k];
+  mappings = m.mappings.vals; receiptSettings = m.rules.vals; storeNames = m.stores.vals;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.filter(r => r.status !== "reading")));
+    localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies)); localStorage.setItem(CURRENT_COMPANY_KEY, JSON.stringify(currentCompanyId));
+    localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archives));
+    localStorage.setItem(MASTERS_KEY, JSON.stringify(masterDiffs)); localStorage.setItem(MAPPINGS_KEY, JSON.stringify(mappings));
+    localStorage.setItem(RECEIPT_SETTINGS_KEY, JSON.stringify(receiptSettings)); localStorage.setItem(STORE_NAMES_KEY, JSON.stringify(storeNames));
+  } catch {}
+  // 取り込んだ中身は「変わった」と数えない
+  for (const [name, get] of Object.entries(SYNC_COLLS)) {
+    const cur = get();
+    syncMeta.hashes[name] = Object.fromEntries(Object.entries(cur).map(([k, v]) => [k, hashOf(JSON.stringify(v))]));
+    syncMeta.stamps[name] = m[name].stamps; syncMeta.tombs[name] = m[name].tombs;
+  }
+}
+async function syncNow(interactive = false) {
+  if (!syncConfigured()) return;
+  if (syncState.busy) { syncState.again = true; return; }
+  syncState.busy = true; syncState.error = ""; renderSync();
+  try {
+    if (!(await googleToken(interactive))) throw new Error(NATIVE ? "ログインが必要です" : "［今すぐ同期］を押してください");
+    if (!syncState.key) { renderSync(); return; }
+    const text = await driveRead("data.enc");
+    const remote = text ? JSON.parse(await decryptText(text)) : { colls: {}, tombs: {} };
+    if (!syncMeta.lastSync) joinSameCompanies(remote); // この端末で初めての同期
+    markSyncChanges();
+    const merged = {}, out = { v: 1, colls: {}, tombs: {} };
+    for (const [name, get] of Object.entries(SYNC_COLLS)) {
+      merged[name] = mergeColl(name, get(), remote);
+      out.colls[name] = Object.fromEntries(Object.entries(merged[name].vals).map(([k, v]) => [k, { t: merged[name].stamps[k], v }]));
+      out.tombs[name] = merged[name].tombs;
+    }
+    applyMerged(merged);
+    await driveWrite("data.enc", await encryptText(JSON.stringify(out)));
+    // 写真：まだ Googleドライブにないものを送る（受け取りは、開いたときに必要な分だけ）
+    const used = new Set([...rows.map(r => r.groupId), ...archives.flatMap(a => (a.rows || []).map(r => r.groupId))].filter(Boolean));
+    const there = await driveList("img-");
+    for (const id of await imageStore.keys()) {
+      if (!used.has(id) || there.has(`img-${id}.enc`)) continue;
+      const src = await imageStore.get(id);
+      if (src) await driveWrite(`img-${id}.enc`, await encryptText(src));
+    }
+    syncMeta.lastSync = syncState.lastSync = Date.now(); saveSyncMeta();
+    render(); renderMasterCodes(); renderCompany();
+    if (!document.getElementById("companiesView").hidden) renderCompanyList();
+    if (!document.getElementById("archiveView").hidden) renderArchive();
+  } catch (err) {
+    syncState.error = err.message || "同期できませんでした";
+  } finally {
+    syncState.busy = false; renderSync();
+    if (syncState.again) { syncState.again = false; queueSync(); }
+  }
+}
+// 携帯とPCで同じ会社を別々に登録していたら、同期先の会社（同じ名前）に1つにまとめる
+function joinSameCompanies(remote) {
+  const theirs = Object.values(remote.colls?.companies || {}).map(x => x.v);
+  const map = {};
+  for (const c of companies) {
+    const t = theirs.find(x => x.id !== c.id && normName(x.name) === normName(c.name));
+    if (t) map[c.id] = t.id;
+  }
+  if (!Object.keys(map).length) return;
+  companies = companies.filter(c => !map[c.id]);
+  for (const r of rows) if (map[r.companyId]) r.companyId = map[r.companyId];
+  for (const a of archives) if (map[a.companyId]) { a.companyId = map[a.companyId]; for (const r of a.rows || []) r.companyId = a.companyId; }
+  for (const [from, to] of Object.entries(map)) {
+    for (const obj of [masterDiffs, mappings, receiptSettings]) {
+      if (obj[from] && !obj[to] && !remote.colls?.[obj === masterDiffs ? "masters" : obj === mappings ? "mappings" : "rules"]?.[to]) obj[to] = obj[from];
+      delete obj[from];
+    }
+    if (currentCompanyId === from) currentCompanyId = to;
+  }
+  for (const k of Object.keys(masters)) delete masters[k];
+}
+// 写真が手元になければ、Googleドライブから受け取る
+async function fetchSyncedImage(groupId) {
+  if (!syncConfigured() || !syncState.key || !(await googleToken(false))) return null;
+  try { const t = await driveRead(`img-${groupId}.enc`); return t ? await decryptText(t) : null; } catch { return null; }
+}
+// 保存のたびに、少し待ってから同期する（続けて直しているあいだは待つ）
+function queueSync() {
+  if (!syncConfigured() || !syncState.key || !syncMeta.signedIn) return;
+  clearTimeout(syncState.timer);
+  syncState.timer = setTimeout(() => syncNow(false), 4000);
+}
+window.__shiwakeSync = { queue: queueSync, fetchImage: fetchSyncedImage };
+
+// ---- 画面（会社マスタの上） ----
+function renderSync() {
+  const panel = document.getElementById("syncPanel");
+  if (!panel) return;
+  panel.hidden = !syncConfigured();
+  if (panel.hidden) return;
+  const body = document.getElementById("syncBody"), status = document.getElementById("syncStatus");
+  const when = syncState.lastSync ? new Date(syncState.lastSync).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  status.textContent = syncState.busy ? "同期しています…" : syncState.error ? syncState.error : when ? `同期済み ${when}` : "";
+  status.className = "panel-sub" + (syncState.error ? " sync-err" : "");
+  if (!syncMeta.signedIn) {
+    body.innerHTML = `<button class="btn btn-primary" data-sync="login">Googleでログイン</button>`;
+  } else if (!syncState.key) {
+    const isNew = syncState.remoteMeta === null;
+    body.innerHTML = syncState.remoteMeta === undefined
+      ? `<button class="btn btn-primary" data-sync="check">続ける</button>`
+      : `<form class="sync-pass" data-sync-form="${isNew ? "new" : "enter"}">
+          <input type="password" id="syncPass1" placeholder="${isNew ? "合言葉を決める（8文字以上）" : "合言葉"}" autocomplete="off" required>
+          ${isNew ? `<input type="password" id="syncPass2" placeholder="もう一度" autocomplete="off" required>` : ""}
+          <button class="btn btn-primary">決定</button></form>`;
+  } else {
+    body.innerHTML = `<button class="btn btn-primary" data-sync="now" ${syncState.busy ? "disabled" : ""}>今すぐ同期</button><button class="btn" data-sync="logout">ログアウト</button>`;
+  }
+}
+document.getElementById("syncPanel")?.addEventListener("click", async e => {
+  const b = e.target.closest("[data-sync]"); if (!b) return;
+  try {
+    if (b.dataset.sync === "login" || b.dataset.sync === "check") {
+      await googleToken(true); syncState.error = "";
+      await remoteMeta();
+    } else if (b.dataset.sync === "now") await syncNow(true);
+    else if (b.dataset.sync === "logout") {
+      if (!confirm("この端末の同期をやめますか？（この端末の仕訳はそのまま残ります）")) return;
+      if (NATIVE) await callNative("googleSignOut", {}).catch(() => {});
+      syncMeta.signedIn = false; syncMeta.email = ""; saveSyncMeta();
+      syncState.token = ""; syncState.key = null; syncState.remoteMeta = undefined; syncState.folderId = "";
+      try { localStorage.removeItem(SYNC_KEY_KEY); } catch {}
+    }
+  } catch (err) { syncState.error = err.message || "できませんでした"; }
+  renderSync();
+});
+document.getElementById("syncPanel")?.addEventListener("submit", async e => {
+  e.preventDefault();
+  const p1 = document.getElementById("syncPass1").value, p2 = document.getElementById("syncPass2")?.value;
+  if (e.target.dataset.syncForm === "new" && (p1.length < 8 || p1 !== p2)) { syncState.error = p1.length < 8 ? "合言葉は8文字以上にしてください" : "2つの合言葉が違います"; return renderSync(); }
+  try { await setPassphrase(p1); syncState.error = ""; renderSync(); await syncNow(true); }
+  catch (err) { syncState.error = err.message; renderSync(); }
+});
+// アプリを開いたとき・戻ってきたときに同期する
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") queueSync(); });
+loadSavedKey().then(() => { renderSync(); if (syncConfigured() && syncState.key && syncMeta.signedIn) syncNow(false); });
 </script>
 </body>
 </html>

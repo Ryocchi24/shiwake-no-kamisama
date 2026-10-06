@@ -2,6 +2,9 @@ import UIKit
 import Vision
 import VisionKit
 import Capacitor
+import AuthenticationServices
+import CryptoKit
+import Security
 
 /// アプリの画面（Webアプリ）を表示する画面。独自の機能（ShiwakeNative）をここで登録する
 class MainViewController: CAPBridgeViewController {
@@ -22,6 +25,9 @@ public class ShiwakeNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "recognizeText", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "shareFile", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "scanDocument", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "googleSignIn", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "googleToken", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "googleSignOut", returnType: CAPPluginReturnPromise),
     ]
 
     /// スキャン画面の結果を受け取る係（画面が閉じるまで保持しておく）
@@ -136,6 +142,108 @@ public class ShiwakeNativePlugin: CAPPlugin, CAPBridgedPlugin {
             scanner.delegate = delegate
             presenter.present(scanner, animated: true)
         }
+    }
+}
+
+// MARK: - Googleでログイン（携帯とPCの同期に使う）
+/// Googleのログイン画面（Safari）を開き、許可されたら Googleドライブを使うための鍵（アクセストークン）を返す。
+/// 長く使える鍵（リフレッシュトークン）は iPhone のキーチェーンにだけ保存し、Webアプリには渡さない。
+final class GoogleAuth: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let shared = GoogleAuth()
+    private var session: ASWebAuthenticationSession?
+    weak var anchor: UIWindow?
+    private let keychainKey = "shiwake.google.refresh"
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor { anchor ?? ASPresentationAnchor() }
+
+    private static func base64url(_ data: Data) -> String {
+        data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+    }
+
+    /// clientId: 「〜.apps.googleusercontent.com」の iPhone 用クライアントID
+    func signIn(clientId: String, scope: String, done: @escaping (Result<[String: Any], Error>) -> Void) {
+        var bytes = [UInt8](repeating: 0, count: 48)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let verifier = GoogleAuth.base64url(Data(bytes))
+        let challenge = GoogleAuth.base64url(Data(SHA256.hash(data: Data(verifier.utf8))))
+        let scheme = "com.googleusercontent.apps." + clientId.replacingOccurrences(of: ".apps.googleusercontent.com", with: "")
+        let redirect = scheme + ":/oauth2redirect"
+        var c = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
+        c.queryItems = [
+            URLQueryItem(name: "client_id", value: clientId), URLQueryItem(name: "redirect_uri", value: redirect),
+            URLQueryItem(name: "response_type", value: "code"), URLQueryItem(name: "scope", value: scope),
+            URLQueryItem(name: "code_challenge", value: challenge), URLQueryItem(name: "code_challenge_method", value: "S256"),
+        ]
+        let s = ASWebAuthenticationSession(url: c.url!, callbackURLScheme: scheme) { [weak self] url, error in
+            self?.session = nil
+            if let error = error { return done(.failure(error)) }
+            guard let url = url, let code = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "code" })?.value else {
+                return done(.failure(NSError(domain: "GoogleAuth", code: 1, userInfo: [NSLocalizedDescriptionKey: "ログインできませんでした"])))
+            }
+            self?.token(params: ["client_id": clientId, "code": code, "code_verifier": verifier, "redirect_uri": redirect, "grant_type": "authorization_code"], done: done)
+        }
+        s.presentationContextProvider = self
+        session = s
+        s.start()
+    }
+
+    /// 保存しておいたリフレッシュトークンで、新しいアクセストークンをもらう
+    func refresh(clientId: String, done: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard let rt = loadRefresh() else { return done(.failure(NSError(domain: "GoogleAuth", code: 2, userInfo: [NSLocalizedDescriptionKey: "ログインしていません"]))) }
+        token(params: ["client_id": clientId, "refresh_token": rt, "grant_type": "refresh_token"], done: done)
+    }
+
+    func signOut() { SecItemDelete([kSecClass: kSecClassGenericPassword, kSecAttrAccount: keychainKey] as CFDictionary) }
+
+    private func token(params: [String: String], done: @escaping (Result<[String: Any], Error>) -> Void) {
+        var req = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        req.httpBody = params.map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")" }.joined(separator: "&").data(using: .utf8)
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, error in
+            if let error = error { return done(.failure(error)) }
+            guard let data = data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let access = json["access_token"] as? String else {
+                return done(.failure(NSError(domain: "GoogleAuth", code: 3, userInfo: [NSLocalizedDescriptionKey: "Googleの鍵を受け取れませんでした"])))
+            }
+            if let rt = json["refresh_token"] as? String { self?.saveRefresh(rt) }
+            done(.success(["accessToken": access, "expiresIn": json["expires_in"] as? Int ?? 3600]))
+        }.resume()
+    }
+
+    private func saveRefresh(_ value: String) {
+        signOut()
+        SecItemAdd([kSecClass: kSecClassGenericPassword, kSecAttrAccount: keychainKey, kSecValueData: Data(value.utf8),
+                    kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary, nil)
+    }
+    private func loadRefresh() -> String? {
+        var out: CFTypeRef?
+        let q = [kSecClass: kSecClassGenericPassword, kSecAttrAccount: keychainKey, kSecReturnData: true, kSecMatchLimit: kSecMatchLimitOne] as CFDictionary
+        guard SecItemCopyMatching(q, &out) == errSecSuccess, let d = out as? Data else { return nil }
+        return String(data: d, encoding: .utf8)
+    }
+}
+
+extension ShiwakeNativePlugin {
+    /// 入力: { clientId, scope } 出力: { accessToken, expiresIn }
+    @objc func googleSignIn(_ call: CAPPluginCall) {
+        guard let clientId = call.getString("clientId"), let scope = call.getString("scope") else { return call.reject("設定がありません") }
+        DispatchQueue.main.async {
+            GoogleAuth.shared.anchor = self.bridge?.viewController?.view.window
+            GoogleAuth.shared.signIn(clientId: clientId, scope: scope) { r in
+                switch r { case .success(let v): call.resolve(v); case .failure(let e): call.reject(e.localizedDescription) }
+            }
+        }
+    }
+    /// 入力: { clientId } 出力: { accessToken, expiresIn }（ログインしていなければエラー）
+    @objc func googleToken(_ call: CAPPluginCall) {
+        guard let clientId = call.getString("clientId") else { return call.reject("設定がありません") }
+        GoogleAuth.shared.refresh(clientId: clientId) { r in
+            switch r { case .success(let v): call.resolve(v); case .failure(let e): call.reject(e.localizedDescription) }
+        }
+    }
+    @objc func googleSignOut(_ call: CAPPluginCall) {
+        GoogleAuth.shared.signOut()
+        call.resolve()
     }
 }
 
