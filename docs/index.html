@@ -4889,8 +4889,8 @@ showView("import");
 // ・どの端末でも同じ合言葉を入れる。鍵は端末の中にだけ保存し、Googleにも送らない
 // ・同じものを両方で直したときは、あとから直したほうを残す（項目ごと）
 const GOOGLE = {
-  webClientId: "", // PC（Web版）用のクライアントID（〜.apps.googleusercontent.com）
-  iosClientId: "", // iPhone用のクライアントID
+  webClientId: "335518035315-s4231fs21ios0rpcjnfp2tagpk8ef9l3.apps.googleusercontent.com", // PC（Web版）用のクライアントID（〜.apps.googleusercontent.com）
+  iosClientId: "335518035315-13gkl7st6cv6jk8oeh1hrne5po5589c0.apps.googleusercontent.com", // iPhone用のクライアントID
   scope: "https://www.googleapis.com/auth/drive.file email",
 };
 const SYNC_META_KEY = "shiwake-sync-meta", SYNC_KEY_KEY = "shiwake-sync-key";
@@ -4967,7 +4967,8 @@ async function googleToken(interactive) {
     gisClient = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE.webClientId, scope: GOOGLE.scope,
       callback: r => r.error ? reject(new Error(r.error)) : resolve(setToken(r.access_token, Number(r.expires_in))),
-      error_callback: e => reject(new Error(e?.type === "popup_closed" ? "ログインの画面が閉じられました" : "ログインできませんでした")),
+      error_callback: e => reject(new Error(e?.type === "popup_closed" ? "ログインの画面が閉じられました"
+        : e?.type === "popup_failed_to_open" ? "ログインの画面がブラウザに止められました。このサイトのポップアップを許可してください" : "ログインできませんでした")),
     });
     gisClient.requestAccessToken({ prompt: syncMeta.signedIn ? "" : "consent", login_hint: syncMeta.email || undefined });
   });
