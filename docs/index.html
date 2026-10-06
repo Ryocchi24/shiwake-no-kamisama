@@ -1504,7 +1504,8 @@ function extractAmount(lines) {
 // 一番上はロゴ（英字や崩れた文字）のことが多いので、日本語の店名の行を優先する
 function extractStore(lines, confs = []) {
   // 宛名（〜様・〜御中）、但し書き、金額・日付・住所の行は店名にしない
-  const skip = /領収|レシート|売上票|伝票|控え|明細|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|様$|御中$|^但|上記|金額|合計|¥|\d\s*円|円也|^金\s|運転手|担当|レジ|\d{4}年|令和|\d{1,2}[/.]\d{1,2}|[都道府県].*[市区町村郡]|^[\d\s\-:/.,¥]+$/i;
+  const skipRe = /領収|レシート|売上票|伝票|控え|明細|いらっしゃ|ありがと|毎度|TEL|電話|〒|登録番号|様$|御中$|^但|上記|金額|合計|¥|\d\s*円|円也|^金\s|運転手|担当|レジ|\d{4}年|令和|\d{1,2}[/.]\d{1,2}|[都道府県].*[市区町村郡]|^[\d\s\-:/.,¥]+$/i;
+  const skip = { test: l => skipRe.test(l) || ADDRESS_RE.test(l) }; // 住所の行も店名にしない
   const japanese = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
   // 店の情報（電話・住所・登録番号）の行。店名はこの近くにあることが多い
   const storeInfo = /TEL|電話|登録番号|〒|[都道府県].*[市区町村郡]/i;
@@ -1541,7 +1542,7 @@ function extractStore(lines, confs = []) {
   });
   if (!best) return "";
   // 店名と支店名（〜店）が2行に分かれている場合はつなげる（例: ファミリーマート 新宿西口店）
-  const isBranch = t => /^[^\s]{1,10}店$/.test(t);
+  const isBranch = t => /^[^\s]{1,10}店$/.test(t) && !/会社|商店$|本店$/.test(t);
   const usable = i => {
     const t = clean(top[i] || "");
     return t && japanese.test(t) && !skip.test(top[i]) && !isBranch(t);
@@ -1606,13 +1607,17 @@ async function recognizeText(dataUrl) {
 }
 
 // レシートの品物の行（右端に金額がある行）から、最初の品名を取り出す。2つ以上あれば「他」を付ける
+// 住所の行（例: 福岡市中央区天神2-5-10、〇〇町1丁目）。店名・品名にはしない
+const ADDRESS_RE = /〒|丁目|番地|[都道府県].*[市区町村郡]|[市区町村郡].{0,12}\d|\d+\s*[-‐ー−の]\s*\d+\s*[-‐ー−の]\s*\d+|\d+\s*[-‐ー−]\s*\d+\s*$/;
 function extractItem(lines) {
   const end = lines.findIndex(l => /小\s*計|合\s*計|総\s*計|お買上|買上計/.test(l));
+  // 品物の行は、店の情報（電話・登録番号・日付・時刻）の行より後にある
+  const head = lines.slice(0, end < 0 ? lines.length : end).reduce((at, l, i) => /TEL|電話|登録番号|〒|\d{4}\s*[年\/.]\s*\d{1,2}|\d{1,2}:\d{2}/i.test(l) ? i : at, -1);
   const skip = /計|税|対象|釣|預|現金|クレジット|カード|ポイント|値引|割引|点数|領収|TEL|電話|登録番号|No\.?|№|レジ|担当|伝票|\d{1,2}:\d{2}|\d+年|\d+月|\d+日|[x×@＠]|単価?\s*\d/i;
   const names = [];
-  for (const line of lines.slice(0, end < 0 ? lines.length : end)) {
+  for (const line of lines.slice(head + 1, end < 0 ? lines.length : end)) {
     const m = line.match(/^(.*?)[\s¥\\]*\d{1,3}(?:,\d{3})*\s*(?:円|※|軽|外|内|\*|[A-Z])?\s*$/);
-    if (!m || skip.test(line)) continue;
+    if (!m || skip.test(line) || ADDRESS_RE.test(line)) continue;
     const name = m[1].replace(/^[\d\s*※軽#★☆・.\-]+/, "").replace(/[\s*※軽#★☆・.¥\\-]+$/, "").replace(/(?<=.{2})[外内軽]$/, "").trim();
     if ((name.match(/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}A-Za-z]/gu) || []).length < 2) continue;
     names.push(name.slice(0, 16));
