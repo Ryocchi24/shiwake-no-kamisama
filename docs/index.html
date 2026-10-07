@@ -985,8 +985,8 @@
     <h2>会社設定 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="dlg-system">
       <label>会社名 <input id="companyNameInput" type="text" autocomplete="off" aria-label="会社名"></label>
-      <label>取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">日計表</option><option value="format3">試算表</option></select></label>
-      <label id="companySystemWrap">元の会計ソフト <select id="companySystem" aria-label="元の会計ソフト"></select></label>
+      <label style="display:none">取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">日計表</option><option value="format3">試算表</option></select></label>
+      <label id="companySystemWrap">試算表の会計ソフト <select id="companySystem" aria-label="試算表の会計ソフト"></select></label>
       <span id="companyFieldsLabel" class="fields-label">使う項目</span>
       <div class="dlg-flags" id="companyFields"></div>
     </div>
@@ -1023,18 +1023,17 @@
     <h2>会社を追加</h2>
     <label class="dlg-label" for="newCompany">会社名</label>
     <input id="newCompany" type="text" placeholder="例: 株式会社サンプル" autocomplete="off">
-    <div class="dlg-label" style="margin-top:16px">取り込むもの</div>
-    <div class="type-pick" id="newCompanyType" role="radiogroup" aria-label="取り込むもの">
-      <button type="button" data-type="receipt">原始資料</button><button type="button" data-type="format2">日計表</button><button type="button" data-type="format3">試算表</button>
+    <div class="type-pick" id="newCompanyType" role="radiogroup" aria-label="取り込むもの" style="display:none">
+      <button type="button" data-type="receipt" class="active">原始資料</button>
     </div>
-    <div id="newSystemWrap" hidden>
-      <label class="dlg-label" for="newCompanySystem" style="margin-top:16px">元の会計ソフト</label>
+    <div id="newSystemWrap">
+      <label class="dlg-label" for="newCompanySystem" style="margin-top:16px">試算表の会計ソフト <span class="dlg-note">試算表を読み込むときだけ</span></label>
       <select id="newCompanySystem"></select>
     </div>
     <div class="dlg-label" style="margin-top:16px">マスタのファイル <span class="dlg-note">CSV・Excel（あとからでも読み込めます）</span></div>
     <div class="file-rows">
       <label class="file-row"><span class="file-row-name">ミロク科目マスタ</span><span class="file-row-status" id="newMasterStatus">未選択</span><span class="btn btn-sm">選ぶ</span><input type="file" id="newMasterFile" accept=".csv,.xlsx,.xlsm,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
-      <label class="file-row" id="newSourceRow" hidden><span class="file-row-name">別会計ソフトの科目</span><span class="file-row-status" id="newSourceStatus">未選択</span><span class="btn btn-sm">選ぶ</span><input type="file" id="newSourceFile" accept=".csv,.xlsx,.xlsm,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
+      <label class="file-row" id="newSourceRow"><span class="file-row-name">別会計ソフトの科目</span><span class="file-row-status" id="newSourceStatus">未選択</span><span class="btn btn-sm">選ぶ</span><input type="file" id="newSourceFile" accept=".csv,.xlsx,.xlsm,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
     </div>
     <div class="dlg-actions" style="margin-top:22px"><span style="flex:1"></span>
       <button class="btn" id="addClose">キャンセル</button>
@@ -1096,6 +1095,7 @@ const IMPORT_FORMATS = {
   purchase: { name: "仕入請求書", ...ALL_TYPES },
   sales: { name: "売上請求書", ...ALL_TYPES },
   card: { name: "クレジット明細", ...ALL_TYPES },
+  cashbook: { name: "現金出納帳", ...ALL_TYPES },
   passbook: { name: "通帳", ...ALL_TYPES },
   payroll: { name: "給与台帳", ...ALL_TYPES },
 };
@@ -1229,6 +1229,7 @@ async function addFiles(fileList) {
   if (!files.length) return;
   if (settings.method === TRIAL_SOURCE) return importTrial(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "passbook") return importPassbook(files);
+  if ((settings.method || "receipt") === "receipt" && settings.docType === "cashbook") return importPassbook(files, "cashbook");
   if ((settings.method || "receipt") === "receipt" && settings.docType === "payroll") return importPayroll(files);
   if ((settings.method || "receipt") === "receipt" && settings.docType === "card") return importCard(files);
   const listDoc = (settings.method || "receipt") === "receipt" ? settings.docType || "receipt" : settings.method === NIKKEI_SOURCE ? "nikkei" : "";
@@ -1962,7 +1963,6 @@ const TRIAL_KEYS = ["date", "debitCode", "debitAmount", "summary", "creditCode",
 // 原始資料・日計表は、12項目のうち会社ごとに選んだ項目（選んでいなければ12項目すべて）
 function fieldKeysOf(c) {
   if (!c) return FIELDS.map(f => f.key);
-  if (c.method === TRIAL_SOURCE) return TRIAL_KEYS;
   if (Array.isArray(c.fields)) {
     // 後から増えた項目（貸方摘要・事業者）は、それより前の設定にも足す
     const f = [...c.fields];
@@ -2054,7 +2054,7 @@ function receiptTaxHint(text) {
 }
 // 行の借方・貸方の消費税を自動で入れる（手で選び直した側はそのまま）
 // 通帳の仕訳で、通帳の科目（預金）が入っている側か
-const isBankSide = (row, side) => row.doc === "passbook" && !!row.bankSide && side === (row.bankSide === "d" ? "debit" : "credit");
+const isBankSide = (row, side) => (row.doc === "passbook" || row.doc === "cashbook") && !!row.bankSide && side === (row.bankSide === "d" ? "debit" : "credit");
 // 出金領収書で、貸方が支払いの科目（現金・未払金）か
 const isPaySide = (row, side) => row.source === NIKKEI_SOURCE ? /現金|預金|銀/.test(normName(masterName(row[side + "Code"], row.companyId))) // 日計表：現金・預金の側（入金・出金・預金の部分とも）
   : row.source === "receipt" && (side === "credit" && (!row.doc || row.doc === "purchase" || row.doc === "card") || side === "debit" && (row.doc === "income" || row.doc === "sales"))
@@ -2688,11 +2688,11 @@ list.addEventListener("change", e => {
     applyMapping(row, row[key], key === "debitCode" ? "debit" : "credit");
     render();
   }
-  else if (row.doc === "passbook" && row.store && lineOf(row) === "pair" && passbookCounterKeys(row).includes(key)) {
+  else if ((row.doc === "passbook" || row.doc === "cashbook") && row.store && lineOf(row) === "pair" && passbookCounterKeys(row).includes(key)) {
     // 通帳: 相手の科目・摘要を、そのカナの摘要のルールとして覚え、同じ摘要でまだ科目が空の行にも入れる
     learnPassbookRule(row);
     if (row[passbookCounterKeys(row)[0]]) row.note = String(row.note || "").split("／").filter(n => n && n !== PB_NO_RULE).join("／");
-    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.doc === "passbook" && !o.locked && o.review !== "exported"
+    for (const o of rows) if (o !== row && o.companyId === row.companyId && o.doc === row.doc && !o.locked && o.review !== "exported"
       && pbKey(o.store) === pbKey(row.store) && lineOf(o) === "pair") applyPassbookRule(o);
     saveReceiptSettings(); save(); render();
   }
@@ -3230,6 +3230,7 @@ function saveMasters() {
 const AUTO_RULE_TYPES = [
   { id: "receipt",  name: "出金領収書", ready: true,  fixed: "貸方の科目（現金）",     fixedEx: "例: 1101", rule: "店名 → 借方の科目",     ruleEx: "例: セブンイレブン" },
   { id: "income",   name: "入金領収書", ready: true,  fixed: "借方の科目",     fixedEx: "例: 1101", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
+  { id: "cashbook", name: "現金出納帳", ready: true, fixed: "現金の科目", fixedEx: "例: 1101", rule: "摘要 → 相手の科目", ruleEx: "例: 文具代" },
   { id: "passbook", name: "通帳",       ready: true,  fixed: "この通帳の科目", fixedEx: "例: 1107", rule: "摘要 → 相手の科目",     ruleEx: "例: NTT" },
   { id: "purchase", name: "仕入請求書", ready: true,  fixed: "貸方の科目",     fixedEx: "例: 2103", rule: "取引先 → 借方の科目",   ruleEx: "例: 取引先の名前" },
   { id: "sales",    name: "売上請求書", ready: true,  fixed: "借方の科目",     fixedEx: "例: 1142", rule: "取引先 → 貸方の科目",   ruleEx: "例: 取引先の名前" },
@@ -3470,7 +3471,9 @@ async function importNikkei(files) {
 // ---- 通帳 ----
 // 1行 → 1つの仕訳。出金は「借方 相手の科目／貸方 通帳の科目」、入金は「借方 通帳の科目／貸方 相手の科目」
 // カナの摘要 → 相手の科目・摘要（漢字）を会社ごとに覚え、次からは自動で入れる
-const passbookRulesOf = cid => autoRulesOf(cid, "passbook");
+// 通帳・現金出納帳：摘要 → 相手の科目・摘要のルールは、資料の種類ごとに覚える
+const passbookRulesOf = (cid, doc = "passbook") => autoRulesOf(cid, doc);
+const isBookDoc = doc => doc === "passbook" || doc === "cashbook";
 // 通帳の科目の候補（預金の科目。なければすべての科目）
 function bankAccounts(cid = currentCompanyId) {
   const m = masterOf(cid);
@@ -3481,24 +3484,24 @@ const passbookBankCode = cid => passbookRulesOf(cid).fixedCode || bankAccounts(c
 // 相手の科目の側（出金なら借方、入金なら貸方）の項目
 const passbookCounterKeys = r => r.bankSide === "c" ? ["debitCode", "summary"] : ["creditCode", "creditSummary"];
 const pbKey = s => normName(s).replace(/[ァィゥェォッャュョヮ]/g, c => String.fromCharCode(c.charCodeAt(0) + 1)).replace(/[)）(（]/g, "");
-function passbookRule(cid, kana) {
+function passbookRule(cid, kana, doc = "passbook") {
   const t = pbKey(kana);
   if (!t) return null;
-  return passbookRulesOf(cid).rules.filter(x => x.keyword && x.code && t.includes(pbKey(x.keyword)))
+  return passbookRulesOf(cid, doc).rules.filter(x => x.keyword && x.code && t.includes(pbKey(x.keyword)))
     .sort((a, b) => normName(b.keyword).length - normName(a.keyword).length)[0] || null;
 }
 function learnPassbookRule(r) {
-  if (r.doc !== "passbook" || !r.store || lineOf(r) !== "pair") return;
+  if (!isBookDoc(r.doc) || !r.store || lineOf(r) !== "pair") return;
   const [ck, sk] = passbookCounterKeys(r);
   const code = r[ck], summary = sk === "summary" ? r.summary : creditSummaryOf(r);
-  const rules = passbookRulesOf(r.companyId).rules;
+  const rules = passbookRulesOf(r.companyId, r.doc).rules;
   const ex = rules.find(x => pbKey(x.keyword) === pbKey(r.store));
   if (!code) { if (ex) ex.summary = summary; return; }
   if (ex) Object.assign(ex, { code, summary }); else rules.push({ keyword: r.store, code, summary });
 }
 // 覚えた科目・摘要を、まだ科目が空の行に入れる
 function applyPassbookRule(r) {
-  const rule = passbookRule(r.companyId, r.store);
+  const rule = passbookRule(r.companyId, r.store, r.doc);
   const [ck] = passbookCounterKeys(r);
   if (!rule || r[ck]) return false;
   r[ck] = rule.code;
@@ -3535,7 +3538,7 @@ function parsePassbook(cellRows, prev) {
     if (oc && ic) { outX = oc.x; inX = ic.x; continue; }
     // 年月日（例: 08-08-04）。行番号や記号とつながって読まれることがある（例: 0608-09-03WTU）
     const dm = line.match(/(\d{2})\s*[-.\/]\s*(\d{2})\s*[-.\/]\s*(\d{2})/);
-    const date = dm ? passbookDate(`${dm[1]}-${dm[2]}-${dm[3]}`) : "";
+    const date = dm ? passbookDate(`${dm[1]}-${dm[2]}-${dm[3]}`) : cardDate(line);
     const amounts = [], words = [];
     for (const c of cells) {
       let t = c.text;
@@ -3608,11 +3611,13 @@ function parsePassbookSheet(table) {
   return { entries };
 }
 // 読んだ通帳の行を、仕訳にして一覧に入れる
-function addPassbookEntries(entries, groupId, thumb) {
-  const cid = currentCompanyId, bank = passbookBankCode(cid);
+function addPassbookEntries(entries, groupId, thumb, doc = "passbook") {
+  const cid = currentCompanyId;
+  // 現金出納帳は、通帳の科目の代わりに現金
+  const bank = doc === "cashbook" ? (passbookRulesOf(cid, "cashbook").fixedCode || masterOf(cid).find(m => normName(m.name) === "現金")?.code || "") : passbookBankCode(cid);
   for (const e of entries) {
     const out = e.dir === "out";
-    const r = { id: uid(), groupId, companyId: cid, source: "receipt", doc: "passbook", thumb, status: "done", review: "pending", date: e.date,
+    const r = { id: uid(), groupId, companyId: cid, source: "receipt", doc, thumb, status: "done", review: "pending", date: e.date,
       store: e.kana, summary: e.kana, creditSummary: e.kana, bankSide: out ? "c" : "d",
       debitCode: out ? "" : bank, debitSub: "", debitAmount: e.amount, creditCode: out ? bank : "", creditSub: "", creditAmount: e.amount,
       taxHint: {}, bizV2: true,
@@ -3622,21 +3627,22 @@ function addPassbookEntries(entries, groupId, thumb) {
   }
   return entries.length;
 }
-async function importPassbook(files) {
+async function importPassbook(files, doc = "passbook") {
+  const label = doc === "cashbook" ? "現金出納帳" : "通帳";
   if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
   const sheets = files.filter(isSheetFile), others = files.filter(f => !isSheetFile(f));
-  if (others.length && !NATIVE) { alert("通帳の写真・PDFは、iPhoneアプリで読み取れます。PCではExcel・CSVを読み込めます。"); return; }
+  if (others.length && !NATIVE) { alert(`${label}の写真・PDFは、iPhoneアプリで読み取れます。PCではExcel・CSVを読み込めます。`); return; }
   const banner = document.getElementById("ocrBanner");
   const show = t => { banner.textContent = t; banner.hidden = false; };
   let made = 0, prev = null; const problems = [];
   try {
     for (const file of sheets) {
-      show(`通帳のファイルを読み込んでいます（${file.name}）…`);
+      show(`${label}のファイルを読み込んでいます（${file.name}）…`);
       const p = parsePassbookSheet(await sheetToRows(file));
       if (!p.entries.length) { problems.push(`${file.name}: 日付と金額の列が見つかりませんでした`); continue; }
       const bad = p.entries.filter(e => e.ok === false).length;
       if (bad) problems.push(`${file.name}: 残高が合わない行が${bad}行あります`);
-      made += addPassbookEntries(p.entries, uid(), "");
+      made += addPassbookEntries(p.entries, uid(), "", doc);
     }
     const pages = [];
     for (const file of others) {
@@ -3644,7 +3650,7 @@ async function importPassbook(files) {
       else pages.push(await resize(file, OCR_MAX_SIDE, 0.9));
     }
     for (let i = 0; i < pages.length; i++) {
-      show(`通帳を読み取っています（${i + 1} / ${pages.length} 枚）…`);
+      show(`${label}を読み取っています（${i + 1} / ${pages.length} 枚）…`);
       const res = await callNative("recognizeText", { image: pages[i].split(",")[1] });
       const p = parsePassbook(tableCells(res.items || [], res.width, res.height), prev);
       prev = p.prev;
@@ -3654,10 +3660,10 @@ async function importPassbook(files) {
       fullImages.set(groupId, full); imageStore.put(groupId, full).catch(() => {});
       const bad = p.entries.filter(e => e.ok === false).length;
       if (bad) problems.push(`${i + 1}枚目: 残高が合わない行が${bad}行あります`);
-      made += addPassbookEntries(p.entries, groupId, thumb);
+      made += addPassbookEntries(p.entries, groupId, thumb, doc);
     }
   } catch (err) {
-    alert(`通帳を読み取れませんでした: ${err.message}`);
+    alert(`${label}を読み取れませんでした: ${err.message}`);
   } finally {
     banner.hidden = true;
   }
@@ -4323,18 +4329,17 @@ companyTypeSel.onchange = () => {
 // 会社の種類ごとに、出すタブ（原始資料 → レシートの自動入力、試算表 → 試算表の読み替え）
 let ruleType = "receipt"; // 自動入力ルールで表示している書類の種類
 // 自動入力ルールのタブは出さない（手で直した科目やCSVに書き出した仕訳から、会社ごとに自動で覚えて使う）
-const TABS_BY_TYPE = { receipt: ["master"], format2: ["master"], format3: ["master", "mapping"] };
+// どの会社も、ミロク科目マスタと別会計ソフト科目マスタ（試算表を読むとき）の両方を持つ
+const TABS_BY_TYPE = { all: ["master", "mapping"] };
 function renderMaster() {
-  const type = companies.find(x => x.id === masterCid)?.method || "receipt";
-  companyTypeSel.value = type;
+  const type = "all";
   companySystemSel.value = systemOf(masterCid).id;
-  document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
+  document.getElementById("companySystemWrap").hidden = false;
   const mc = companies.find(x => x.id === masterCid);
   const keys = fieldKeysOf(mc);
   document.getElementById("companyFields").innerHTML = FIELDS.map(f =>
     `<label class="flag ${f.side || ""}"><input type="checkbox" value="${f.key}"${keys.includes(f.key) ? " checked" : ""}> ${f.label}</label>`).join("");
-  document.getElementById("companyFields").hidden = document.getElementById("companyFieldsLabel").hidden = type === TRIAL_SOURCE;
-  const tabs = TABS_BY_TYPE[type] || TABS_BY_TYPE.receipt;
+  const tabs = TABS_BY_TYPE[type];
   if (!tabs.includes(masterTab)) masterTab = "master";
   for (const b of document.querySelectorAll("[data-mtab]")) b.hidden = !tabs.includes(b.dataset.mtab);
   document.getElementById("masterTabs").hidden = tabs.length < 2;
@@ -4559,7 +4564,7 @@ function renderCompany() {
   const shown = companies.filter(c => !q || normName(c.name).includes(q));
   document.getElementById("coPickerList").innerHTML = shown.length
     ? shown.map(c => `<button class="co-picker-item ${c.id === currentCompanyId ? "active" : ""}" data-pick="${c.id}" role="option">
-        <span>${escapeHtml(c.name)}</span><span class="method-tag t-${c.method || "receipt"}">${escapeHtml(methodLabel(c))}</span></button>`).join("")
+        <span>${escapeHtml(c.name)}</span></button>`).join("")
     : `<div class="co-picker-empty">${companies.length ? "見つかりません" : "会社はまだありません"}</div>`;
 }
 function closeCoPicker() { coPickerMenu.hidden = true; }
@@ -4586,8 +4591,8 @@ document.addEventListener("click", e => { if (!e.target.closest("#coPicker")) cl
 function switchCompany(id) {
   currentCompanyId = id;
   const c = currentCompany();
-  // 会社の種類（原始資料・日計表・試算表）に取り込み方法を合わせる
-  if (c) { settings.method = c.method || "receipt"; if (settings.method === "receipt") settings.docType = "receipt"; saveSettings(); renderMethod(); }
+  // 資料の種類は会社ではなく取り込み画面で選ぶので、会社を切り替えても今の種類のまま
+  if (c) renderMethod();
   saveCompanies();
   render();
 }
@@ -4615,7 +4620,6 @@ function renderCompanyList() {
     : shown.map(c => `<div class="company-item">
       <div class="co-main">
         <span class="co-name">${escapeHtml(c.name)}</span>
-        <span class="method-tag t-${c.method || "receipt"}">${escapeHtml(methodLabel(c))}</span>
       </div>
       <button class="btn btn-sm open-master" data-cid="${c.id}">会社設定</button>
       <button class="icon-btn" data-remove="${c.id}" title="削除"><svg><use href="#i-trash"/></svg></button>
@@ -4628,7 +4632,7 @@ document.addEventListener("click", e => {
 // 会社を追加する画面: 会社名 → 取り込むもの →（試算表なら）元の会計ソフト。すべて選ぶまで追加できない
 const addDlg = document.getElementById("addDlg");
 const newSystemSel = document.getElementById("newCompanySystem");
-newSystemSel.innerHTML = `<option value="">選んでください</option>` + SOURCE_SYSTEMS.map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join("");
+newSystemSel.innerHTML = `<option value="">使わない</option>` + SOURCE_SYSTEMS.map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join("");
 const newType = () => document.querySelector("#newCompanyType .active")?.dataset.type || "";
 let newMasterItems = null, newSourceItems = null;
 function setFileStatus(id, text, ok) { const el = document.getElementById(id); el.textContent = text; el.classList.toggle("ok", !!ok); el.classList.toggle("ng", ok === false); }
@@ -4645,13 +4649,10 @@ document.getElementById("newSourceFile").addEventListener("change", async e => {
   else setFileStatus("newSourceStatus", `${newSourceItems.length}科目`, true);
 });
 function updateAddDlg() {
-  document.getElementById("newSystemWrap").hidden = newType() !== TRIAL_SOURCE;
-  document.getElementById("newSourceRow").hidden = newType() !== TRIAL_SOURCE;
-  document.getElementById("addCompany").disabled = !document.getElementById("newCompany").value.trim() || !newType() || (newType() === TRIAL_SOURCE && !newSystemSel.value);
+  document.getElementById("addCompany").disabled = !document.getElementById("newCompany").value.trim();
 }
 function openAddCompany() {
   document.getElementById("newCompany").value = "";
-  for (const x of document.querySelectorAll("#newCompanyType [data-type]")) x.classList.remove("active");
   newSystemSel.value = "";
   newMasterItems = newSourceItems = null;
   setFileStatus("newMasterStatus", "未選択"); setFileStatus("newSourceStatus", "未選択");
@@ -4672,13 +4673,13 @@ document.getElementById("addCompany").onclick = () => {
   updateAddDlg();
   if (document.getElementById("addCompany").disabled) return;
   const name = document.getElementById("newCompany").value.trim();
-  const c = { id: uid(), name, method: newType() };
-  if (c.method === TRIAL_SOURCE) c.system = newSystemSel.value;
+  const c = { id: uid(), name, method: "receipt" };
+  if (newSystemSel.value) c.system = newSystemSel.value;
   companies.push(c);
   // 読み込んだマスタを入れる（先にミロク科目マスタ、次に別会計ソフトの科目 → 科目名からミロクのコードを推測）
   let note = "";
   if (newMasterItems) setCompanyMaster(c.id, newMasterItems);
-  if (newSourceItems && c.method === TRIAL_SOURCE) {
+  if (newSourceItems) {
     const res = setCompanySource(c.id, newSourceItems, true);
     if (res.unset) note = `（ミロクのコード未設定 ${res.unset}件は、会社設定で選んでください）`;
   }
@@ -4713,8 +4714,8 @@ function renderMethod() {
   const doc = settings.docType || "receipt";
   for (const b of document.querySelectorAll(".method")) b.classList.toggle("active", b.dataset.method === method);
   for (const b of document.querySelectorAll(".doc-type")) b.classList.toggle("active", b.dataset.doc === doc);
-  renderDocPicker(doc);
-  document.getElementById("docTypes").hidden = method !== "receipt";
+  renderDocPicker();
+  document.getElementById("docTypes").hidden = false;
   const fmt = importFormat(method);
   const docReady = method !== "receipt" || !!AUTO_RULE_TYPES.find(t => t.id === doc)?.ready;
   const ready = docReady && fmt.types.length > 0;
@@ -4734,19 +4735,24 @@ function renderMethod() {
     method === "receipt" ? label(activeDoc) : label(activeMethod).replace(/^[①②③]/, "");
   document.body.classList.toggle("method-off", !ready);
 }
-// 原始資料の種類の選択（会社を選ぶ欄と同じ形）
+// 取り込む資料の種類（会社を選ぶ欄と同じ形）。原始資料の種類のあとに、日計表・試算表も並べる
 const docPickerMenu = document.getElementById("docPickerMenu");
-function renderDocPicker(doc) {
-  const cur = AUTO_RULE_TYPES.find(t => t.id === doc) || AUTO_RULE_TYPES[0];
+const IMPORT_KINDS = [...AUTO_RULE_TYPES.map(t => ({ id: t.id, name: t.name, method: "receipt" })),
+  { id: "nikkei", name: "日計表", method: "format2" }, { id: "trial", name: "試算表", method: "format3" }];
+const currentKind = () => (settings.method || "receipt") === "format2" ? "nikkei" : settings.method === "format3" ? "trial" : settings.docType || "receipt";
+function renderDocPicker() {
+  const cur = IMPORT_KINDS.find(t => t.id === currentKind()) || IMPORT_KINDS[0];
   document.getElementById("docPickerName").textContent = cur.name;
-  document.getElementById("docPickerList").innerHTML = AUTO_RULE_TYPES.map(t => `<button class="co-picker-item ${t.id === cur.id ? "active" : ""}" data-pickdoc="${t.id}" role="option">
-    <span>${escapeHtml(t.name)}</span>${t.ready ? "" : `<span class="soon-tag">準備中</span>`}</button>`).join("");
+  document.getElementById("docPickerList").innerHTML = IMPORT_KINDS.map(t => `<button class="co-picker-item ${t.id === cur.id ? "active" : ""}" data-pickdoc="${t.id}" role="option">
+    <span>${escapeHtml(t.name)}</span></button>`).join("");
 }
 document.getElementById("docPickerBtn").onclick = () => { docPickerMenu.hidden = !docPickerMenu.hidden; };
 document.getElementById("docPickerList").addEventListener("click", e => {
   const b = e.target.closest("[data-pickdoc]"); if (!b) return;
   docPickerMenu.hidden = true;
-  settings.docType = b.dataset.pickdoc;
+  const k = IMPORT_KINDS.find(t => t.id === b.dataset.pickdoc) || IMPORT_KINDS[0];
+  settings.method = k.method;
+  if (k.method === "receipt") settings.docType = k.id;
   saveSettings();
   renderMethod(); render();
 });
@@ -4877,8 +4883,7 @@ rows.forEach(r => {
 });
 save();
 pruneImages();
-// 開いたときも、選んでいる会社の種類の取り込み画面にする
-if (currentCompany()) { settings.method = currentCompany().method || "receipt"; renderMethod(); }
+renderMethod();
 render();
 renderMasterCodes();
 showView("import");
@@ -4915,16 +4920,18 @@ const hashOf = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 
 // 前に見たときから変わった項目に、今の時刻を付ける。消えた項目は「消した時刻」を覚える
 function markSyncChanges() {
   const now = Date.now();
+  let changed = false;
   rows.forEach((r, i) => { if (!r.ct) r.ct = now + i / 1000; }); // 仕訳を作った順（並び順に使う）
   for (const [name, get] of Object.entries(SYNC_COLLS)) {
     const cur = get(), hashes = (syncMeta.hashes[name] ||= {}), stamps = (syncMeta.stamps[name] ||= {}), tombs = (syncMeta.tombs[name] ||= {});
     for (const [k, v] of Object.entries(cur)) {
       const h = hashOf(JSON.stringify(v));
-      if (hashes[k] !== h) { hashes[k] = h; stamps[k] = now; delete tombs[k]; }
+      if (hashes[k] !== h) { hashes[k] = h; stamps[k] = now; delete tombs[k]; changed = true; }
     }
-    for (const k of Object.keys(hashes)) if (!(k in cur)) { delete hashes[k]; delete stamps[k]; tombs[k] = now; }
+    for (const k of Object.keys(hashes)) if (!(k in cur)) { delete hashes[k]; delete stamps[k]; tombs[k] = now; changed = true; }
   }
   saveSyncMeta();
+  return changed; // 前に見たときから、手元で変わった項目があったか
 }
 
 // ---- 鍵（合言葉から作る。AES-GCM） ----
@@ -5007,10 +5014,10 @@ async function driveRead(name) {
 }
 async function driveWrite(name, text) {
   const folder = await driveFolder(), id = await driveFind(name, folder);
-  if (id) return drive(`${DRIVE_UP}/files/${id}?uploadType=media`, { method: "PATCH", headers: { "Content-Type": "text/plain" }, body: text });
+  if (id) return drive(`${DRIVE_UP}/files/${id}?uploadType=media&fields=id,modifiedTime`, { method: "PATCH", headers: { "Content-Type": "text/plain" }, body: text });
   const boundary = "shiwake" + Math.random().toString(36).slice(2);
   const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder] })}\r\n--${boundary}\r\nContent-Type: text/plain\r\n\r\n${text}\r\n--${boundary}--`;
-  return drive(`${DRIVE_UP}/files?uploadType=multipart&fields=id`, { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body });
+  return drive(`${DRIVE_UP}/files?uploadType=multipart&fields=id,modifiedTime`, { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body });
 }
 async function driveList(prefix) {
   const folder = await driveFolder(), names = new Set();
@@ -5088,13 +5095,22 @@ function applyMerged(m) {
     syncMeta.stamps[name] = m[name].stamps; syncMeta.tombs[name] = m[name].tombs;
   }
 }
-async function syncNow(interactive = false) {
+// 入力中・ドラッグ中は、画面を描き直さない（打っている文字が消えないように）
+const syncEditing = () => { const a = document.activeElement; return !!blockDrag || !!(a && a.matches?.("input, textarea, select") && a.closest("#list, .dialog")); };
+async function syncNow(interactive = false, quiet = false) {
   if (!syncConfigured()) return;
   if (syncState.busy) { syncState.again = true; return; }
-  syncState.busy = true; syncState.error = ""; renderSync();
+  if (!interactive && syncEditing()) { clearTimeout(syncState.timer); syncState.timer = setTimeout(() => syncNow(false, quiet), 3000); return; }
+  syncState.busy = true; if (!quiet) { syncState.error = ""; renderSync(); }
   try {
     if (!(await googleToken(interactive))) throw new Error(NATIVE ? "ログインが必要です" : "［今すぐ同期］を押してください");
     if (!syncState.key) { renderSync(); return; }
+    // Googleドライブ側が前の同期から変わっておらず、手元も変わっていなければ、何もしない（確かめるだけなので軽い）
+    const localChanged = markSyncChanges();
+    const dataId = syncState.dataId || (syncState.dataId = await driveFind("data.enc", await driveFolder()));
+    const remoteMod = dataId ? (await (await drive(`${DRIVE}/files/${dataId}?fields=modifiedTime`)).json()).modifiedTime : "";
+    if (dataId && remoteMod === syncMeta.remoteMod && !localChanged) { syncMeta.lastSync = syncState.lastSync = Date.now(); saveSyncMeta(); return; }
+    if (quiet) { syncState.error = ""; renderSync(); }
     const text = await driveRead("data.enc");
     const remote = text ? JSON.parse(await decryptText(text)) : { colls: {}, tombs: {} };
     if (!syncMeta.lastSync) joinSameCompanies(remote); // この端末で初めての同期
@@ -5106,7 +5122,9 @@ async function syncNow(interactive = false) {
       out.tombs[name] = merged[name].tombs;
     }
     applyMerged(merged);
-    await driveWrite("data.enc", await encryptText(JSON.stringify(out)));
+    const wrote = await (await driveWrite("data.enc", await encryptText(JSON.stringify(out)))).json().catch(() => ({}));
+    if (wrote.id) syncState.dataId = wrote.id;
+    syncMeta.remoteMod = wrote.modifiedTime || "";
     // 写真：まだ Googleドライブにないものを送る（受け取りは、開いたときに必要な分だけ）
     const used = new Set([...rows.map(r => r.groupId), ...archives.flatMap(a => (a.rows || []).map(r => r.groupId))].filter(Boolean));
     const there = await driveList("img-");
@@ -5124,6 +5142,7 @@ async function syncNow(interactive = false) {
   } finally {
     syncState.busy = false; renderSync();
     if (syncState.again) { syncState.again = false; queueSync(); }
+    if (syncState.error === "ログインし直してください") { syncState.dataId = ""; syncState.folderId = ""; }
   }
 }
 // 携帯とPCで同じ会社を別々に登録していたら、同期先の会社（同じ名前）に1つにまとめる
@@ -5209,7 +5228,9 @@ document.getElementById("syncPanel")?.addEventListener("submit", async e => {
   catch (err) { syncState.error = err.message; renderSync(); }
 });
 // アプリを開いたとき・戻ってきたときに同期する
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") queueSync(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && syncReady()) syncNow(false, true); });
+const syncReady = () => syncConfigured() && syncState.key && syncMeta.signedIn && (NATIVE || (syncState.token && Date.now() < syncState.tokenUntil - 60000));
+setInterval(() => { if (document.visibilityState === "visible" && !syncState.busy && syncReady()) syncNow(false, true); }, 15000);
 loadSavedKey().then(() => { renderSync(); if (syncConfigured() && syncState.key && syncMeta.signedIn) syncNow(false); });
 </script>
 </body>
