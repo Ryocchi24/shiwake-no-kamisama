@@ -331,6 +331,7 @@
   .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px 12px !important; }
   .dlg-system label { display: contents; }
   .dlg-system label[hidden] { display: none; }
+  .dlg-system .kind-tabs { grid-column: 1 / -1; justify-self: start; margin: 4px 0 2px; }
   /* 使う項目：1列に、項目名を全部書いて並べる */
   .dlg-flags[hidden], .fields-label[hidden] { display: none; }
   .fields-label { grid-column: 1 / -1; margin-top: 4px; }
@@ -985,6 +986,9 @@
     <h2>会社設定 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="dlg-system">
       <label>会社名 <input id="companyNameInput" type="text" autocomplete="off" aria-label="会社名"></label>
+      <div class="tabs kind-tabs" id="companyKindTabs" role="tablist" aria-label="設定する資料">
+        <button class="tab" data-ckind="receipt">原始資料</button><button class="tab" data-ckind="format2">日計表</button><button class="tab" data-ckind="format3">試算表</button>
+      </div>
       <label style="display:none">取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">日計表</option><option value="format3">試算表</option></select></label>
       <label id="companySystemWrap">試算表の会計ソフト <select id="companySystem" aria-label="試算表の会計ソフト"></select></label>
       <span id="companyFieldsLabel" class="fields-label">使う項目</span>
@@ -1961,8 +1965,9 @@ const creditSummaryOf = r => r.creditSummary ?? r.summary ?? "";
 // 試算表は6項目で固定（補助・消費税は使わない）
 const TRIAL_KEYS = ["date", "debitCode", "debitAmount", "summary", "creditCode", "creditAmount"];
 // 原始資料・日計表は、12項目のうち会社ごとに選んだ項目（選んでいなければ12項目すべて）
-function fieldKeysOf(c) {
+function fieldKeysOf(c, kind = "receipt") {
   if (!c) return FIELDS.map(f => f.key);
+  if (kind === NIKKEI_SOURCE && Array.isArray(c.fieldsNikkei)) return [...c.fieldsNikkei]; // 日計表を別に決めていなければ原始資料と同じ
   if (Array.isArray(c.fields)) {
     // 後から増えた項目（貸方摘要・事業者）は、それより前の設定にも足す
     const f = [...c.fields];
@@ -1977,7 +1982,7 @@ function fieldKeysOf(c) {
 // 確認画面とCSVに出す項目（どちらも同じ）
 // 確認画面の項目名には番号を付けない（番号はCSVの列の順のためのもので、会社設定の「使う項目」にだけ出す）
 function visibleFields() {
-  const keys = currentSource() === TRIAL_SOURCE ? TRIAL_KEYS : fieldKeysOf(currentCompany());
+  const keys = currentSource() === TRIAL_SOURCE ? TRIAL_KEYS : fieldKeysOf(currentCompany(), currentSource());
   const plain = t => t.replace(/^[\u2460-\u2473]/, "");
   // 試算表は片側だけの仕訳なので、摘要は1つ（借方と貸方の間）
   const trialSummary = { key: "summary", label: "摘要", cls: "c-summary b-left" };
@@ -4285,11 +4290,13 @@ document.getElementById("listClear").onclick = () => {
 // ---- 科目マスタ・対応表の画面 ----
 const masterDlg = document.getElementById("masterDlg");
 let masterTab = "master";
+let companyKind = "receipt"; // 会社設定で見ている資料（原始資料・日計表・試算表）
 let masterCid = null; // 科目マスタ・対応表を開いている会社
 function openMaster(cid = currentCompanyId) {
   const company = companies.find(c => c.id === cid);
   if (!company) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
   masterCid = cid;
+  companyKind = settings.method || "receipt"; // 今取り込んでいる資料の設定から開く
   document.getElementById("masterCompany").textContent = company.name;
   document.getElementById("companyNameInput").value = company.name;
   document.getElementById("masterSearch").value = "";
@@ -4317,7 +4324,9 @@ document.getElementById("companyNameInput").addEventListener("change", e => {
 document.getElementById("companyFields").onchange = e => {
   const c = companies.find(x => x.id === masterCid);
   if (!c) return;
-  c.fields = [...document.querySelectorAll("#companyFields input:checked")].map(i => i.value);
+  const picked = [...document.querySelectorAll("#companyFields input:checked")].map(i => i.value);
+  if (companyKind === NIKKEI_SOURCE) { c.fieldsNikkei = picked; saveCompanies(); render(); return; }
+  c.fields = picked;
   c.fieldsV2 = c.fieldsV3 = true;
   delete c.useSub; delete c.taxExempt;
   saveCompanies(); render();
@@ -4331,17 +4340,19 @@ companyTypeSel.onchange = () => {
 // 会社の種類ごとに、出すタブ（原始資料 → レシートの自動入力、試算表 → 試算表の読み替え）
 let ruleType = "receipt"; // 自動入力ルールで表示している書類の種類
 // 自動入力ルールのタブは出さない（手で直した科目やCSVに書き出した仕訳から、会社ごとに自動で覚えて使う）
-// どの会社も、ミロク科目マスタと別会計ソフト科目マスタ（試算表を読むとき）の両方を持つ
-const TABS_BY_TYPE = { all: ["master", "mapping"] };
+// 会社設定は、原始資料・日計表・試算表ごとに分ける。ミロク科目マスタは共通、別会計ソフト科目マスタは試算表だけ
+const TABS_BY_TYPE = { receipt: ["master"], format2: ["master"], format3: ["master", "mapping"] };
 function renderMaster() {
-  const type = "all";
+  const type = companyKind;
+  for (const b of document.querySelectorAll("[data-ckind]")) b.classList.toggle("active", b.dataset.ckind === type);
   companySystemSel.value = systemOf(masterCid).id;
-  document.getElementById("companySystemWrap").hidden = false;
+  document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
+  document.getElementById("companyFields").hidden = document.getElementById("companyFieldsLabel").hidden = type === TRIAL_SOURCE;
   const mc = companies.find(x => x.id === masterCid);
-  const keys = fieldKeysOf(mc);
+  const keys = fieldKeysOf(mc, type);
   document.getElementById("companyFields").innerHTML = FIELDS.map(f =>
     `<label class="flag ${f.side || ""}"><input type="checkbox" value="${f.key}"${keys.includes(f.key) ? " checked" : ""}> ${f.label}</label>`).join("");
-  const tabs = TABS_BY_TYPE[type];
+  const tabs = TABS_BY_TYPE[type] || TABS_BY_TYPE.receipt;
   if (!tabs.includes(masterTab)) masterTab = "master";
   for (const b of document.querySelectorAll("[data-mtab]")) b.hidden = !tabs.includes(b.dataset.mtab);
   document.getElementById("masterTabs").hidden = tabs.length < 2;
@@ -4406,6 +4417,10 @@ document.addEventListener("click", e => {
   const t = e.target.closest(".open-master");
   if (t) { e.preventDefault(); openMaster(t.dataset.cid || currentCompanyId); }
 });
+document.getElementById("companyKindTabs").onclick = e => {
+  const b = e.target.closest("[data-ckind]"); if (!b) return;
+  companyKind = b.dataset.ckind; renderMaster();
+};
 document.getElementById("masterTabs").onclick = e => {
   const b = e.target.closest("[data-mtab]"); if (!b) return;
   masterTab = b.dataset.mtab; renderMaster();
