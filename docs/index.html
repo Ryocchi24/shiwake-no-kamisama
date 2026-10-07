@@ -793,6 +793,17 @@
     body.web .mobile-capture { grid-template-columns: 1fr; }
     body.web .mobile-capture label.btn { background: var(--primary); border-color: var(--primary); color: #fff; }
   }
+  /* PC：確認画面の表が横に長いので、列を少し詰め、完了・削除の列は右端に固定して、いつも見えるようにする */
+  @media (min-width: 861px) {
+    td.c-date { width: 118px; }
+    td.c-acct { width: 140px; min-width: 140px; }
+    td.c-code:not(.c-acct) { min-width: 56px; }
+    td.c-amount { width: 96px; min-width: 92px; }
+    td.c-tax, td.c-rate { width: 70px; min-width: 70px; }
+    td.c-biz { width: 108px; min-width: 108px; }
+    td.c-summary { min-width: 140px; }
+    #list td.c-del, #list thead tr > th:last-child { position: sticky; right: 0; z-index: 2; background: var(--surface); box-shadow: -8px 0 8px -8px rgba(15, 23, 42, .28); }
+  }
 </style>
 </head>
 <body>
@@ -3356,18 +3367,35 @@ function nikkeiAccount(text, cid) {
 }
 const isDitto = t => !String(t || "").replace(/[〃”"'’`\s]/g, ""); // 「〃」（上と同じ）や空欄
 const isDittoMark = t => /^[〃”"'’`]+$/.test(String(t || "").trim()); // はっきり「〃」と書いてある
+// 見出し（科目名・コード・相手先・内容・取引日・金額）の位置から、列の区切りを決める
+// 印刷の日計表や、写真の写り方が違っても、見出しを頼りに列を合わせる。見出しが読めなければ決まった位置を使う
+const NIKKEI_HEAD = [[/^借方科目/, "dAcct"], [/^貸方科目/, "cAcct"], [/^借方金額/, "dAmount"], [/^貸方金額/, "cAmount"],
+  [/^科目/, "acct"], [/^コード/, "code"], [/^相手先/, "party"], [/^内容/, "content"], [/^取引日/, "day"], [/^金額/, "amount"]];
+function nikkeiColsFromHeads(heads, right) {
+  const list = heads.map(h => ({ x: h.x + h.w / 2, name: (NIKKEI_HEAD.find(([re]) => re.test(h.t)) || [])[1] })).filter(h => h.name).sort((a, b) => a.x - b.x);
+  // 振替の「コード」は、借方科目の次なら借方、貸方科目の次なら貸方
+  for (let i = 0; i < list.length; i++) if (list[i].name === "code" && i && /^[dc]Acct$/.test(list[i - 1].name)) list[i].name = list[i - 1].name[0] + "Code";
+  if (list.length < 3) return null;
+  return list.map((h, i) => [i + 1 < list.length ? (h.x + list[i + 1].x) / 2 : right, h.name]);
+}
 function parseNikkei(items, cid) {
   const tokens = nikkeiTokens(items);
-  const find = re => items.find(it => re.test(String(it.text || "").normalize("NFKC")));
-  // 日付（例: 令和7年7月2日。手書きの「1」が「／」などに読まれることがある）
+  const norm = it => String(it.text || "").normalize("NFKC").replace(/\s/g, "");
+  const find = re => items.find(it => re.test(norm(it)));
+  // 日付（例: 令和7年7月2日。印刷の日計表は「令和8年月分」「8月4日」のように分かれていることがある。手書きの「1」が「／」などに読まれることがある）
   let date = "";
   for (const it of items) {
     const m = String(it.text || "").normalize("NFKC").replace(/[／/|lI!]/g, "1").match(/(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
     if (m) { const y = 2018 + Number(m[1]); if (validDate(y, +m[2], +m[3])) { date = `${y}-${pad(+m[2])}-${pad(+m[3])}`; break; } }
   }
+  if (!date) {
+    const yIt = items.map(norm).map(t => t.match(/令和(\d{1,2})年/)).find(Boolean);
+    const md = items.map(norm).map(t => t.match(/^(\d{1,2})月(\d{1,2})日$/)).find(Boolean);
+    if (yIt && md) { const y = 2018 + Number(yIt[1]); if (validDate(y, +md[1], +md[2])) date = `${y}-${pad(+md[1])}-${pad(+md[2])}`; }
+  }
   // 区切りの位置: 見出しの行、本日の合計の行、振替の見出しの行
   const headY = (find(/金額|科目名/)?.y ?? 0.11) + 0.012;
-  const totalIt = find(/本日入金合計|入金合計/);
+  const totalIt = find(/本日(入金|収入)合計|(入金|収入)合計/);
   const bLabel = items.filter(it => /\(B\)|（B）/.test(it.text) && it.y > 0.3).sort((a, b) => a.y - b.y)[0];
   const totalY = Math.min(totalIt?.y ?? 0.5, bLabel?.y ?? 1) - 0.008;
   const transIt = find(/借方科目名|借方金額/);
@@ -3375,10 +3403,21 @@ function parseNikkei(items, cid) {
   const upper = tokens.filter(k => k.y > headY && k.y < totalY);
   const lower = tokens.filter(k => k.y > transY);
   const entries = [];
-  // 収入の部・支出の部（「〃」や空欄の科目・相手先は、上の行と同じ）
-  for (const [side, cols, x0, x1] of [["income", NIKKEI_COLS.income, 0, 0.5], ["expense", NIKKEI_COLS.expense, 0.5, 1]]) {
+  // 収入の部と支出の部の境目：「収入の部」と「支出の部」の見出しの間（読めなければ真ん中）
+  const inLabel = find(/収入の部|入金の部/), outLabel = find(/支出の部|出金の部/);
+  const split = inLabel && outLabel && outLabel.x > inLabel.x ? (inLabel.x + inLabel.w + outLabel.x) / 2 : 0.5;
+  // 見出しの行（「科目名」と同じ高さ）の文字から、列の区切りを決める
+  const headIt = find(/^科目名?$/);
+  const heads = headIt ? items.filter(it => Math.abs(it.y - headIt.y) < 0.02).map(it => ({ x: it.x, w: it.w, t: norm(it) })) : [];
+  const inCols = nikkeiColsFromHeads(heads.filter(h => h.x + h.w / 2 < split), split) || NIKKEI_COLS.income;
+  const outCols = nikkeiColsFromHeads(heads.filter(h => h.x + h.w / 2 >= split), 1) || NIKKEI_COLS.expense;
+  const transHeads = transIt ? items.filter(it => Math.abs(it.y - transIt.y) < 0.02).map(it => ({ x: it.x, w: it.w, t: norm(it) })) : [];
+  const transCols = nikkeiColsFromHeads(transHeads, 1) || NIKKEI_COLS.transfer;
+  // 収入の部・支出の部（「〃」や空欄の科目・相手先は、上の行と同じ）。合計の行は仕訳にしない
+  for (const [side, cols, x0, x1] of [["income", inCols, 0, split], ["expense", outCols, split, 1]]) {
     let last = {};
     for (const c of nikkeiRows(upper.filter(k => k.x >= x0 && k.x < x1), cols, x0)) {
+      if (Object.values(c).some(v => /合計|繰越|残高/.test(v))) continue;
       const amount = numOf(c.amount);
       const acct = isDitto(c.acct) && !c.code ? last.acct : (c.acct || "") + (c.code || "");
       const party = isDittoMark(c.party) ? last.party : c.party;
@@ -3389,7 +3428,8 @@ function parseNikkei(items, cid) {
   }
   // 振替（現金以外の取引）
   let last = {};
-  for (const c of nikkeiRows(lower, NIKKEI_COLS.transfer, 0)) {
+  for (const c of nikkeiRows(lower, transCols, 0)) {
+    if (Object.values(c).some(v => /合計|繰越|残高/.test(v))) continue;
     const dAmount = numOf(c.dAmount), cAmount = numOf(c.cAmount);
     const dAcct = isDitto(c.dAcct) && !c.dCode ? last.dAcct : (c.dAcct || "") + (c.dCode || "");
     const cAcct = isDitto(c.cAcct) && !c.cCode ? last.cAcct : (c.cAcct || "") + (c.cCode || "");
@@ -3402,8 +3442,11 @@ function parseNikkei(items, cid) {
   const near = (y0, y1, x0, x1) => tokens.filter(k => k.y > y0 && k.y < y1 && k.x >= x0 && k.x < x1 && /\d{3,}/.test(k.t)).map(k => numOf(k.t));
   const bTotal = near(totalY - 0.03, totalY + 0.03, 0.40, 0.50)[0] || 0;
   const cTotal = near(totalY - 0.03, totalY + 0.03, 0.90, 1)[0] || 0;
-  const balance = near(totalY + 0.012, totalY + 0.06, 0.85, 1)[0] || 0;
-  const prevRaw = near(totalY + 0.012, totalY + 0.06, 0.15, 0.38)[0] || 0;
+  // 「本日現金残高」「前日繰越」は、見出しのすぐ右の数字（見出しが読めなければ決まった位置）
+  const rightOf = re => { const L = items.find(it => re.test(norm(it))); if (!L) return 0;
+    return tokens.filter(k => Math.abs(k.y - (L.y + L.h / 2)) < 0.015 && k.x > L.x + L.w * 0.5 && /\d{3,}/.test(k.t)).sort((a, b) => a.x - b.x).map(k => numOf(k.t))[0] || 0; };
+  const balance = rightOf(/現金残(高|金)|本日.*残/) || near(totalY + 0.012, totalY + 0.06, 0.85, 1)[0] || 0;
+  const prevRaw = rightOf(/繰越/) || near(totalY + 0.012, totalY + 0.06, 0.15, 0.38)[0] || 0;
   return { date, entries, bTotal, cTotal, balance, prevRaw };
 }
 // 読み取った内容を確かめる（入金・出金の合計、前日繰越＋入金−出金＝本日残高）
