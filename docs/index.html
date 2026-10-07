@@ -1935,7 +1935,7 @@ async function readReceiptFree(dataUrl) {
 // ---- 表示 ----
 // 確認画面の15項目。会社ごとに、使う項目を選ぶ（試算表は6項目で固定）
 const TAX_TYPES = ["課税", "非課税", "対象外"];
-const TAX_RATES = ["10%", "8%軽", "8%", "非課税", "対象外"];
+const TAX_RATES = ["10%", "8%軽", "8%"]; // 非課税・対象外のときの税率は「－」（空）
 const BIZ_TYPES = ["課税事業者", "免税事業者"]; // 取引の相手が、インボイスの登録をしている事業者かどうか
 const FIELDS = [
   { key: "date", label: "①伝票日付", type: "date", cls: "c-date" },
@@ -2067,7 +2067,7 @@ function setAutoTax(row, side) {
   const type = autoTaxType(row[side + "Code"], side === "credit" ? creditSummaryOf(row) : row.summary, row.companyId)
     || (side === "debit" && h.split ? "課税" : ""); // 8%と10%に分けた行は、科目がまだ空でも課税
   row[side + "Tax"] = type;
-  row[side + "Rate"] = type !== "課税" ? type : h.reduced ? "8%軽" : "10%";
+  row[side + "Rate"] = type !== "課税" ? "" : h.reduced ? "8%軽" : "10%";
   // 事業者区分は取引の相手で決まる（品物が対象外・非課税でも、相手は課税事業者のことがある）
   // 通帳の科目（預金）の側は「－」（空）
   // 出金領収書の貸方の現金・未払金も「－」
@@ -2246,6 +2246,8 @@ function render() {
     // 以前は対象外・非課税のとき事業者区分を空にしていたので、一度だけ課税事業者を入れる
     if (!r.bizV2) { for (const side of ["debit", "credit"]) if (!r[side + "Biz"]) r[side + "Biz"] = "課税事業者"; r.bizV2 = true; }
     // 出金領収書の貸方の現金・未払金は「－」にした（まだ完了していない行を一度だけそろえる）
+    // 以前は非課税・対象外のとき税率にも「非課税」「対象外」を入れていたので、「－」にする
+    for (const side of ["debit", "credit"]) if (r[side + "Rate"] === "非課税" || r[side + "Rate"] === "対象外") r[side + "Rate"] = "";
     if (!r.bizV3) { if (!r.locked && r.review !== "exported") for (const side of ["debit", "credit"]) if (isPaySide(r, side) && r[side + "Biz"] === "課税事業者") r[side + "Biz"] = ""; r.bizV3 = true; }
   }
   // 見出しの上の段：続いている借方・貸方の項目をまとめる
@@ -2669,11 +2671,11 @@ list.addEventListener("change", e => {
   if (!row) return;
   const side = key.startsWith("debit") ? "debit" : "credit";
   if (/Tax$|Rate$|Biz$/.test(key)) {
-    // 区分と税率の組み合わせをそろえる（非課税・対象外は区分と税率が同じ、税率を選んだら課税）
+    // 区分と税率の組み合わせをそろえる（非課税・対象外の税率は「－」、税率を選んだら課税）
     // 事業者区分は相手で決まるので、区分・税率とは別に選べる（空なら課税事業者を入れる）
     const v = row[key];
-    if (key.endsWith("Tax")) row[side + "Rate"] = v === "課税" ? (TAX_TYPES.includes(row[side + "Rate"]) || !row[side + "Rate"] ? "10%" : row[side + "Rate"]) : v;
-    else if (key.endsWith("Rate")) row[side + "Tax"] = TAX_TYPES.includes(v) ? v : v ? "課税" : "";
+    if (key.endsWith("Tax")) row[side + "Rate"] = v === "課税" ? (TAX_RATES.includes(row[side + "Rate"]) ? row[side + "Rate"] : "10%") : "";
+    else if (key.endsWith("Rate") && v) row[side + "Tax"] = "課税";
     if (!key.endsWith("Biz") && !row[side + "Biz"] && row.doc !== "payroll" && !isBankSide(row, side) && !isPaySide(row, side)) row[side + "Biz"] = "課税事業者";
     row.taxManual = { ...row.taxManual, [side]: true };
     save(); render(); return;
@@ -3035,7 +3037,7 @@ const CSV_HEADERS = {
 // CSVでは、消費税・税率・事業者取引区分をミロクのコードにする（全社共通）
 const CSV_CODES = {
   Tax: { 課税: "10", 非課税: "30", 対象外: "40" },
-  Rate: { "10%": "4", "8%軽": "5", "8%": "3", 非課税: "0", 対象外: "0" },
+  Rate: { "10%": "4", "8%軽": "5", "8%": "3", 非課税: "0", 対象外: "0", "": "0" }, // 「－」（非課税・対象外）は 0
   Biz: { 課税事業者: "0", 免税事業者: "1", "": "0" },
 };
 document.getElementById("download").onclick = async () => {
@@ -3074,8 +3076,8 @@ document.getElementById("download").onclick = async () => {
   //   借方だけの行：借方 科目 ／ 貸方 （空欄）　　貸方だけの行：借方 （空欄）／ 貸方 科目
   const lineCsv = r => {
     const ln = lineOf(r);
-    if (ln === "d") return { ...r, date: voucherRows(r)[0].date, creditCode: shokuchi, creditSub: "", creditAmount: r.debitAmount, creditTax: "対象外", creditRate: "対象外", creditBiz: "課税事業者", creditSummary: r.summary };
-    if (ln === "c") return { ...r, date: voucherRows(r)[0].date, debitCode: shokuchi, debitSub: "", debitAmount: r.creditAmount, debitTax: "対象外", debitRate: "対象外", debitBiz: "課税事業者", summary: creditSummaryOf(r) };
+    if (ln === "d") return { ...r, date: voucherRows(r)[0].date, creditCode: shokuchi, creditSub: "", creditAmount: r.debitAmount, creditTax: "対象外", creditRate: "", creditBiz: "課税事業者", creditSummary: r.summary };
+    if (ln === "c") return { ...r, date: voucherRows(r)[0].date, debitCode: shokuchi, debitSub: "", debitAmount: r.creditAmount, debitTax: "対象外", debitRate: "", debitBiz: "課税事業者", summary: creditSummaryOf(r) };
     return r;
   };
   const lines = done.map(lineCsv).map(r => {
