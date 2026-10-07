@@ -331,7 +331,6 @@
   .dlg-system { display: grid !important; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px 12px !important; }
   .dlg-system label { display: contents; }
   .dlg-system label[hidden] { display: none; }
-  .dlg-system .kind-tabs { grid-column: 1 / -1; justify-self: start; margin: 4px 0 2px; }
   /* 使う項目：1列に、項目名を全部書いて並べる */
   .dlg-flags[hidden], .fields-label[hidden] { display: none; }
   .fields-label { grid-column: 1 / -1; margin-top: 4px; }
@@ -986,9 +985,7 @@
     <h2>会社設定 <span class="dlg-sub" id="masterCompany"></span></h2>
     <div class="dlg-system">
       <label>会社名 <input id="companyNameInput" type="text" autocomplete="off" aria-label="会社名"></label>
-      <div class="tabs kind-tabs" id="companyKindTabs" role="tablist" aria-label="設定する資料">
-        <button class="tab" data-ckind="receipt">原始資料</button><button class="tab" data-ckind="format2">日計表</button><button class="tab" data-ckind="format3">試算表</button>
-      </div>
+      <label>資料 <select id="companyKind" aria-label="設定する資料"><option value="receipt">原始資料</option><option value="format2">日計表</option><option value="format3">試算表</option></select></label>
       <label style="display:none">取り込むもの <select id="companyType" aria-label="取り込むもの"><option value="receipt">原始資料</option><option value="format2">日計表</option><option value="format3">試算表</option></select></label>
       <label id="companySystemWrap">試算表の会計ソフト <select id="companySystem" aria-label="試算表の会計ソフト"></select></label>
       <span id="companyFieldsLabel" class="fields-label">使う項目</span>
@@ -4344,7 +4341,7 @@ let ruleType = "receipt"; // 自動入力ルールで表示している書類の
 const TABS_BY_TYPE = { receipt: ["master"], format2: ["master"], format3: ["master", "mapping"] };
 function renderMaster() {
   const type = companyKind;
-  for (const b of document.querySelectorAll("[data-ckind]")) b.classList.toggle("active", b.dataset.ckind === type);
+  document.getElementById("companyKind").value = type;
   companySystemSel.value = systemOf(masterCid).id;
   document.getElementById("companySystemWrap").hidden = type !== TRIAL_SOURCE;
   document.getElementById("companyFields").hidden = document.getElementById("companyFieldsLabel").hidden = type === TRIAL_SOURCE;
@@ -4417,10 +4414,7 @@ document.addEventListener("click", e => {
   const t = e.target.closest(".open-master");
   if (t) { e.preventDefault(); openMaster(t.dataset.cid || currentCompanyId); }
 });
-document.getElementById("companyKindTabs").onclick = e => {
-  const b = e.target.closest("[data-ckind]"); if (!b) return;
-  companyKind = b.dataset.ckind; renderMaster();
-};
+document.getElementById("companyKind").onchange = e => { companyKind = e.target.value; renderMaster(); };
 document.getElementById("masterTabs").onclick = e => {
   const b = e.target.closest("[data-mtab]"); if (!b) return;
   masterTab = b.dataset.mtab; renderMaster();
