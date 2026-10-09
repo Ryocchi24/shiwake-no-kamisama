@@ -5281,6 +5281,30 @@ document.getElementById("syncPanel")?.addEventListener("submit", async e => {
   try { await setPassphrase(p1); syncState.error = ""; renderSync(); await syncNow(true); }
   catch (err) { syncState.error = err.message; renderSync(); }
 });
+// ---- 同じブラウザで開いている、ほかのページの変更をすぐ映す ----
+// どのページも同じ保存場所（localStorage）を使うので、ほかのページが保存したら知らせが来る。読み込み直して描き直す
+const TAB_KEYS = [STORAGE_KEY, COMPANIES_KEY, MASTERS_KEY, MAPPINGS_KEY, RECEIPT_SETTINGS_KEY, STORE_NAMES_KEY, ARCHIVE_KEY, SYNC_META_KEY];
+let tabReloadTimer = 0;
+function reloadFromOtherTab() {
+  clearTimeout(tabReloadTimer);
+  if (syncEditing()) { tabReloadTimer = setTimeout(reloadFromOtherTab, 1000); return; } // 入力中は、終わってから
+  const reading = rows.filter(r => r.status === "reading");
+  rows = [...load(STORAGE_KEY, []), ...reading];
+  companies = load(COMPANIES_KEY, []);
+  if (!companies.some(c => c.id === currentCompanyId)) currentCompanyId = companies[0]?.id || null;
+  const diffs = load(MASTERS_KEY, {});
+  for (const k of Object.keys(masterDiffs)) delete masterDiffs[k];
+  Object.assign(masterDiffs, diffs);
+  for (const k of Object.keys(masters)) delete masters[k];
+  mappings = load(MAPPINGS_KEY, {}); receiptSettings = load(RECEIPT_SETTINGS_KEY, {}); storeNames = load(STORE_NAMES_KEY, {}); archives = load(ARCHIVE_KEY, []);
+  syncMeta = load(SYNC_META_KEY, syncMeta); syncState.lastSync = syncMeta.lastSync || syncState.lastSync;
+  render(); renderMasterCodes(); renderCompany(); renderSync();
+  if (!document.getElementById("companiesView").hidden) renderCompanyList();
+  if (!document.getElementById("archiveView").hidden) renderArchive();
+  if (!masterDlg.hidden) renderMaster();
+}
+window.addEventListener("storage", e => { if (TAB_KEYS.includes(e.key)) { clearTimeout(tabReloadTimer); tabReloadTimer = setTimeout(reloadFromOtherTab, 150); } });
+
 // アプリを開いたとき・戻ってきたときに同期する
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && syncReady()) syncNow(false, true); });
 const syncReady = () => syncConfigured() && syncState.key && syncMeta.signedIn && (NATIVE || (syncState.token && Date.now() < syncState.tokenUntil - 60000));
