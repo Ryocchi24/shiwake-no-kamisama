@@ -3079,7 +3079,12 @@ document.getElementById("download").onclick = async () => {
       return;
     }
   }
-  // 空の欄や貸借の不一致（赤いお知らせ）があっても止めない（ミロクに取り込むときに確かめるため）
+  // 試算表は、空の欄や貸借の不一致（赤いお知らせ）があっても止めない（ミロクに取り込むときに確かめるため）
+  // 原始資料・日計表は、日付・金額が空の行があれば確かめる
+  if (currentSource() !== TRIAL_SOURCE) {
+    const incomplete = done.filter(r => !voucherRows(r)[0].date || !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount)); // 日付は仕訳の先頭の塊が持っている
+    if (incomplete.length && !confirm(`日付・金額が空の行が ${incomplete.length} 件あります。このままダウンロードしますか？`)) return;
+  }
 
   const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
