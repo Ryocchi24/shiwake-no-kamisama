@@ -2155,8 +2155,12 @@ const balanceHtml = r => {
     : `⚠ 借方 ${b.d.toLocaleString()} ／ 貸方 ${b.c.toLocaleString()}（差額 ${Math.abs(b.d - b.c).toLocaleString()}円）`}</div>`;
 };
 // 金額を直したら、そのレシートの一致の表示（伝票日付の枠の色）を更新する
+// 赤いお知らせ（日付が空・借方と貸方が合わない）がある仕訳は、完了にできない
+const voucherBlocked = r => !voucherRows(r)[0].date || !balanceOf(r).ok;
 function refreshBalance(row) {
   const v = vidOf(row);
+  const lockBtn = list.querySelector(`[data-lock="${CSS.escape(v)}"]`);
+  if (lockBtn && !row.locked) lockBtn.disabled = voucherBlocked(row);
   const el = list.querySelector(`[data-bal-for="${v}"]`);
   if (el) el.outerHTML = balanceHtml(row);
   const head = list.querySelector(`tr[data-vid-head="${v}"]`);
@@ -2250,7 +2254,7 @@ function render() {
   const actions = (row, v, locked) => {
     const del = `<button class="icon-btn del" data-del="${row.id}" title="削除"><svg><use href="#i-trash"/></svg><span class="act-label">削除</span></button>`;
     if (row.source === TRIAL_SOURCE || row.status !== "done") return `<td class="c-del"><div class="row-actions">${del}</div></td>`;
-    const lock = `<button class="btn btn-sm lock-btn ${locked ? "" : "btn-primary"}" data-lock="${escapeHtml(v)}">${locked ? "完了解除" : "完了"}</button>`;
+    const lock = `<button class="btn btn-sm lock-btn ${locked ? "" : "btn-primary"}" data-lock="${escapeHtml(v)}"${!locked && voucherBlocked(row) ? " disabled" : ""}>${locked ? "完了解除" : "完了"}</button>`;
     return `<td class="c-del"><div class="row-actions v-actions"><span class="act-spacer"></span>${lock}${locked ? "" : del}</div></td>`;
   };
   const fields = visibleFields();
@@ -2953,6 +2957,7 @@ list.addEventListener("click", async e => {
     // 完了：その仕訳を触っても変わらないようにする（完了解除で戻す）
     const vr = rows.filter(r => r.companyId === currentCompanyId && vidOf(r) === t.dataset.lock);
     const lock = !vr.some(r => r.locked);
+    if (lock && vr[0] && voucherBlocked(vr[0])) return; // 赤いお知らせがあるうちは完了にできない
     for (const r of vr) r.locked = lock;
     save(); render();
   } else if (t.dataset.del) {
