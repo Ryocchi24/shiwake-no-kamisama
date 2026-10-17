@@ -3079,11 +3079,25 @@ document.getElementById("download").onclick = async () => {
       return;
     }
   }
-  // 試算表は、空の欄や貸借の不一致（赤いお知らせ）があっても止めない（ミロクに取り込むときに確かめるため）
-  // 原始資料・日計表は、日付・金額が空の行があれば確かめる
-  if (currentSource() !== TRIAL_SOURCE) {
-    const incomplete = done.filter(r => !voucherRows(r)[0].date || !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount)); // 日付は仕訳の先頭の塊が持っている
-    if (incomplete.length && !confirm(`日付・金額が空の行が ${incomplete.length} 件あります。このままダウンロードしますか？`)) return;
+  // 赤いお知らせ（日付・金額・科目の空欄、借方と貸方の不一致）があるときは、書き出さない（会計の決まりとして、合わないものは出さない）
+  {
+    const problems = [];
+    if (currentSource() === TRIAL_SOURCE) {
+      const d = done.reduce((s, r) => s + Number(r.debitAmount || 0), 0), c = done.reduce((s, r) => s + Number(r.creditAmount || 0), 0);
+      if (d !== c) problems.push(`借方合計（${d.toLocaleString()}円）と貸方合計（${c.toLocaleString()}円）が一致していません`);
+      const noDate = done.filter(r => !r.date).length, noCode = done.filter(r => !(Number(r.debitAmount) ? r.debitCode : r.creditCode)).length;
+      if (noDate) problems.push(`伝票日付が空の行が ${noDate} 行あります`);
+      if (noCode) problems.push(`ミロクのコードが空の行が ${noCode} 行あります`);
+    } else {
+      const order = [...new Set(sortedRows().map(vidOf))];
+      const bad = order.map((v, i) => ({ v, no: i + 1, vr: done.filter(r => vidOf(r) === v) })).filter(x => x.vr.length).filter(x =>
+        !x.vr[0].date && !voucherRows(x.vr[0])[0].date || x.vr.some(r => !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount)) || !balanceOf(x.vr[0]).ok);
+      if (bad.length) {
+        problems.push(`日付・金額の空欄や、借方と貸方の不一致がある仕訳があります（${bad.slice(0, 10).map(x => `${x.no}件目`).join("・")}${bad.length > 10 ? " ほか" : ""}）`);
+        list.querySelector(`tr[data-vid-head="${CSS.escape(bad[0].v)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+    if (problems.length) { alert(`赤いお知らせを直してから、CSVをダウンロードしてください。\n\n${problems.join("\n")}`); return; }
   }
 
   const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
