@@ -899,6 +899,7 @@
             <span class="method-tag" id="trialSystem"></span>
             <span class="trial-balance" id="trialBalance"></span>
             <label class="field">伝票日付<input type="date" id="trialDate"></label>
+            <button class="btn btn-sm" id="trialAddRow"><svg><use href="#i-plus"/></svg>行を追加</button>
           </div>
           <div class="trial-bar" id="passbookBar" hidden>
             <label class="field">通帳の科目<select id="passbookAcct"></select></label>
@@ -2536,6 +2537,13 @@ document.addEventListener("input", e => {
   showSuggest(e.target);
 });
 document.addEventListener("focusin", e => {
+  const n = e.target;
+  // 金額の欄は、押したら数字を全部選ぶ（そのまま打てば置き換わる）。iPhoneは指を離したときに選択が外れるので、少し後にもう一度選ぶ
+  if (!n.matches?.("#list input.num")) return;
+  const all = () => { if (document.activeElement === n) { try { n.setSelectionRange(0, n.value.length); } catch { n.select?.(); } } };
+  setTimeout(all, 0); setTimeout(all, 180);
+});
+document.addEventListener("focusin", e => {
   if (!e.target.matches?.("[data-code-suggest]")) return;
   e.target.dataset.prev = e.target.value;
   delete e.target.dataset.picked;
@@ -3071,14 +3079,7 @@ document.getElementById("download").onclick = async () => {
       return;
     }
   }
-  const incomplete = done.filter(r => r.source === TRIAL_SOURCE
-    ? !r.date || !(Number(r.debitAmount) ? r.debitCode : r.creditCode)
-    : !voucherRows(r)[0].date || !Number(lineOf(r) === "c" ? r.creditAmount : r.debitAmount)); // 日付は仕訳の先頭の塊が持っている
-  if (incomplete.length && !confirm(`日付・金額・コードが空の行が ${incomplete.length} 件あります。このままダウンロードしますか？`)) return;
-  if (done.some(r => r.source === TRIAL_SOURCE)) {
-    const d = done.reduce((s, r) => s + Number(r.debitAmount || 0), 0), c = done.reduce((s, r) => s + Number(r.creditAmount || 0), 0);
-    if (d !== c && !confirm(`借方合計（${d.toLocaleString()}）と貸方合計（${c.toLocaleString()}）が一致していません。このままダウンロードしますか？`)) return;
-  }
+  // 空の欄や貸借の不一致（赤いお知らせ）があっても止めない（ミロクに取り込むときに確かめるため）
 
   const formatDate = d => !d ? "" : settings.dateFormat === "compact" ? d.replace(/-/g, "") : d.replace(/-/g, "/");
   const cell = v => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
@@ -4315,6 +4316,18 @@ function renderTrialBar() {
   const dateEl = document.getElementById("trialDate");
   if (document.activeElement !== dateEl) dateEl.value = items[0]?.date || "";
 }
+// 試算表に、読み取れなかった科目などを手で1行足す（一覧の一番下に入る）
+document.getElementById("trialAddRow").onclick = () => {
+  const items = sortedRows();
+  const r = { id: uid(), groupId: items[0]?.groupId || uid(), companyId: currentCompanyId, source: TRIAL_SOURCE, thumb: "", status: "done", review: "pending",
+    date: items[0]?.date || "", summary: "", debitCode: "", debitSub: "", debitAmount: "", creditCode: "", creditSub: "", creditAmount: "",
+    srcKey: "", srcCode: "", srcName: "（手で追加）", codeHow: "", note: "" };
+  rows.push(r);
+  save(); render();
+  const inp = list.querySelector(`[data-id="${r.id}"][data-key="debitCode"]`);
+  inp?.closest("tr")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  setTimeout(() => inp?.focus(), 300);
+};
 document.getElementById("trialDate").addEventListener("change", e => {
   for (const r of sortedRows()) r.date = e.target.value;
   save(); render();
