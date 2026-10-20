@@ -703,6 +703,14 @@
     /* 8%と10%に分けた仕訳は、2つ目（10%）を1つ目の続きとして見せる（間の線・日付・画像を出さない） */
     /* 借方・貸方が複数ある仕訳は、2行目からを1行目の続きとして見せる（間の線・日付・画像を出さない） */
     tbody tr.v-mid { border-bottom: none; padding-bottom: 4px; }
+    /* 仕訳ボックスの枠：借方と貸方が合っていれば薄い緑、合っていなければ薄い赤（下の方を見ていても分かるように）。
+       複合仕訳は何行かに分かれているので、先頭の行に上の線、最後の行に下の線を引いて、1つの枠に見せる */
+    tbody tr.v-ok::after, tbody tr.v-ng::after { content: ""; position: absolute; left: 56px; right: 4px; top: 4px; bottom: 4px; pointer-events: none;
+      border: 2px solid var(--vframe); border-radius: 14px; }
+    tbody tr.v-ok { --vframe: rgba(18, 122, 74, .38); }
+    tbody tr.v-ng { --vframe: rgba(198, 42, 42, .42); }
+    tbody tr.v-mid::after { bottom: 0; border-bottom: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+    tbody tr.v-cont::after { top: 0; border-top: none; border-top-left-radius: 0; border-top-right-radius: 0; }
     tbody tr.v-cont { padding-top: 0; }
     tbody tr.v-cont td.c-date, tbody tr.v-cont td.c-status { display: none; }
     tbody tr.v-cont td.c-thumb { top: 4px; } /* 足した塊の番号は、借方科目の左に出す */
@@ -2159,6 +2167,8 @@ const balanceHtml = r => {
 const voucherBlocked = r => !voucherRows(r)[0].date || !balanceOf(r).ok;
 function refreshBalance(row) {
   const v = vidOf(row);
+  const ok = balanceOf(row).ok;
+  for (const tr of list.querySelectorAll(`tr[data-vid="${CSS.escape(v)}"]`)) { tr.classList.toggle("v-ok", ok); tr.classList.toggle("v-ng", !ok); }
   const lockBtn = list.querySelector(`[data-lock="${CSS.escape(v)}"]`);
   if (lockBtn && !row.locked) lockBtn.disabled = voucherBlocked(row);
   const el = list.querySelector(`[data-bal-for="${v}"]`);
@@ -2320,7 +2330,7 @@ function render() {
         [...new Set(fields.filter(f => f.side).map(f => kindOf(f.key)))].map(kd => fields.find(f => f.side === side && kindOf(f.key) === kd) || { blank: true, side }))];
       // この段に－が出るか（出るなら、借方・貸方の最初の項目の高さをそろえる）
       const minusRow = compound && !locked && ["debit", "credit"].some(side => sideCount[side] > 1 && (side === "debit" ? dRow : cRow));
-      const trCls = [isTrial ? "" : "row-receipt", k > 1 && !last ? "v-mid" : "", first ? "" : "v-cont", locked ? "locked" : "", minusRow ? "minus-row" : ""].filter(Boolean).join(" ");
+      const trCls = [isTrial ? "" : "row-receipt", isTrial ? "" : balanceOf(anchor).ok ? "v-ok" : "v-ng", k > 1 && !last ? "v-mid" : "", first ? "" : "v-cont", locked ? "locked" : "", minusRow ? "minus-row" : ""].filter(Boolean).join(" ");
       body += `<tr data-row="${(dRow || cRow || anchor).id}" data-vid="${escapeHtml(v)}" data-bi="${i}" ${first ? `data-vid-head="${escapeHtml(v)}"` : ""} class="${trCls}">${head}` + cells.map(f => {
         if (f.blank) return `<td class="c-blank s-${f.side}"></td>`;
         const src = srcOf(f);
