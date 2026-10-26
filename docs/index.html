@@ -1182,7 +1182,7 @@ let archives = load(ARCHIVE_KEY, []);
 async function pruneImages() {
   try {
     const used = new Set([...rows.map(r => r.groupId), ...archives.flatMap(a => a.rows.map(r => r.groupId))]); // 保管庫の写真も残す
-    for (const key of await imageStore.keys()) if (!used.has(key)) await imageStore.del(key);
+    for (const key of await imageStore.keys()) if (!used.has(key) && !String(key).startsWith("backup-")) await imageStore.del(key);
     for (const key of fullImages.keys()) if (!used.has(key)) fullImages.delete(key);
     for (const key of ocrImages.keys()) if (!used.has(key)) ocrImages.delete(key);
   } catch {}
@@ -5008,15 +5008,80 @@ const syncConfigured = () => !!(NATIVE ? GOOGLE.iosClientId : GOOGLE.webClientId
 const saveSyncMeta = () => { try { localStorage.setItem(SYNC_META_KEY, JSON.stringify(syncMeta)); } catch {} };
 
 // ---- 同期する中身（項目ごとに、いつ直したかを覚える） ----
+// 科目マスタ・対応表・覚えたルールは、会社ごとのかたまりではなく1科目・1ルールずつ合わせる（両方の端末で覚えたものがどちらも残るように）
+const SEP = "\u001f";
+function flatMasters(obj = masterDiffs) {
+  const o = {};
+  for (const [cid, d] of Object.entries(obj || {})) {
+    (d?.adds || []).forEach((m, i) => { o[[cid, "a", m.code || `#${i}`].join(SEP)] = { code: m.code, name: m.name }; });
+    for (const code of d?.deleted || []) o[[cid, "d", code].join(SEP)] = 1;
+  }
+  return o;
+}
+function flatMappings(obj = mappings) {
+  const o = {};
+  for (const [cid, m] of Object.entries(obj || {})) for (const [k, v] of Object.entries(m || {})) o[cid + SEP + k] = v;
+  return o;
+}
+function flatRules(obj = receiptSettings) {
+  const o = {};
+  for (const [cid, types] of Object.entries(obj || {})) for (const [type, rc] of Object.entries(types || {})) {
+    for (const [p, v] of Object.entries(rc || {})) if (p !== "rules") o[[cid, type, "p", p].join(SEP)] = v;
+    (rc?.rules || []).forEach((r, i) => { o[[cid, type, "r", r.keyword ? String(r.keyword) : `#${i}`].join(SEP)] = r; });
+  }
+  return o;
+}
+// 並び順は、この端末での並びを先に、ほかの端末から来たものをあとに
+function orderedKeys(vals, localFlat) {
+  const mine = Object.keys(localFlat).filter(k => k in vals), seen = new Set(mine);
+  return [...mine, ...Object.keys(vals).filter(k => !seen.has(k))];
+}
+function unflatMasters(vals) {
+  const out = {};
+  for (const k of orderedKeys(vals, flatMasters())) {
+    const [cid, kind, code] = k.split(SEP), d = (out[cid] ||= { adds: [], deleted: [] });
+    if (kind === "a") d.adds.push({ ...vals[k] }); else d.deleted.push(code);
+  }
+  return out;
+}
+function unflatMappings(vals) {
+  const out = {};
+  for (const k of orderedKeys(vals, flatMappings())) { const i = k.indexOf(SEP); (out[k.slice(0, i)] ||= {})[k.slice(i + 1)] = vals[k]; }
+  return out;
+}
+function unflatRules(vals) {
+  const out = {};
+  for (const k of orderedKeys(vals, flatRules())) {
+    const [cid, type, kind, ...rest] = k.split(SEP), rc = ((out[cid] ||= {})[type] ||= { fixedCode: "", rules: [] });
+    if (kind === "p") rc[rest.join(SEP)] = vals[k]; else rc.rules.push({ ...vals[k] });
+  }
+  return out;
+}
 const SYNC_COLLS = {
   rows: () => Object.fromEntries(rows.filter(r => r.status !== "reading").map((r, i) => [r.id, { ...r, _i: i }])),
   companies: () => Object.fromEntries(companies.map((c, i) => [c.id, { ...c, _i: i }])),
   archives: () => Object.fromEntries(archives.map(a => [a.id, a])),
-  masters: () => ({ ...masterDiffs }),
-  mappings: () => ({ ...mappings }),
-  rules: () => ({ ...receiptSettings }),
+  masters2: () => flatMasters(),
+  mappings2: () => flatMappings(),
+  rules2: () => flatRules(),
   stores: () => ({ ...storeNames }),
 };
+// 前の形（会社ごとのかたまり）の名前と、分け方。前の版のアプリとも同期できるように、前の形でも書き出す
+const OLD_COLLS = {
+  masters2: { old: "masters", flat: flatMasters, get: () => masterDiffs },
+  mappings2: { old: "mappings", flat: flatMappings, get: () => mappings },
+  rules2: { old: "rules", flat: flatRules, get: () => receiptSettings },
+};
+// Googleドライブにまだ前の形しかなければ、1件ずつの形に直して読む
+function upgradeRemote(remote) {
+  remote.colls ||= {}; remote.tombs ||= {};
+  for (const [name, o] of Object.entries(OLD_COLLS)) {
+    if (remote.colls[name] || !remote.colls[o.old]) continue;
+    const out = {};
+    for (const [cid, x] of Object.entries(remote.colls[o.old])) for (const [k, v] of Object.entries(o.flat({ [cid]: x.v }))) out[k] = { t: x.t, v };
+    remote.colls[name] = out;
+  }
+}
 const hashOf = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return `${s.length}:${h}`; };
 // 前に見たときから変わった項目に、今の時刻を付ける。消えた項目は「消した時刻」を覚える
 function markSyncChanges() {
@@ -5024,7 +5089,13 @@ function markSyncChanges() {
   let changed = false;
   rows.forEach((r, i) => { if (!r.ct) r.ct = now + i / 1000; }); // 仕訳を作った順（並び順に使う）
   for (const [name, get] of Object.entries(SYNC_COLLS)) {
-    const cur = get(), hashes = (syncMeta.hashes[name] ||= {}), stamps = (syncMeta.stamps[name] ||= {}), tombs = (syncMeta.tombs[name] ||= {});
+    const cur = get();
+    if (!syncMeta.hashes[name] && OLD_COLLS[name]) {
+      const oldStamps = syncMeta.stamps[OLD_COLLS[name].old] || {};
+      syncMeta.hashes[name] = {}; syncMeta.stamps[name] = {};
+      for (const [k, v] of Object.entries(cur)) { syncMeta.hashes[name][k] = hashOf(JSON.stringify(v)); syncMeta.stamps[name][k] = oldStamps[k.split(SEP)[0]] || 0; }
+    }
+    const hashes = (syncMeta.hashes[name] ||= {}), stamps = (syncMeta.stamps[name] ||= {}), tombs = (syncMeta.tombs[name] ||= {});
     for (const [k, v] of Object.entries(cur)) {
       const h = hashOf(JSON.stringify(v));
       if (hashes[k] !== h) { hashes[k] = h; stamps[k] = now; delete tombs[k]; changed = true; }
@@ -5178,10 +5249,11 @@ function applyMerged(m) {
   companies = sortByI(Object.values(m.companies.vals));
   if (!companies.some(c => c.id === currentCompanyId)) currentCompanyId = companies[0]?.id || null;
   archives = Object.values(m.archives.vals).sort((a, b) => String(a.savedAt).localeCompare(String(b.savedAt)));
+  const newMasters = unflatMasters(m.masters2.vals), newMappings = unflatMappings(m.mappings2.vals), newRules = unflatRules(m.rules2.vals);
   for (const k of Object.keys(masterDiffs)) delete masterDiffs[k];
-  Object.assign(masterDiffs, m.masters.vals);
+  Object.assign(masterDiffs, newMasters);
   for (const k of Object.keys(masters)) delete masters[k];
-  mappings = m.mappings.vals; receiptSettings = m.rules.vals; storeNames = m.stores.vals;
+  mappings = newMappings; receiptSettings = newRules; storeNames = m.stores.vals;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.filter(r => r.status !== "reading")));
     localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies)); localStorage.setItem(CURRENT_COMPANY_KEY, JSON.stringify(currentCompanyId));
@@ -5214,7 +5286,8 @@ async function syncNow(interactive = false, quiet = false) {
     if (quiet) { syncState.error = ""; renderSync(); }
     const text = await driveRead("data.enc");
     const remote = text ? JSON.parse(await decryptText(text)) : { colls: {}, tombs: {} };
-    if (!syncMeta.lastSync) joinSameCompanies(remote); // この端末で初めての同期
+    upgradeRemote(remote);
+    if (!syncMeta.lastSync) { await backupBeforeSync(); joinSameCompanies(remote); } // この端末で初めての同期
     markSyncChanges();
     const merged = {}, out = { v: 1, colls: {}, tombs: {} };
     for (const [name, get] of Object.entries(SYNC_COLLS)) {
@@ -5223,6 +5296,11 @@ async function syncNow(interactive = false, quiet = false) {
       out.tombs[name] = merged[name].tombs;
     }
     applyMerged(merged);
+    for (const [name, o] of Object.entries(OLD_COLLS)) {
+      const latest = {};
+      for (const [k, t] of Object.entries(merged[name].stamps)) { const cid = k.split(SEP)[0]; latest[cid] = Math.max(latest[cid] || 0, t || 0); }
+      out.colls[o.old] = Object.fromEntries(Object.entries(o.get()).map(([cid, v]) => [cid, { t: latest[cid] || 0, v }]));
+    }
     const wrote = await (await driveWrite("data.enc", await encryptText(JSON.stringify(out)))).json().catch(() => ({}));
     if (wrote.id) syncState.dataId = wrote.id;
     syncMeta.remoteMod = wrote.modifiedTime || "";
@@ -5260,13 +5338,36 @@ function joinSameCompanies(remote) {
   for (const a of archives) if (map[a.companyId]) { a.companyId = map[a.companyId]; for (const r of a.rows || []) r.companyId = a.companyId; }
   for (const [from, to] of Object.entries(map)) {
     for (const obj of [masterDiffs, mappings, receiptSettings]) {
-      if (obj[from] && !obj[to] && !remote.colls?.[obj === masterDiffs ? "masters" : obj === mappings ? "mappings" : "rules"]?.[to]) obj[to] = obj[from];
+      if (obj[from] && !obj[to]) obj[to] = obj[from];
       delete obj[from];
     }
     if (currentCompanyId === from) currentCompanyId = to;
   }
   for (const k of Object.keys(masters)) delete masters[k];
 }
+// ---- 初めて同期する前の中身を、この端末に残しておく（困ったら戻せるように） ----
+const BACKUP_KEY = "backup-before-sync";
+const BACKUP_DATA_KEYS = [STORAGE_KEY, COMPANIES_KEY, CURRENT_COMPANY_KEY, MASTERS_KEY, MAPPINGS_KEY, RECEIPT_SETTINGS_KEY, STORE_NAMES_KEY, ARCHIVE_KEY];
+async function backupBeforeSync() {
+  const data = {};
+  for (const k of BACKUP_DATA_KEYS) { const v = localStorage.getItem(k); if (v !== null) data[k] = v; }
+  const at = Date.now();
+  await imageStore.put(BACKUP_KEY, JSON.stringify({ at, data }));
+  syncState.backupAt = at;
+}
+async function restoreBackup() {
+  const b = JSON.parse((await imageStore.get(BACKUP_KEY)) || "null");
+  if (!b) return;
+  const when = new Date(b.at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  if (!confirm(`${when}、同期を始める前の中身に戻しますか？\nこの端末の同期は止まります。`)) return;
+  if (NATIVE) await callNative("googleSignOut", {}).catch(() => {});
+  for (const k of BACKUP_DATA_KEYS) { if (k in b.data) localStorage.setItem(k, b.data[k]); else localStorage.removeItem(k); }
+  syncMeta = { stamps: {}, tombs: {}, hashes: {}, signedIn: false, email: "", lastSync: 0 }; saveSyncMeta();
+  try { localStorage.removeItem(SYNC_KEY_KEY); } catch {}
+  location.reload();
+}
+imageStore.get(BACKUP_KEY).then(t => { if (t) { syncState.backupAt = JSON.parse(t).at; renderSync(); } }).catch(() => {});
+
 // 写真が手元になければ、Googleドライブから受け取る
 async function fetchSyncedImage(groupId) {
   if (!syncConfigured() || !syncState.key || !(await googleToken(false))) return null;
@@ -5301,7 +5402,8 @@ function renderSync() {
           ${isNew ? `<input type="password" id="syncPass2" placeholder="もう一度" autocomplete="off" required>` : ""}
           <button class="btn btn-primary">決定</button></form>`;
   } else {
-    body.innerHTML = `<button class="btn btn-primary" data-sync="now" ${syncState.busy ? "disabled" : ""}>今すぐ同期</button><button class="btn" data-sync="logout">ログアウト</button>`;
+    body.innerHTML = `<button class="btn btn-primary" data-sync="now" ${syncState.busy ? "disabled" : ""}>今すぐ同期</button><button class="btn" data-sync="logout">ログアウト</button>`
+      + (syncState.backupAt ? `<button class="btn" data-sync="restore">同期前に戻す</button>` : "");
   }
 }
 document.getElementById("syncPanel")?.addEventListener("click", async e => {
@@ -5311,6 +5413,7 @@ document.getElementById("syncPanel")?.addEventListener("click", async e => {
       await googleToken(true); syncState.error = "";
       await remoteMeta();
     } else if (b.dataset.sync === "now") await syncNow(true);
+    else if (b.dataset.sync === "restore") await restoreBackup();
     else if (b.dataset.sync === "logout") {
       if (!confirm("この端末の同期をやめますか？（この端末の仕訳はそのまま残ります）")) return;
       if (NATIVE) await callNative("googleSignOut", {}).catch(() => {});
