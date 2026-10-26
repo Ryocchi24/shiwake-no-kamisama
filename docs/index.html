@@ -4046,6 +4046,8 @@ function parseTrialTable(allRows) {
   const t = headerText.replace(/(\d)(\d{1,2}:\d{2})/g, "$1 $2");
   for (const m of t.matchAll(/(?:令和|R)\s*(\d{1,2}|元)\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/g)) dates.push([2018 + (m[1] === "元" ? 1 : +m[1]), +m[2], +m[3]]);
   for (const m of t.matchAll(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})/g)) dates.push([+m[1], +m[2], +m[3]]);
+  // 「期間：2025年11月～2026年10月」のように日がないときは、終わりの月の末日（freee など）
+  if (!dates.length) for (const m of t.matchAll(/[～~〜]\s*(20\d{2})\s*年\s*(\d{1,2})\s*月/g)) dates.push([+m[1], +m[2], new Date(+m[1], +m[2], 0).getDate()]);
   const valid = dates.filter(([y, m, d]) => validDate(y, m, d)).map(([y, m, d]) => `${y}-${pad(m)}-${pad(d)}`).sort();
   return { accounts, date: valid[valid.length - 1] || "" };
 }
@@ -4170,7 +4172,7 @@ function setCompanySource(cid, items, replace) {
 // 小計・合計・見出しの行（科目ではない行）か
 function isSubtotalName(name) {
   const n = String(name).replace(/\s/g, "");
-  return /計$|合計|小計|累計|総計/.test(n)
+  return /計$|合計|小計|累計(?!額)|総計/.test(n) // 「減価償却累計額」は科目なので読む
     || /^[【〔(（［\[<＜《].*[】〕)）］\]>＞》]$/.test(n)
     || /の部$|^(資産|負債|純資産|負債純資産|負債・純資産)(の部)?$/.test(n)
     || /^(売上総|営業|経常|税引前当期純?|税引前|当期純?)(利益|損失|損益)/.test(n)
@@ -4207,9 +4209,12 @@ function parseTrialSheetPart(rows) {
   const debitCol = find(/借方/, /残高|繰越|前|期首/);
   const creditCol = find(/貸方/, /残高|繰越|前|期首/);
   const zenCol = find(/前月|前残|前期|期首|繰越/);
-  const zanCol = find(/残高/, /前月|前残|期首|繰越|借方残高|貸方残高/);
+  const zanCol = find(/残高|期末/, /前月|前残|期首|繰越|借方残高|貸方残高/);
   let codeCol = find(/コード|番号|^No|^ＮＯ/i);
   let nameCol = find(/科目|勘定/);
+  // freee の書き出し：科目名の見出しがなく、科目の段（大分類・中分類・科目）ごとに名前の列が右にずれる
+  const firstAmountCol = Math.min(...[zenCol, debitCol, creditCol].filter(c => c >= 0));
+  const tiered = nameCol < 0 && codeCol < 0 && firstAmountCol > 1 && firstAmountCol < Infinity;
   // 見出しに「コード」がなくても、借方の列より左で、ほとんどの行が番号（2〜6桁）の列を科目コードの列とみなす
   if (codeCol < 0) {
     const body = rows.slice(headerIdx + 1).filter(r => r.some(c => String(c).trim()));
@@ -4230,8 +4235,20 @@ function parseTrialSheetPart(rows) {
     return Number.isFinite(n) ? Math.round(neg ? -n : n) : 0;
   };
   const accounts = [];
-  for (const row of rows.slice(headerIdx + 1)) {
-    let srcName = String(row[nameCol] || "").replace(/\s/g, "");
+  // 段のある表では、名前が入っている一番左の列を「段」とし、下の行がより深い段なら合計の行（親）として読まない
+  const depthOf = row => { for (let c = 0; c < firstAmountCol; c++) if (String(row[c] ?? "").trim()) return c; return -1; };
+  const body = rows.slice(headerIdx + 1), depths = tiered ? body.map(depthOf) : [];
+  body.forEach((row, i) => {
+    if (!tiered) return;
+    const d = depths[i]; if (d < 0) return;
+    const next = depths.slice(i + 1).find(x => x >= 0), prev = depths.slice(0, i).reverse().find(x => x >= 0);
+    // 下の行が深い → 親（中身の合計）。上の行が深い → 前のまとまりの合計（「商品売上原価」など）
+    row.skip = (next !== undefined && next > d) || (prev !== undefined && prev > d);
+    row.name = String(row[d] || "");
+  });
+  for (const row of body) {
+    if (tiered && (row.skip || !row.name)) continue;
+    let srcName = String(tiered ? row.name : row[nameCol] || "").replace(/\s/g, "");
     let srcCode = codeCol >= 0 ? String(row[codeCol] || "").trim() : "";
     const m = srcName.match(/^(.*?)[［\[]\s*(\d+)\s*[］\]]?$/); // 「現金［111］」のように番号が科目名に付いている形
     if (m) { srcName = m[1]; srcCode ||= m[2]; }
@@ -4255,10 +4272,15 @@ async function importTrial(files) {
     // Excel・CSV はセルの値をそのまま使い、PDF・画像は文字認識で表を読み取る
     const sheets = files.filter(isSheetFile), others = files.filter(f => !isSheetFile(f));
     let accounts = [], date = "";
+    // freee の貸借対照表のファイルには損益計算書も入っているので、前のファイルとまったく同じ行は2回取り込まない
+    const seenRows = new Set();
     for (const file of sheets) {
       show(`Excelを読み込んでいます（${file.name}）…`);
       const res = parseTrialSheet(await sheetToRows(file));
-      accounts.push(...res.accounts); date = date || res.date;
+      const keys = res.accounts.map(a => [a.srcCode, a.srcName, a.zen, a.debit, a.credit, a.zan].join("|"));
+      accounts.push(...res.accounts.filter((a, i) => !seenRows.has(keys[i])));
+      keys.forEach(k => seenRows.add(k));
+      date = date || res.date;
     }
     if (others.length) {
       const pages = [];
