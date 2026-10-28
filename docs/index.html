@@ -308,6 +308,9 @@
   .soon-tag { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
   .trial-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .trial-bar[hidden] { display: none; }
+  .trial-add { padding: 12px 16px 16px; }
+  .trial-add[hidden] { display: none; }
+  .trial-add .btn { width: 100%; justify-content: center; border-style: dashed; }
   .trial-bar .field input, .trial-bar .field select { font: inherit; font-size: 12.5px; height: 30px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 6px; }
   .trial-balance { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; }
   .trial-balance.ok { background: var(--ok-soft); color: var(--ok); }
@@ -907,7 +910,6 @@
             <span class="method-tag" id="trialSystem"></span>
             <span class="trial-balance" id="trialBalance"></span>
             <label class="field">伝票日付<input type="date" id="trialDate"></label>
-            <button class="btn btn-sm" id="trialAddRow"><svg><use href="#i-plus"/></svg>行を追加</button>
           </div>
           <div class="trial-bar" id="passbookBar" hidden>
             <label class="field">通帳の科目<select id="passbookAcct"></select></label>
@@ -918,6 +920,7 @@
           <button class="btn btn-primary" id="download"><svg><use href="#i-download"/></svg><span>CSVダウンロード</span></button>
         </div>
         <div id="list"></div>
+        <div class="trial-add" id="trialAddWrap" hidden><button class="btn" id="trialAddRow"><svg><use href="#i-plus"/></svg>行を追加</button></div>
       </div>
      </section>
 
@@ -4362,6 +4365,7 @@ function renderTrialBar() {
   const items = isTrial ? sortedRows().filter(r => r.status === "done") : [];
   // 試算表を読み込むまでは表示しない
   bar.hidden = !isTrial || !items.length;
+  document.getElementById("trialAddWrap").hidden = bar.hidden;
   if (bar.hidden) return;
   const d = items.reduce((s, r) => s + Number(r.debitAmount || 0), 0), c = items.reduce((s, r) => s + Number(r.creditAmount || 0), 0);
   document.getElementById("trialSystem").textContent = systemOf().name;
