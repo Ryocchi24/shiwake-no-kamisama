@@ -2143,16 +2143,23 @@ function rateAmounts(text) {
   const got = {};
   const amountIn = t => {
     const after = t.includes("対象") ? t.slice(t.indexOf("対象")) : t;
-    const m = after.replace(/(10|8)%/g, "").match(/\d{1,3}(?:,\d{3})+|\d{2,}/);
+    const rest = after.replace(/(10|8)%/g, "");
+    const yen = rest.match(/¥(\d{1,3}(?:,\d{3})+|\d+)/); // ¥が付いていれば、1桁の金額（レジ袋の ¥3 など）も読む
+    if (yen) return Number(yen[1].replace(/,/g, ""));
+    const m = rest.match(/\d{1,3}(?:,\d{3})+|\d{2,}/);
     return m ? Number(m[0].replace(/,/g, "")) : 0;
   };
-  lines.forEach((t, i) => {
+  // 先に「税率8%対象 ¥328」「税込8% ¥328」のような税込の行を見て、なければ「小計（税抜8%）」などの行を見る
+  const scan = onlyTarget => lines.forEach((t, i) => {
     if (/※|印/.test(t) || !/対象|合計|計|税抜|税込/.test(t)) return; // 「※印は軽減税率対象」のような説明の行は使わない
+    if (onlyTarget && !(/対象|税込/.test(t) && !/税抜/.test(t))) return;
     const rate = /10%/.test(t) ? "10" : /8%|軽減/.test(t) ? "8" : "";
     if (!rate || got[rate]) return;
-    const amount = amountIn(t) || (lines[i + 1] && !/%/.test(lines[i + 1]) ? amountIn(lines[i + 1]) : 0); // 金額が次の行に分かれていることもある
+    const next = lines[i + 1];
+    const amount = amountIn(t) || (next && !/%|計|税/.test(next) ? amountIn(next) : 0); // 金額が次の行に分かれていることもある（次の行が合計などのときは使わない）
     if (amount) got[rate] = amount;
   });
+  scan(true); scan(false);
   return got;
 }
 function splitByRate(text) {
