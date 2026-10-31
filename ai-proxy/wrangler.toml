@@ -5,3 +5,6 @@ workers_dev = true
 
 # キーと合い言葉は、ここには書かない。Cloudflareの画面（設定 → 変数とシークレット）で入れる:
 #   ANTHROPIC_API_KEY / SHARED_TOKEN
+
+# 予備の入口（プレビューURL）は使わない
+preview_urls = false
