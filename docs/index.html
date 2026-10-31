@@ -308,8 +308,13 @@
   .soon-tag { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
   .trial-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .trial-bar[hidden] { display: none; }
-  .ai-on { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 10px; }
-  .ai-on input { width: 20px; height: 20px; }
+  .ai-tag { display: block; width: fit-content; margin: 3px auto 0; padding: 0 6px; font-size: 10px; font-weight: 700; line-height: 16px; border-radius: 8px; color: #fff; background: var(--primary); }
+  body.no-ai .open-camera-ai, body.web .open-camera-ai { display: none; }
+  dialog#aiTokenDlg { border: 0; border-radius: 16px; padding: 20px; width: min(86vw, 360px); box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+  dialog#aiTokenDlg::backdrop { background: rgba(0,0,0,.4); }
+  dialog#aiTokenDlg form { display: grid; gap: 12px; }
+  dialog#aiTokenDlg input { font: inherit; height: 44px; border: 1px solid var(--line-strong); border-radius: 10px; padding: 0 12px; }
+  dialog#aiTokenDlg .row { display: flex; gap: 10px; justify-content: flex-end; }
   .trial-add { padding: 12px 16px 16px; }
   .trial-add[hidden] { display: none; }
   .trial-add .btn { width: 100%; justify-content: center; border-style: dashed; }
@@ -768,6 +773,9 @@
     .mobile-capture { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
       background: var(--surface); border-top: 1px solid var(--line); z-index: 20; }
     .mobile-capture .btn { height: 48px; justify-content: center; font-size: 15px; }
+    body:not(.no-ai):not(.web) .mobile-capture { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    body:not(.no-ai):not(.web) .mobile-capture .btn { font-size: 13px; padding: 0 4px; gap: 4px; }
+    body:not(.no-ai):not(.web) .mobile-capture .btn svg { width: 15px; height: 15px; }
     .toast { bottom: calc(90px + env(safe-area-inset-bottom)); }
     .tabs { width: 100%; }
     .tab { flex: 1; justify-content: center; padding: 7px 4px; }
@@ -971,8 +979,14 @@
 
 <div class="mobile-capture">
   <button class="btn btn-primary open-camera"><svg><use href="#i-camera"/></svg>撮影する</button>
+  <button class="btn open-camera-ai"><svg><use href="#i-camera"/></svg>AIで撮影</button>
   <label class="btn"><svg><use href="#i-upload"/></svg><span class="pick-label">ファイルを選ぶ</span><input class="file-picker" type="file" accept="image/*" multiple></label>
 </div>
+<dialog id="aiTokenDlg"><form method="dialog" id="aiTokenForm">
+  <b>AIの合い言葉</b>
+  <input type="password" id="aiTokenInput" autocomplete="off" placeholder="合い言葉">
+  <div class="row"><button class="btn" value="cancel" formnovalidate>やめる</button><button class="btn btn-primary" value="ok">決定</button></div>
+</form></dialog>
 
 <div class="toast" id="toast" hidden></div>
 
@@ -1254,7 +1268,7 @@ addEventListener("drop", e => {
   addFiles([...e.dataTransfer.files].filter(f => f.type.startsWith("image/")));
 });
 
-async function addFiles(fileList) {
+async function addFiles(fileList, opts = {}) {
   let files = Array.from(fileList);
   if (!files.length) return;
   if (settings.method === TRIAL_SOURCE) return importTrial(files);
@@ -1289,6 +1303,7 @@ async function addFiles(fileList) {
   }
   for (const file of images) {
     const groupId = uid();
+    if (opts.ai && aiEligible()) aiGroups.add(groupId);
     try {
       const [full, thumb, forOcr] = await Promise.all([
         resize(file, 1600, 0.85),
@@ -1326,9 +1341,11 @@ function resize(file, maxSide, quality) {
   });
 }
 
+const MAX_PARALLEL_AI = 3; // AIは通信を待つだけなので、3枚まで同時に送る（呼び出しの回数と費用は同じ）
 function pump() {
-  const limit = MAX_PARALLEL_OCR;
-  while (running < limit && queue.length) {
+  while (queue.length) {
+    const limit = aiGroups.has(queue[0]) ? MAX_PARALLEL_AI : MAX_PARALLEL_OCR;
+    if (running >= limit) break;
     const groupId = queue.shift();
     running++;
     readGroup(groupId).finally(() => { running--; pump(); });
@@ -1340,7 +1357,10 @@ async function readGroup(groupId) {
   try {
     const image = ocrImages.get(groupId) || await getFullImage(groupId);
     if (!image) throw new Error("画像が見つかりません。もう一度撮影してください");
-    const data = { receipts: await readReceiptFree(image, placeholder.doc) };
+    const useAi = aiGroups.has(groupId);
+    aiGroups.delete(groupId);
+    if (placeholder) placeholder.useAi = useAi; // 再読み取りでも同じ読み方にする
+    const data = { receipts: await readReceiptFree(image, placeholder.doc, useAi) };
 
     const idx = rows.indexOf(placeholder);
     if (idx < 0) return; // 読み取り中に削除された
@@ -1370,7 +1390,7 @@ async function readGroup(groupId) {
       ];
     }).map(r => ({
       id: uid(), groupId, companyId: placeholder.companyId, source: placeholder.source || "receipt", thumb: placeholder.thumb, status: "done", review: "pending",
-      store: r.store || "", item: r.item || "", bizV2: true, bizV3: true,
+      store: r.store || "", item: r.item || "", bizV2: true, bizV3: true, ...(r.viaAi ? { viaAi: true } : {}),
       date: r.date || "",
       debitCode: r.debitShokuchi ? shokuchiOf(placeholder.companyId) : receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
@@ -1949,8 +1969,11 @@ function extractPurpose(lines) {
 // 領収書の写真だけを、中継役（Cloudflare）を通して AI に送って読む。会計データは送らない。通帳・給与台帳・試算表・日計表は端末の中で読む
 // 合い言葉はこの端末にだけ置く（同期もしない）。AIで読めなかったときは、今までの端末の文字認識で読む
 const AI_KEY = "shiwake-ai-camera", AI_URL = "https://shiwake-ai.osake-ai.workers.dev/read";
-let aiSettings = load(AI_KEY, { on: false, token: "" });
-const aiReady = () => !!(NATIVE && aiSettings.on && aiSettings.token);
+let aiSettings = load(AI_KEY, { token: "" });
+const aiReady = () => !!(NATIVE && aiSettings.token);
+// AIで読めるのは領収書（出金・入金）だけ
+const aiEligible = () => !!NATIVE && (settings.method || "receipt") === "receipt" && ["receipt", "income"].includes(settings.docType || "receipt");
+const aiGroups = new Set(); // 「AIで撮影」で撮った写真（読み取りが終わるまで）
 const saveAi = () => { try { localStorage.setItem(AI_KEY, JSON.stringify(aiSettings)); } catch {} };
 function shrinkDataUrl(dataUrl, maxSide, quality) {
   return new Promise((resolve, reject) => {
@@ -1978,9 +2001,9 @@ async function readReceiptAI(dataUrl) {
     return j.data;
   } finally { clearTimeout(timer); }
 }
-async function readReceiptFree(dataUrl, doc) {
+async function readReceiptFree(dataUrl, doc, useAi) {
   let ai = null, aiNote = "";
-  if (aiReady() && (!doc || doc === "income")) { // 領収書だけ
+  if (useAi && aiReady() && (!doc || doc === "income")) { // 「AIで撮影」で撮った領収書だけ
     try { ai = await readReceiptAI(dataUrl); } catch (e) { aiNote = `${e.name === "AbortError" ? "AIが時間内に答えませんでした" : e.message || "AIで読めませんでした"}（端末で読みました）`; }
   }
   // AIが返した全文があれば、それを今までの文字認識の結果として使う（税率・クレジット払い・店名の覚えなど、後ろの処理はそのまま動く）
@@ -2006,7 +2029,7 @@ async function readReceiptFree(dataUrl, doc) {
   const aiItem = aiItems.length ? String(aiItems[0].name).trim().slice(0, 16) + (aiItems.length > 1 ? " 他" : "") : "";
   const item = extractPurpose(lines) || aiItem || extractItem(lines);
   const summary = [store, item].filter(Boolean).join(" ");
-  return [{ date, amount, store, item, summary, ocrText: text, note: aiNote }];
+  return [{ date, amount, store, item, summary, ocrText: text, note: aiNote, viaAi: !!ai }];
 }
 // 会社マスタの画面の「AIカメラ」の欄（iPhoneアプリだけに出す）
 function renderAi() {
@@ -2015,13 +2038,9 @@ function renderAi() {
   panel.hidden = !NATIVE;
   if (!NATIVE) return;
   const status = document.getElementById("aiStatus");
-  status.textContent = !aiSettings.on ? "オフ" : aiSettings.token ? "領収書の写真をAIに送って読みます" : "合い言葉を入れてください";
-  document.getElementById("aiBody").innerHTML = `<label class="ai-on"><input type="checkbox" id="aiOn" ${aiSettings.on ? "checked" : ""}> 領収書をAIで読む</label>
-    <form class="sync-pass" id="aiForm"><input type="password" id="aiToken" placeholder="${aiSettings.token ? "合い言葉（設定済み）" : "合い言葉"}" autocomplete="off"><button class="btn">保存</button></form>`;
+  status.textContent = aiSettings.token ? "設定済み" : "合い言葉を入れてください";
+  document.getElementById("aiBody").innerHTML = `<form class="sync-pass" id="aiForm"><input type="password" id="aiToken" placeholder="${aiSettings.token ? "合い言葉（設定済み）" : "合い言葉"}" autocomplete="off"><button class="btn">保存</button></form>`;
 }
-document.getElementById("aiPanel")?.addEventListener("change", e => {
-  if (e.target.id === "aiOn") { aiSettings.on = e.target.checked; saveAi(); renderAi(); }
-});
 document.getElementById("aiPanel")?.addEventListener("submit", e => {
   e.preventDefault();
   const v = document.getElementById("aiToken").value.trim();
@@ -2308,6 +2327,7 @@ function inputHtml(row, f) {
 
 function render() {
   const list = document.getElementById("list");
+  document.body.classList.toggle("no-ai", !aiEligible());
   renderCompany();
   renderStats();
 
@@ -2328,7 +2348,7 @@ function render() {
     const icon = currentSource() === "receipt" ? "i-receipt" : "i-list";
     list.innerHTML = `<div class="dropzone"><svg><use href="#${icon}"/></svg>
       <b>${escapeHtml(what)}${NATIVE ? "を撮影するか、ファイルを選んでください" : "のファイルを選んでください"}</b>${fmt.types.join("・")}${!NATIVE && fmt.app.some(t => !fmt.types.includes(t)) ? `（${fmt.app.filter(t => !fmt.types.includes(t)).join("・")}はiPhoneアプリで）` : ""}
-      <div class="drop-actions">${NATIVE ? `<button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button>` : ""}
+      <div class="drop-actions">${NATIVE ? `<button class="btn btn-primary drop-camera"><svg><use href="#i-camera"/></svg>撮影する</button>` : ""}${aiEligible() ? `<button class="btn drop-camera-ai"><svg><use href="#i-camera"/></svg>AIで撮影</button>` : ""}
       <button class="btn ${NATIVE ? "" : "btn-primary"} drop-pick"><svg><use href="#i-upload"/></svg>ファイルを選ぶ</button></div></div>`;
     return;
   }
@@ -2382,7 +2402,7 @@ function render() {
     const isTrial = anchor.source === TRIAL_SOURCE;
     const thumbOf = row => isTrial ? `<td class="c-thumb"><span class="trial-tag">試算表</span></td>`
       : row.thumb
-      ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="${row.source === NIKKEI_SOURCE ? "日計表" : "領収書"}"></td>`
+      ? `<td class="c-thumb"><img class="thumb" src="${row.thumb}" data-group="${row.groupId}" alt="${row.source === NIKKEI_SOURCE ? "日計表" : "領収書"}">${row.viaAi ? `<span class="ai-tag">AI</span>` : ""}</td>`
       : `<td class="c-thumb"><span class="no-img">画像なし</span></td>`;
     if (anchor.status !== "done") {
       const msg = anchor.status === "reading"
@@ -3061,6 +3081,7 @@ list.addEventListener("click", async e => {
       return;
     }
     Object.assign(row, { status: "reading", error: "" });
+    if (row.useAi) aiGroups.add(row.groupId);
     queue.push(row.groupId);
     render(); pump();
   } else {
@@ -4986,6 +5007,25 @@ const video = document.getElementById("video");
 let stream = null;
 let shotCount = 0;
 
+// 合い言葉が入っていなければ、その場で入れてもらう（1回だけ）
+function askAiToken() {
+  return new Promise(resolve => {
+    const dlg = document.getElementById("aiTokenDlg"), input = document.getElementById("aiTokenInput");
+    input.value = "";
+    dlg.addEventListener("close", () => {
+      const v = dlg.returnValue === "ok" ? input.value.trim() : "";
+      input.value = "";
+      if (v) { aiSettings.token = v; saveAi(); renderAi(); }
+      resolve(!!v);
+    }, { once: true });
+    dlg.showModal();
+  });
+}
+async function openCameraAi() {
+  if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
+  if (!aiReady() && !(await askAiToken())) return;
+  return scanReceipts(true);
+}
 async function openCamera() {
   if (!currentCompany()) { alert("先に会社を登録・選択してください。"); openCompanies(); return; }
   if (NATIVE) return scanReceipts();
@@ -5013,7 +5053,7 @@ async function openCamera() {
 
 // iPhoneアプリでは標準の書類スキャンを使う（四隅の自動検出・傾き補正・影の除去で読み取りが正確になる）。
 // 1回のスキャンで何枚でも続けて撮れる
-async function scanReceipts() {
+async function scanReceipts(ai = false) {
   try {
     const { images } = await callNative("scanDocument");
     if (!images || !images.length) return; // 閉じた
@@ -5023,7 +5063,7 @@ async function scanReceipts() {
       for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
       return new File([bytes], `scan_${Date.now()}_${i}.jpg`, { type: "image/jpeg" });
     });
-    await addFiles(files);
+    await addFiles(files, { ai });
   } catch (err) {
     alert(err.message || "スキャンを開けませんでした");
   }
@@ -5056,10 +5096,12 @@ document.getElementById("shutter").onclick = () => {
 document.getElementById("camClose").onclick = closeCamera;
 document.getElementById("camDone").onclick = closeCamera;
 for (const el of document.querySelectorAll(".open-camera")) el.addEventListener("click", openCamera);
+for (const el of document.querySelectorAll(".open-camera-ai")) el.addEventListener("click", openCameraAi);
 // 一覧が空のときのボタン
 document.getElementById("addMore").onclick = () => document.querySelector(".file-picker:not([capture])").click();
 list.addEventListener("click", e => {
   if (e.target.closest(".drop-pick")) document.querySelector(".file-picker:not([capture])").click();
+  else if (e.target.closest(".drop-camera-ai")) openCameraAi();
   else if (e.target.closest(".drop-camera")) openCamera();
 });
 // Web版は撮影ボタンを出さない（スマホのブラウザでも「ファイルを選ぶ」からカメラで撮れる）
