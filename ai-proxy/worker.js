@@ -13,11 +13,12 @@ const MEDIA = /^(image\/(jpeg|png|webp|gif)|application\/pdf)$/;
 
 const PROMPTS = {
   receipt: `これは日本の領収書・レシートの写真です。書いてある内容だけを読み取り、次の形のJSONだけを返してください（説明文やコードの囲みは付けない）。
-{"date":"YYYY-MM-DD または空","store":"店名（支店名まで）","tel":"電話番号（数字とハイフン）または空","invoiceNo":"T+13桁の登録番号または空","total":合計金額（税込・数字）,"payment":"cash|card|unknown","items":[{"name":"品名","amount":金額（数字）,"taxRate":"10|8軽|8|0"}]}
+{"date":"YYYY-MM-DD または空","store":"店名（支店名まで）","tel":"電話番号（数字とハイフン）または空","invoiceNo":"T+13桁の登録番号または空","total":合計金額（税込・数字）,"payment":"cash|card|unknown","items":[{"name":"品名","amount":金額（数字）,"taxRate":"10|8軽|8|0"}],"text":"レシートに印字されている文字を、印字されている行のとおりに、改行で区切って全部書き写したもの"}
 決まり:
 - 読めない・書いていない項目は、推測せず空文字か null にする。
 - 住所は店名や品名に入れない。
 - 金額に円記号やカンマは付けない。値引きはマイナスの金額の行にする。
+- text は、上から下へ、店名・電話番号・登録番号・日付・品物・小計・税の内訳・合計・支払方法まで、見えるとおりに書き写す。
 - 令和・平成の年は西暦に直す。`,
 };
 
@@ -81,7 +82,7 @@ export default {
       res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model: env.MODEL || DEFAULT_MODEL, max_tokens: 1500, messages: [{ role: "user", content: [block, { type: "text", text: prompt }] }] }),
+        body: JSON.stringify({ model: env.MODEL || DEFAULT_MODEL, max_tokens: 3000, messages: [{ role: "user", content: [block, { type: "text", text: prompt }] }] }),
       });
     } catch { return json({ error: "upstream_unreachable" }, 502, cors); }
     if (!res.ok) return json({ error: "upstream", status: res.status }, res.status === 429 ? 429 : 502, cors);

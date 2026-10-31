@@ -308,6 +308,8 @@
   .soon-tag { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
   .trial-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .trial-bar[hidden] { display: none; }
+  .ai-on { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 10px; }
+  .ai-on input { width: 20px; height: 20px; }
   .trial-add { padding: 12px 16px 16px; }
   .trial-add[hidden] { display: none; }
   .trial-add .btn { width: 100%; justify-content: center; border-style: dashed; }
@@ -949,6 +951,10 @@
         <div class="panel-head"><span class="panel-title">携帯とPCの同期</span><span class="panel-sub" id="syncStatus"></span></div>
         <div class="sync-body" id="syncBody"></div>
       </div>
+      <div class="panel sync-panel" id="aiPanel" hidden>
+        <div class="panel-head"><span class="panel-title">AIカメラ</span><span class="panel-sub" id="aiStatus"></span></div>
+        <div class="sync-body" id="aiBody"></div>
+      </div>
       <div class="panel">
         <div class="panel-head">
           <span class="panel-title">会社一覧</span><span class="panel-sub" id="companyCount"></span>
@@ -1334,7 +1340,7 @@ async function readGroup(groupId) {
   try {
     const image = ocrImages.get(groupId) || await getFullImage(groupId);
     if (!image) throw new Error("画像が見つかりません。もう一度撮影してください");
-    const data = { receipts: await readReceiptFree(image) };
+    const data = { receipts: await readReceiptFree(image, placeholder.doc) };
 
     const idx = rows.indexOf(placeholder);
     if (idx < 0) return; // 読み取り中に削除された
@@ -1939,22 +1945,90 @@ function extractPurpose(lines) {
   return "";
 }
 
-async function readReceiptFree(dataUrl) {
-  const recognized = (await recognizeText(dataUrl))
-    .map(l => ({ text: normalizeText(l.text).trim(), conf: l.conf }))
-    .filter(l => l.text);
+// ---- AIカメラ（iPhoneアプリだけ・初期はオフ） ----
+// 領収書の写真だけを、中継役（Cloudflare）を通して AI に送って読む。会計データは送らない。通帳・給与台帳・試算表・日計表は端末の中で読む
+// 合い言葉はこの端末にだけ置く（同期もしない）。AIで読めなかったときは、今までの端末の文字認識で読む
+const AI_KEY = "shiwake-ai-camera", AI_URL = "https://shiwake-ai.osake-ai.workers.dev/read";
+let aiSettings = load(AI_KEY, { on: false, token: "" });
+const aiReady = () => !!(NATIVE && aiSettings.on && aiSettings.token);
+const saveAi = () => { try { localStorage.setItem(AI_KEY, JSON.stringify(aiSettings)); } catch {} };
+function shrinkDataUrl(dataUrl, maxSide, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => reject(new Error("画像を開けませんでした"));
+    img.src = dataUrl;
+  });
+}
+async function readReceiptAI(dataUrl) {
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 45000);
+  try {
+    const image = await shrinkDataUrl(dataUrl, 1600, 0.85);
+    const res = await fetch(AI_URL, { method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/json", "X-Shiwake-Token": aiSettings.token }, body: JSON.stringify({ image, kind: "receipt" }) });
+    if (res.status === 401) throw new Error("AIの合い言葉が違います");
+    if (res.status === 429) throw new Error("AIの月の上限に達しました");
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j?.ok || !j.data) throw new Error("AIで読めませんでした");
+    return j.data;
+  } finally { clearTimeout(timer); }
+}
+async function readReceiptFree(dataUrl, doc) {
+  let ai = null, aiNote = "";
+  if (aiReady() && (!doc || doc === "income")) { // 領収書だけ
+    try { ai = await readReceiptAI(dataUrl); } catch (e) { aiNote = `${e.name === "AbortError" ? "AIが時間内に答えませんでした" : e.message || "AIで読めませんでした"}（端末で読みました）`; }
+  }
+  // AIが返した全文があれば、それを今までの文字認識の結果として使う（税率・クレジット払い・店名の覚えなど、後ろの処理はそのまま動く）
+  const aiLines = ai ? String(ai.text || "").split(/\r?\n/).map(l => normalizeText(l).trim()).filter(Boolean) : [];
+  const recognized = aiLines.length >= 3 ? aiLines.map(text => ({ text, conf: 1 }))
+    : (await recognizeText(dataUrl)).map(l => ({ text: normalizeText(l.text).trim(), conf: l.conf })).filter(l => l.text);
   if (!recognized.length) return [];
   const lines = recognized.map(l => l.text);
   const text = lines.join("\n");
-  const date = extractDate(text);
-  const amount = extractAmount(lines);
+  let date = extractDate(text);
+  let amount = extractAmount(lines);
+  if (ai) {
+    const d = String(ai.date || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (d && validDate(+d[1], +d[2], +d[3])) date = ai.date;
+    const t = Math.round(Number(ai.total));
+    if (t > 0) amount = t;
+  }
   // 店名: 前に直した店名があれば、それを使う（電話番号・登録番号で見分ける）
-  const store = storeNames[storeKeyOf(text)] || extractStore(lines, recognized.map(l => l.conf));
+  const aiStore = ai ? String(ai.store || "").replace(/\s+/g, " ").trim().slice(0, 30) : "";
+  const store = storeNames[storeKeyOf(text)] || aiStore || extractStore(lines, recognized.map(l => l.conf));
   // 摘要: 店名 ＋ 品名（手書きの領収書は「但し〇〇」）。品物が2つ以上あれば「他」を付ける
-  const item = extractPurpose(lines) || extractItem(lines);
+  const aiItems = ai && Array.isArray(ai.items) ? ai.items.filter(x => x && Number(x.amount) > 0 && String(x.name || "").trim()) : [];
+  const aiItem = aiItems.length ? String(aiItems[0].name).trim().slice(0, 16) + (aiItems.length > 1 ? " 他" : "") : "";
+  const item = extractPurpose(lines) || aiItem || extractItem(lines);
   const summary = [store, item].filter(Boolean).join(" ");
-  return [{ date, amount, store, item, summary, ocrText: text, note: "" }];
+  return [{ date, amount, store, item, summary, ocrText: text, note: aiNote }];
 }
+// 会社マスタの画面の「AIカメラ」の欄（iPhoneアプリだけに出す）
+function renderAi() {
+  const panel = document.getElementById("aiPanel");
+  if (!panel) return;
+  panel.hidden = !NATIVE;
+  if (!NATIVE) return;
+  const status = document.getElementById("aiStatus");
+  status.textContent = !aiSettings.on ? "オフ" : aiSettings.token ? "領収書の写真をAIに送って読みます" : "合い言葉を入れてください";
+  document.getElementById("aiBody").innerHTML = `<label class="ai-on"><input type="checkbox" id="aiOn" ${aiSettings.on ? "checked" : ""}> 領収書をAIで読む</label>
+    <form class="sync-pass" id="aiForm"><input type="password" id="aiToken" placeholder="${aiSettings.token ? "合い言葉（設定済み）" : "合い言葉"}" autocomplete="off"><button class="btn">保存</button></form>`;
+}
+document.getElementById("aiPanel")?.addEventListener("change", e => {
+  if (e.target.id === "aiOn") { aiSettings.on = e.target.checked; saveAi(); renderAi(); }
+});
+document.getElementById("aiPanel")?.addEventListener("submit", e => {
+  e.preventDefault();
+  const v = document.getElementById("aiToken").value.trim();
+  if (v) { aiSettings.token = v; saveAi(); }
+  renderAi();
+});
+renderAi();
 
 // ---- 表示 ----
 // 確認画面の15項目。会社ごとに、使う項目を選ぶ（試算表は6項目で固定）
