@@ -1392,7 +1392,7 @@ async function readGroup(groupId) {
       id: uid(), groupId, companyId: placeholder.companyId, source: placeholder.source || "receipt", thumb: placeholder.thumb, status: "done", review: "pending",
       store: r.store || "", item: r.item || "", bizV2: true, bizV3: true, ...(r.viaAi ? { viaAi: true } : {}),
       date: r.date || "",
-      debitCode: r.debitShokuchi ? shokuchiOf(placeholder.companyId) : receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store), debitSub: "", debitAmount: r.amount || "",
+      debitCode: r.debitShokuchi ? shokuchiOf(placeholder.companyId) : receiptDebitCode(placeholder.companyId, r.store, r.summary || r.store) || (!placeholder.doc ? defaultDebitCode(placeholder.companyId) : ""), debitSub: "", debitAmount: r.amount || "",
       summary: r.summary || r.store || "",
       creditCode: r.creditShokuchi ? shokuchiOf(placeholder.companyId) : payCodeOf(placeholder.companyId, r.ocrText, rc), creditSub: "", creditAmount: r.amount || "",
       note: [r.note, receiptTaxHint(r.ocrText).mixed && !r.split ? "8%と10%の品物が混ざっています" : "", receiptTaxHint(r.ocrText).noInvoice && !r.debitShokuchi ? "登録番号（T＋13桁）が見つかりません" : "",
@@ -2189,8 +2189,12 @@ function setAutoTax(row, side) {
   const c = companies.find(x => x.id === row.companyId);
   if (!c || row.taxManual?.[side]) return;
   const h = row.taxHint || {};
-  const type = autoTaxType(row[side + "Code"], side === "credit" ? creditSummaryOf(row) : row.summary, row.companyId)
+  let type = autoTaxType(row[side + "Code"], side === "credit" ? creditSummaryOf(row) : row.summary, row.companyId)
     || (side === "debit" && h.split ? "課税" : ""); // 8%と10%に分けた行は、科目がまだ空でも課税
+  if (!type && side === "debit" && !row.debitCode && row.source === "receipt" && !row.doc) { // 科目がまだ空の領収書は、品物の税（課税）にしておく
+    const w = String(row.summary || "");
+    type = TAX_WORDS.非課税.some(x => w.includes(x)) ? "非課税" : TAX_WORDS.対象外.some(x => w.includes(x)) ? "対象外" : "課税";
+  }
   row[side + "Tax"] = type;
   row[side + "Rate"] = type !== "課税" ? "" : h.reduced ? "8%軽" : "10%";
   // 事業者区分は取引の相手で決まる（品物が対象外・非課税でも、相手は課税事業者のことがある）
@@ -3405,16 +3409,20 @@ function saveReceiptSettings() { try { localStorage.setItem(RECEIPT_SETTINGS_KEY
 // 自動入力ルールの言葉: 店名。読めなかったときは摘要
 const ruleKeywordOf = r => String(r.store || r.summary || "").trim().slice(0, 30);
 // 領収書の仕訳から「店名（または摘要） → 借方の科目」を覚える（すでにあれば科目を上書き）
+// 支払いの科目（現金・未払金・預金など）か。領収書の借方（使ったもの）には入らない
+const isPayAccount = (code, cid) => { const n = normName(masterName(code, cid)); return /^(現金|未払金|未払費用|買掛金|売掛金)$/.test(n) || /預金|銀$/.test(n); };
+// 初めての店（覚えていない店）の借方の科目：会社で決めていればそれ、なければ「福利厚生費」。直せば、その店は覚える
+const defaultDebitCode = cid => receiptSettingsOf(cid).debitCode || masterOf(cid).find(m => normName(m.name) === "福利厚生費")?.code || "";
 function learnReceiptRule(r) {
   const kw = ruleKeywordOf(r);
-  if (r.source !== "receipt" || (r.doc && r.doc !== "card") || !kw || !r.debitCode || lineOf(r) === "c") return;
+  if (r.source !== "receipt" || (r.doc && r.doc !== "card") || !kw || !r.debitCode || lineOf(r) === "c" || isPayAccount(r.debitCode, r.companyId)) return;
   const rc = receiptSettingsOf(r.companyId);
   const ex = rc.rules.find(x => normName(x.keyword) === normName(kw));
   if (ex) ex.code = r.debitCode; else rc.rules.push({ keyword: kw, code: r.debitCode });
 }
 function receiptDebitCode(cid, store, summary) {
   const text = normName(`${store || ""} ${summary || ""}`);
-  const hit = receiptSettingsOf(cid).rules.filter(r => r.keyword && r.code && text.includes(normName(r.keyword)))
+  const hit = receiptSettingsOf(cid).rules.filter(r => r.keyword && r.code && !isPayAccount(r.code, cid) && text.includes(normName(r.keyword)))
     .sort((a, b) => normName(b.keyword).length - normName(a.keyword).length)[0];
   return hit ? hit.code : "";
 }
