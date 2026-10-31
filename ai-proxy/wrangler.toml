@@ -1,0 +1,7 @@
+name = "shiwake-ai"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# キーと合い言葉は、ここには書かない。Cloudflareの画面（設定 → 変数とシークレット）で入れる:
+#   ANTHROPIC_API_KEY / SHARED_TOKEN
